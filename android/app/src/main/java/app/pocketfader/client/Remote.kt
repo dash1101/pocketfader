@@ -57,6 +57,27 @@ object Remote {
     @Volatile private var fastUntil = 0L
     @Volatile private var settleUntil = 0L   // keep optimistic values for a moment so sliders don't jump back
     private var tick = 0
+    // Values you just changed (shuffle, loop, autoplay, like, play/pause) are held for a few seconds, so a poll that
+    // lands before the computer has applied the change doesn't flip the button back and forth.
+    private val held = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private fun hold(key: String) { held[key] = SystemClock.elapsedRealtime() + 3500 }
+
+    private fun withHeld(fresh: Now?, cur: Now?): Now? {
+        if (fresh == null || cur == null || fresh.videoId != cur.videoId) { held.clear(); return fresh }
+        val t = SystemClock.elapsedRealtime()
+        fun keep(k: String, same: Boolean): Boolean {
+            val until = held[k] ?: return false
+            if (t > until || same) { held.remove(k); return false }     // expired, or the computer caught up
+            return true
+        }
+        var n = fresh
+        if (keep("shuffle", fresh.shuffle == cur.shuffle)) n = n.copy(shuffle = cur.shuffle)
+        if (keep("repeat", fresh.repeat == cur.repeat)) n = n.copy(repeat = cur.repeat)
+        if (keep("autoplay", fresh.autoplay == cur.autoplay)) n = n.copy(autoplay = cur.autoplay)
+        if (keep("liked", fresh.liked == cur.liked)) n = n.copy(liked = cur.liked)
+        if (keep("playing", fresh.playing == cur.playing)) n = n.copy(playing = cur.playing)
+        return n
+    }
 
     fun notify(text: String) { _messages.tryEmit(text) }
 
@@ -143,7 +164,7 @@ object Remote {
                 configured = true,
                 online = true,
                 error = null,
-                now = now,
+                now = withHeld(now, cur.now),
                 queue = queue,
                 source = source,
                 bridge = bridge,
@@ -197,27 +218,32 @@ object Remote {
     fun transport(action: String, position: Double? = null) {
         val b = JSONObject().put("type", "transport").put("action", action)
         if (position != null) b.put("position", position)
+        if (action == "playpause") hold("playing")
         if (action == "playpause") _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(playing = !n.playing) }) }
         if (action == "seek" && position != null) _progress.value = Progress(position, SystemClock.elapsedRealtime())
         command(b)
     }
 
     fun like(videoId: String, on: Boolean) {
+        hold("liked")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(liked = on) }) }
         command(JSONObject().put("type", "like").put("videoId", videoId).put("action", if (on) "like" else "remove"))
     }
 
     fun setRepeat(mode: String) {
+        hold("repeat")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(repeat = mode) }) }
         command(JSONObject().put("type", "setRepeat").put("mode", mode))
     }
 
     fun setShuffle(on: Boolean) {
+        hold("shuffle")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(shuffle = on) }) }
         command(JSONObject().put("type", "setShuffle").put("on", on))
     }
 
     fun setAutoplay(on: Boolean) {
+        hold("autoplay")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(autoplay = on) }) }
         command(JSONObject().put("type", "setAutoplay").put("on", on))
     }

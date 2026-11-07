@@ -122,7 +122,25 @@
   }
 
   // ------------------------------------------------------------------ readers
-  const bar = () => document.querySelector("ytmusic-player-bar");
+  // Some YouTube Music builds put the player bar inside shadow roots, where document.querySelector can't see it.
+  let barCache = null, barAt = 0;
+  const bar = () => {
+    if (barCache && barCache.isConnected && Date.now() - barAt < 4000) return barCache;
+    barCache = document.querySelector("ytmusic-player-bar") ||
+      deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-BAR")[0] || null;
+    barAt = Date.now();
+    return barCache;
+  };
+  const BTN = /^(button|tp-yt-paper-icon-button|yt-icon-button|ytmusic-toggle-button-renderer|yt-button-shape)$/i;
+  // The control for "shuffle" / "repeat", found by what it's called when the bar's own markup isn't recognised.
+  function labelControl(word) {
+    const w = word.toLowerCase();
+    const label = (el) => ((el.getAttribute("aria-label") || el.getAttribute("title") || "") + " " + (el.className && el.className.baseVal === undefined ? el.className : "")).toLowerCase();
+    const hits = deepAll(document, (el) => BTN.test(el.tagName) && label(el).includes(w) && !el.closest("ytmusic-player-queue-item, ytmusic-menu-renderer"));
+    return hits.find((el) => el.tagName === "BUTTON") || hits[0] || null;
+  }
+  const pressed = (el) => el && (el.getAttribute("aria-pressed") === "true" || el.getAttribute("aria-checked") === "true" ||
+    el.hasAttribute("active") || el.classList.contains("style-default-active"));
   const queueEl = () => document.querySelector("ytmusic-player-queue");
   // Loop / shuffle / autoplay state (verified live):
   //   repeat  -> attribute repeat-mode = NONE | ALL | ONE on <ytmusic-player-bar>
@@ -130,9 +148,12 @@
   //   autoplay-> <tp-yt-paper-toggle-button id="automix">.checked  (queue.autoplayEnabled mirrors it)
   function repeatMode() {
     const m = bar() && bar().getAttribute("repeat-mode");
-    return m === "ALL" || m === "ONE" ? m : "NONE";
+    if (m) return m === "ALL" || m === "ONE" ? m : "NONE";
+    const c = labelControl("repeat");                                   // fall back to the button's own label
+    const t = c ? ((c.getAttribute("aria-label") || c.getAttribute("title") || "")).toLowerCase() : "";
+    return /\bone\b|single|track/.test(t) ? "ONE" : /\ball\b|queue|playlist/.test(t) || pressed(c) ? "ALL" : "NONE";
   }
-  const shuffleOn = () => !!(bar() && bar().hasAttribute("shuffle-on"));
+  const shuffleOn = () => bar() ? bar().hasAttribute("shuffle-on") : pressed(labelControl("shuffle"));
   const autoplayToggle = () => document.querySelector("tp-yt-paper-toggle-button#automix");
   function autoplayOn() {
     const t = autoplayToggle();
@@ -394,12 +415,18 @@
     const end = Date.now() + ms;
     for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) return null; await sleep(step); }
   };
-  const barButton = (cls) => bar() && (bar().querySelector(`yt-icon-button.${cls} button`) || bar().querySelector(`.${cls} button`));
+  const barButton = (cls) => {
+    const b = bar();
+    const direct = b && (b.querySelector(`yt-icon-button.${cls} button`) || b.querySelector(`.${cls} button`) ||
+      deepAll(b, (el) => el.classList && el.classList.contains(cls) && BTN.test(el.tagName))[0]);
+    return direct || labelControl(cls);
+  };
+  const missing = (what) => `no_${what}_button (player bar ${bar() ? "found" : "not found"}, ${deepAll(document, (el) => BTN.test(el.tagName)).length} buttons on the page; reload the extension, then use Settings to send the diagnostics)`;
   async function setRepeat(mode) {
     if (!["NONE", "ALL", "ONE"].includes(mode)) return { ok: false, error: "bad_mode" };
     for (let i = 0; i < 3 && repeatMode() !== mode; i++) {
       const b = barButton("repeat");
-      if (!b) return { ok: false, error: "no_repeat_button" };
+      if (!b) return { ok: false, error: missing("repeat") };
       const before = repeatMode();
       b.click();
       await waitFor(() => repeatMode() !== before, 1200);
@@ -409,7 +436,7 @@
   async function setShuffle(on) {
     if (shuffleOn() !== on) {
       const b = barButton("shuffle");
-      if (!b) return { ok: false, error: "no_shuffle_button" };
+      if (!b) return { ok: false, error: missing("shuffle") };
       b.click();
       await waitFor(() => shuffleOn() === on, 1500);
       await sleep(350);   // the queue reorders just after the flag flips
@@ -691,6 +718,8 @@
       pressed: el.getAttribute("aria-pressed") || el.getAttribute("aria-checked") || el.getAttribute("active") || undefined,
       in: chain(el).slice(1, 4).join(" < ") });
     out.barButtons = bar ? deepAll(bar, btnPred).map(describe).slice(0, 40) : [];
+    out.foundBar = !!document.querySelector("ytmusic-player-bar") ? "light-dom" : (deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-BAR").length ? "shadow-dom" : "missing");
+    out.controls = deepAll(document, (el) => btnPred(el) && /shuffle|repeat|loop|autoplay|automix/i.test((el.getAttribute("aria-label") || "") + " " + (el.getAttribute("title") || "") + " " + (el.className || "") + " " + (el.id || ""))).map(describe).slice(0, 30);
     out.queueButtons = q ? deepAll(q, btnPred).map(describe).slice(0, 40) : [];
     const items = deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-QUEUE-ITEM");
     out.queueItemCount = items.length;

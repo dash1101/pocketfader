@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -70,14 +72,14 @@ fun rememberLyrics(now: Now?, active: Boolean): LyricsUi {
     var error by remember { mutableStateOf<String?>(null) }
     var refreshTick by remember { mutableIntStateOf(0) }
     var force by remember { mutableStateOf(false) }
-    val key = now?.takeIf { it.title.isNotBlank() }?.let { it.title + "|" + it.artist + "|" + it.duration.toInt() }
+    val key = now?.takeIf { it.title.isNotBlank() }?.let { it.title + "|" + it.artist }
 
     LaunchedEffect(key, prefs.lyricsSource, refreshTick) {
         val n = now
         if (n == null || key == null) { result = null; error = null; return@LaunchedEffect }
         val refresh = force
         force = false
-        delay(if (refresh) 0 else 500)          // skipping through tracks shouldn't start a lookup for each one
+        delay(if (refresh) 0 else if (n.duration <= 0) 1500 else 500)   // skipping tracks shouldn't start a lookup for each; the length helps pick the right version
         loading = result == null
         error = null
         try {
@@ -133,7 +135,7 @@ fun rememberActiveLine(lines: List<LyricLine>, synced: Boolean, playing: Boolean
 
 /** Keeps the line being sung about a third of the way down, unless the user is scrolling. */
 @Composable
-fun FollowLyrics(listState: LazyListState, firstLineIndex: Int, active: Int, enabled: Boolean) {
+fun FollowLyrics(listState: LazyListState, firstLineIndex: Int, active: Int, enabled: Boolean, jump: Int = 0) {
     var pausedUntil by remember { mutableLongStateOf(0L) }
     var ours by remember { mutableStateOf(false) }
     LaunchedEffect(listState) {
@@ -141,7 +143,8 @@ fun FollowLyrics(listState: LazyListState, firstLineIndex: Int, active: Int, ena
             if (moving && !ours) pausedUntil = SystemClock.elapsedRealtime() + 6000
         }
     }
-    LaunchedEffect(active, enabled) {
+    LaunchedEffect(jump) { if (jump > 0) pausedUntil = 0L }     // "current line" button: follow again right away
+    LaunchedEffect(active, enabled, jump) {
         if (!enabled || active < 0 || SystemClock.elapsedRealtime() < pausedUntil) return@LaunchedEffect
         ours = true
         try {
@@ -157,17 +160,27 @@ fun FollowLyrics(listState: LazyListState, firstLineIndex: Int, active: Int, ena
 fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
     val prefs by Settings.prefs.collectAsStateWithLifecycle()
     val r = ui.result
+    var layoutOpen by remember { mutableStateOf(false) }
+    if (layoutOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { layoutOpen = false },
+            title = { Text("Lyrics layout") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { LyricsLayoutControls() } },
+            confirmButton = { TextButton(onClick = { layoutOpen = false }) { Text("Done") } },
+        )
+    }
     Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             r?.sources?.forEach { src ->
                 FilterChip(
-                    selected = r.source == src.id,
+                    selected = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id,
                     onClick = { Settings.update { it.copy(lyricsSource = src.id) } },
                     enabled = src.found,
                     label = { Text(src.label + if (src.found && src.words) " · word-by-word" else if (src.found && src.synced) " · synced" else "") },
                 )
             }
             IconButton(onClick = ui.refresh, enabled = !ui.loading) { Icon(Icons.Filled.Refresh, "Look again") }
+            FilterChip(selected = false, onClick = { layoutOpen = true }, label = { Text("Aa  Layout") })
         }
         if (r != null && r.found) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,7 +234,7 @@ fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics
             LyricsMessage("No lyrics found for this song. Try another source above, or look again.")
         }
         else -> {
-            val base = when (prefs.lyricsSize) { 0 -> 18 else -> if (prefs.lyricsSize == 2) 26 else 22 }
+            val base = prefs.lyricsSp
             itemsLines(r, active, prefs, base, playing)
         }
     }
@@ -229,6 +242,7 @@ fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics
 
 private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs, base: Int, playing: Boolean) {
     val lines = r.lines
+    val align = when (prefs.lyricsAlign) { "center" -> TextAlign.Center; "end" -> TextAlign.End; else -> TextAlign.Start }
     for (i in lines.indices) {
         item(key = "ly-$i") {
             val ln = lines[i]
@@ -240,31 +254,33 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
                     Modifier.fillMaxWidth().padding(vertical = 10.dp),
                     textAlign = TextAlign.Center,
                     fontSize = (if (isActive) 38 else 30).sp,
-                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    color = if (isActive) (LocalAccent.current ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                 )
             } else {
                 Column(
                     Modifier.fillMaxWidth()
                         .clickable(enabled = r.synced && ln.t != null) { ln.t?.let { Remote.transport("seek", it) } }
-                        .padding(horizontal = 20.dp, vertical = 7.dp)
-                        .alpha(if (!r.synced || isActive) 1f else 0.45f),
+                        .padding(horizontal = 20.dp, vertical = prefs.lyricsSpacing.dp)
+                        .alpha(if (!r.synced || isActive) 1f else prefs.lyricsDim / 100f),
+                    horizontalAlignment = when (prefs.lyricsAlign) { "center" -> Alignment.CenterHorizontally; "end" -> Alignment.End; else -> Alignment.Start },
                 ) {
                     if (isActive && ln.words != null) {
-                        WordLine(ln, base + 2, playing, prefs.lyricsOffsetMs)
+                        WordLine(ln, base + 2, playing, prefs.lyricsOffsetMs, align)
                     } else {
                         Text(
                             ln.text,
                             fontSize = (if (isActive) base + 2 else base).sp,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
-                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            color = if (isActive) (LocalAccent.current ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.onSurface,
                             lineHeight = ((base + 6)).sp,
+                            textAlign = align,
                         )
                     }
                     if (prefs.lyricsRoman && ln.rom != null) {
-                        Text(ln.rom, fontSize = (base - 5).sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(ln.rom, fontSize = (base - 5).sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = align)
                     }
                     if (prefs.lyricsTranslation && ln.tr != null) {
-                        Text(ln.tr, fontSize = (base - 5).sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(ln.tr, fontSize = (base - 5).sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = align)
                     }
                 }
             }
@@ -275,7 +291,7 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
 
 /** The line being sung, filling in word by word (and letter by letter inside the current word). */
 @Composable
-private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int) {
+private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, align: TextAlign) {
     val reduce = LocalReduceMotion.current
     val progress = Remote.progress.collectAsStateWithLifecycle()
     var tick by remember { mutableLongStateOf(0L) }
@@ -285,7 +301,7 @@ private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int) 
             tick = SystemClock.elapsedRealtime()
         }
     }
-    val on = MaterialTheme.colorScheme.primary
+    val on = LocalAccent.current ?: MaterialTheme.colorScheme.primary
     val off = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
     val p = progress.value
     val clock = maxOf(tick, p.at)
@@ -306,7 +322,7 @@ private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int) 
             }
         }
     }
-    Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp)
+    Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp, textAlign = align)
 }
 
 @Composable
@@ -327,9 +343,56 @@ fun LyricsPane(s: RemoteState, modifier: Modifier = Modifier) {
     val ui = rememberLyrics(s.now, active = true)
     val active = rememberActiveLine(ui.result?.lines.orEmpty(), ui.result?.synced == true, s.now?.playing == true)
     val state = rememberLazyListState()
-    FollowLyrics(state, firstLineIndex = 1, active = active, enabled = true)
-    LazyColumn(modifier.fillMaxSize(), state = state) {
-        item(key = "ly-controls") { LyricsControls(ui) }
-        lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
+    var jump by remember { mutableIntStateOf(0) }
+    FollowLyrics(state, firstLineIndex = 1, active = active, enabled = true, jump = jump)
+    Box(modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), state = state) {
+            item(key = "ly-controls") { LyricsControls(ui) }
+            lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
+        }
+        JumpToLine(state, 1, active, Modifier.align(Alignment.BottomEnd).padding(16.dp)) { jump++ }
+    }
+}
+
+/** A button that appears when the line being sung is off screen and takes you back to it. */
+@Composable
+fun JumpToLine(state: LazyListState, firstLineIndex: Int, active: Int, modifier: Modifier = Modifier, onJump: () -> Unit) {
+    val offscreen by remember(active) {
+        derivedStateOf { active >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == firstLineIndex + active } }
+    }
+    if (offscreen) {
+        androidx.compose.material3.ExtendedFloatingActionButton(
+            onClick = onJump,
+            modifier = modifier,
+            icon = { Icon(Icons.Filled.MyLocation, null) },
+            text = { Text("Current line") },
+        )
+    }
+}
+
+/** Alignment, size, spacing and how faint the other lines are. Shared by Settings and the lyrics view. */
+@Composable
+fun LyricsLayoutControls() {
+    val p by Settings.prefs.collectAsStateWithLifecycle()
+    @Composable
+    fun chips(title: String, options: List<Pair<String, String>>, selected: String, pick: (String) -> Unit) {
+        Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { (v, l) -> FilterChip(selected = selected == v, onClick = { pick(v) }, label = { Text(l) }) }
+        }
+    }
+    chips("Alignment", listOf("start" to "Left", "center" to "Centered", "end" to "Right"), p.lyricsAlign) { v -> Settings.update { it.copy(lyricsAlign = v) } }
+    Text("Text size · ${p.lyricsSp} sp", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
+    androidx.compose.material3.Slider(
+        value = p.lyricsSp.toFloat(), onValueChange = { v -> Settings.update { it.copy(lyricsSp = v.toInt()) } }, valueRange = 14f..40f,
+    )
+    chips("Line spacing", listOf("3" to "Tight", "7" to "Normal", "12" to "Relaxed", "18" to "Airy"), p.lyricsSpacing.toString()) { v -> Settings.update { it.copy(lyricsSpacing = v.toInt()) } }
+    chips("Other lines", listOf("65" to "Bright", "45" to "Normal", "28" to "Faint"), p.lyricsDim.toString()) { v -> Settings.update { it.copy(lyricsDim = v.toInt()) } }
+    Text("Sample", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+    val align = when (p.lyricsAlign) { "center" -> TextAlign.Center; "end" -> TextAlign.End; else -> TextAlign.Start }
+    Column(Modifier.fillMaxWidth().padding(vertical = p.lyricsSpacing.dp)) {
+        Text("This is the line being sung", fontSize = (p.lyricsSp + 2).sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = align, modifier = Modifier.fillMaxWidth())
+        Text("And this one comes next", fontSize = p.lyricsSp.sp, fontWeight = FontWeight.SemiBold, textAlign = align,
+            modifier = Modifier.fillMaxWidth().padding(top = p.lyricsSpacing.dp).alpha(p.lyricsDim / 100f))
     }
 }

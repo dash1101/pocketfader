@@ -215,19 +215,19 @@ private fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
             lists == null && err != null -> Message(err)
             lists == null -> Loading()
             lists.isEmpty() -> Message("No playlists yet.")
-            else -> LazyColumn(Modifier.fillMaxSize()) {
+            else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 items(lists, key = { it.playlistId ?: it.browseId ?: it.title }) { p ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onOpen(p) }.padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        Thumb(p.thumb, 56, 12)
-                        Column(Modifier.weight(1f)) {
-                            Text(p.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (p.subtitle.isNotBlank()) {
-                                Text(p.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
+                    Column(Modifier.clickable { onOpen(p) }) {
+                        Thumb(p.thumb, 150, 18)
+                        Text(p.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (p.subtitle.isNotBlank()) {
+                            Text(p.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

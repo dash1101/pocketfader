@@ -57,6 +57,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -129,16 +131,26 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
     val now = s.now
     val hasTrack = now != null && now.title.isNotBlank()
     Column(modifier.padding(horizontal = 24.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Cover(now?.art, Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f))
-        Spacer(Modifier.height(20.dp))
+        val calm = LocalReduceMotion.current
+        val scale by androidx.compose.animation.core.animateFloatAsState(
+            if (now?.playing == true || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "cover",
+        )
+        Cover(
+            now?.art,
+            Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f)
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .then(if (calm) Modifier else Modifier.shadow(20.dp, RoundedCornerShape(32.dp), clip = false)),
+            corner = 32,
+        )
+        Spacer(Modifier.height(22.dp))
 
         val videoId = now?.videoId
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
                     now?.title?.takeIf { it.isNotBlank() } ?: "Nothing playing",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -296,14 +308,15 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val lines = ui.result?.lines.orEmpty()
     val active = rememberActiveLine(lines, ui.result?.synced == true, s.now?.playing == true)
     // list items before the first lyric line: player, tabs, lyrics controls
-    FollowLyrics(listState, firstLineIndex = 3, active = active, enabled = tab == 1)
+    var jump by remember { mutableIntStateOf(0) }
+    FollowLyrics(listState, firstLineIndex = 3, active = active, enabled = tab == 1, jump = jump)
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), state = listState) {
             item(key = "player") { PlayerPanel(s) }
             stickyHeader(key = "tabs") {
-                Surface(color = MaterialTheme.colorScheme.background) {
-                    TabRow(selectedTabIndex = tab) {
+                Surface(color = MaterialTheme.colorScheme.background.copy(alpha = 0.94f)) {
+                    TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
                         Tab(selected = tab == 0, onClick = { tab = 0; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Up next") })
                         Tab(selected = tab == 1, onClick = { tab = 1; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Lyrics") })
                     }
@@ -318,6 +331,7 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
             item(key = "pad") { Spacer(Modifier.height(88.dp)) }
         }
         menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
+        if (tab == 1) JumpToLine(listState, 3, active, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 92.dp)) { jump++ }
         val showMini by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
         if (showMini) {
             MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier.align(Alignment.BottomCenter))

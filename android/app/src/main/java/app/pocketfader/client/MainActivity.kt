@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -219,10 +220,17 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         if (e != null && s.online) snackbar.showSnackbar(e)
     }
 
+    val tint by rememberArtTint(s.now?.art)
+    val showArt = !showSettings && (wide || dest == Dest.Playing)
+    val (washBrush, accent) = artBackground(if (showArt) tint else null, prefs.theme == "black")
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides (if (showArt) accent else null)) {
+    Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text(if (showSettings) "Settings" else if (wide) "Pocketfader" else dest.label) },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                title = { Text(if (showSettings) "Settings" else if (wide) "Pocketfader" else if (dest == Dest.Playing) "Now playing" else dest.label, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
                 navigationIcon = {
                     if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
@@ -233,7 +241,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         },
         bottomBar = {
             if (!wide && !showSettings) {
-                NavigationBar {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
                     Dest.values().forEach { d ->
                         NavigationBarItem(
                             selected = dest == d, onClick = { dest = d },
@@ -296,6 +304,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
             }
         }
     }
+
+    }   // Box
+    }   // CompositionLocalProvider
 
     if (showConnect) {
         ConnectDialog(

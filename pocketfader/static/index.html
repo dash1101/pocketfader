@@ -2445,7 +2445,7 @@ function setRailMode(mode) {
   if (ly) loadLyrics(false);
 }
 document.querySelectorAll('.railhead .rtab').forEach(b => b.addEventListener('click', () => setRailMode(b.dataset.rt)));
-function lyricsKey() { const n = lastNow; return n && n.title ? [n.title, n.artist, Math.round(n.duration || 0)].join('|') : null; }
+function lyricsKey() { const n = lastNow; return n && n.title ? [n.title, n.artist].join('|') : null; }
 async function loadLyrics(refresh) {
   const key = lyricsKey(), body = $('#lyricsbody');
   if (!key) { lyr.key = null; lyr.data = null; body.innerHTML = '<div class="lymsg">Nothing is playing.</div>'; return; }

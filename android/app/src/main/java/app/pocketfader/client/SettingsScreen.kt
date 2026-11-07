@@ -13,6 +13,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -126,9 +138,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "Sync", "Shift the lyrics if they run early or late on this device. You can also nudge them while viewing lyrics.",
                 listOf("-500" to "−0.5 s", "-200" to "−0.2 s", "0" to "On time", "200" to "+0.2 s", "500" to "+0.5 s"), p.lyricsOffsetMs.toString(),
             ) { v -> Settings.update { it.copy(lyricsOffsetMs = v.toInt()) } }
-            Choice("Text size", null, listOf("0" to "Small", "1" to "Normal", "2" to "Large"), p.lyricsSize.toString()) { v ->
-                Settings.update { it.copy(lyricsSize = v.toInt()) }
-            }
+            LyricsLayoutControls()
             Choice(
                 "Preferred source", "Used first when it has the song. You can also switch while viewing lyrics.",
                 listOf("auto" to "Automatic", "kugou" to "KuGou", "lrclib" to "LRCLIB", "netease" to "NetEase", "ytm" to "YouTube Music"), p.lyricsSource,
@@ -187,8 +197,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val icon = when (title) {
+        "Connection" -> Icons.Filled.Link; "Appearance" -> Icons.Filled.Palette; "Screen & always-on" -> Icons.Filled.Smartphone
+        "Controls" -> Icons.Filled.TouchApp; "Lyrics" -> Icons.Filled.MusicNote; "Performance" -> Icons.Filled.Speed
+        "Updates" -> Icons.Filled.SystemUpdate; else -> Icons.Filled.Info
+    }
     Column {
-        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
+        Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        }
         Card(
             Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
