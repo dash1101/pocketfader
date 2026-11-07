@@ -15,8 +15,6 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.concurrent.thread
 
 /**
@@ -30,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var web: WebView
     private val prefs by lazy { getSharedPreferences("vmr", MODE_PRIVATE) }
-    private val server get() = prefs.getString("server", DEFAULT_SERVER)!!.trim().trimEnd('/')
+    private val addr get() = ServerAddress.parse(prefs.getString("server", DEFAULT_SERVER)!!)
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,15 +62,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startEverything() {
-        web.loadUrl(server)
-        startService(Intent(this, PlaybackService::class.java).putExtra("server", server))
+        // Loading the full link lets the server set its access-token cookie for the WebView.
+        web.loadUrl(addr.open)
+        startService(Intent(this, PlaybackService::class.java)
+            .putExtra("server", addr.base).putExtra("token", addr.token))
     }
 
     private fun promptServer() {
-        val input = EditText(this).apply { setText(server) }
+        val input = EditText(this).apply { setText(prefs.getString("server", DEFAULT_SERVER)) }
         AlertDialog.Builder(this)
             .setTitle("Server address")
-            .setMessage("The Pocketfader server URL (host:port).")
+            .setMessage("The Pocketfader server address (host:port), or the full link it prints if it asks for a token.")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 prefs.edit().putString("server", input.text.toString().trim()).apply()
@@ -94,8 +94,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun bumpVolume(delta: Int) = thread {
         try {
-            (URL("$server/api/volume").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 1500; readTimeout = 1500
+            val a = addr
+            open("${a.base}/api/volume", a.token, "POST", 1500).apply {
+                doOutput = true
                 setRequestProperty("Content-Type", "application/json")
                 outputStream.use { it.write("""{"delta":$delta}""".toByteArray()) }
                 responseCode; disconnect()

@@ -1,60 +1,41 @@
-# Legacy Android WebView wrapper
+# Pocketfader Android client (WebView edition)
 
-> **Superseded.** This is the original thin WebView shell, kept for reference. The plan for a real native
-> app is in [`docs/ANDROID_PLAN.md`](../../docs/ANDROID_PLAN.md).
+A thin native wrapper around the Pocketfader web app that adds what a browser can't do on its own:
 
+1. **Media notification** on the lock screen / status bar showing what's playing on the computer
+   (title, artist, cover art) with **prev / play-pause / next**.
+2. **Hardware volume keys**: while the app is open, the phone's volume buttons change the
+   **computer's** volume instead of the phone's.
 
-A thin native wrapper around the Pocketfader web app that adds the two things a browser can't do:
+Everything else is the normal web app inside a WebView. A fully native app is planned; see
+[`docs/ANDROID_PLAN.md`](../../docs/ANDROID_PLAN.md).
 
-1. **Media notification** in the status bar / lock screen showing what's playing on the PC's
-   YT Music (title, artist, cover art) with **prev / play-pause / next** — looks and behaves
-   like native playback on the device, but controls the computer.
-2. **Hardware volume keys** — while the app is focused, the device's volume buttons bump the
-   **host computer's** volume (via `/api/volume {delta}`) instead of the device's own volume.
+## Install
 
-Everything else (search, queue, widgets, themes…) is the existing web app loaded in a WebView.
+Download `pocketfader-android-….apk` from the repository's **Releases** page, allow "install unknown
+apps" for your browser/file manager, and open it. On first launch enter the address of the computer
+running Pocketfader, for example `http://my-computer:8777` (a Tailscale name or address). Tap the small
+gear in the top-right corner any time to change it.
 
----
+If the server was started with `--lan` (or `--token`) it asks for an access token: paste the **full
+link** the server prints (it ends in `?token=…`) instead of just the address.
 
-## Set it up in Android Studio (~10 min)
+## Build it yourself
 
-1. **New Project → Empty Views Activity** (Kotlin).
-   - Name: `Pocketfader`  · Package: `app.pocketfader.legacy`  · Language: **Kotlin**
-   - Minimum SDK: **API 26 (Android 8.0)** or higher.
-2. Replace the generated `MainActivity.kt` with [`MainActivity.kt`](MainActivity.kt) from here,
-   and add [`PlaybackService.kt`](PlaybackService.kt) in the same package folder
-   (`app/src/main/java/app/pocketfader/legacy/`).
-3. **Module `build.gradle.kts`** → add to `dependencies`:
-   ```kotlin
-   implementation("androidx.media:media:1.7.0")
-   implementation("androidx.appcompat:appcompat:1.7.0")
-   ```
-4. **`AndroidManifest.xml`** — inside `<manifest>` (above `<application>`):
-   ```xml
-   <uses-permission android:name="android.permission.INTERNET"/>
-   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-   ```
-   On the `<application …>` tag add:  `android:usesCleartextTraffic="true"`
-   (the server is plain HTTP over Tailscale).
-   Inside `<application>` add the service:
-   ```xml
-   <service
-       android:name=".PlaybackService"
-       android:exported="false"
-       android:foregroundServiceType="mediaPlayback"/>
-   ```
-   And on the existing `<activity android:name=".MainActivity">` add:
-   `android:launchMode="singleTask"`  and  `android:configChanges="orientation|screenSize|keyboardHidden"`
-   (so rotating / volume presses don't recreate the WebView).
-5. Run it on your device. **First launch asks for the server address** — it defaults to
-   `http://your-computer:8777`. Long-press the little ⚙ (top-right) any time to change it.
+Needs JDK 17 and the Android SDK (Android Studio includes both).
+
+```bash
+cd android/legacy-webview
+gradle :app:assembleRelease          # or open this folder in Android Studio and press Run
+# APK: app/build/outputs/apk/release/app-release.apk
+```
+
+Release builds from CI are signed with a throwaway debug key; sign your own build with a
+keystore of your choice if you want updates to install over each other.
 
 ## Notes
-- Uses built-in `android.R.drawable.ic_media_*` icons, so there are **no drawable files to add**.
-- The media notification polls `/api/ytm/state` every 2 s; transport buttons POST
-  `/api/ytm {type:"transport",…}`; volume keys POST `/api/volume {delta:±5}`.
-- To make it installable to the app drawer, just **Build → Generate Signed APK** (or run once from
-  Android Studio and it stays installed).
-- Later ideas: lock-screen seek bar, tasker-style quick tiles, Wear OS remote.
+- Minimum Android 8.0 (API 26). Uses built-in system icons for the notification buttons.
+- The notification polls `/api/ytm/state` every 2 s; transport buttons post to `/api/ytm`; volume keys
+  post `{"delta": ±5}` to `/api/volume`.
+- `spen/SpenRemoteManager.kt` is an optional Samsung S Pen air-actions helper. It needs Samsung's
+  S Pen Remote SDK (`.aar`), is **not** compiled into the default build, and is kept for reference.

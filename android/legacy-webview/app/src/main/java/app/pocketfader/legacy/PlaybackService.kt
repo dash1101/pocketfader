@@ -18,7 +18,6 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import org.json.JSONObject
-import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
@@ -31,7 +30,8 @@ class PlaybackService : Service() {
     companion object { const val CH = "vmr_playback"; const val NID = 1 }
 
     private lateinit var session: MediaSessionCompat
-    private var server = MainActivity.DEFAULT_SERVER
+    private var server = ServerAddress.parse(MainActivity.DEFAULT_SERVER).base
+    private var token: String? = null
     private val ui = Handler(Looper.getMainLooper())
     @Volatile private var running = true
     private var artUrl: String? = null
@@ -56,6 +56,7 @@ class PlaybackService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.getStringExtra("server")?.let { server = it.trim().trimEnd('/') }
+        if (intent?.hasExtra("token") == true) token = intent.getStringExtra("token")
         intent?.action?.takeIf { it.startsWith("cmd:") }?.let { transport(it.removePrefix("cmd:")) }
         return START_STICKY
     }
@@ -63,7 +64,7 @@ class PlaybackService : Service() {
     private fun poll() = thread {
         while (running) {
             try {
-                val now = JSONObject(URL("$server/api/ytm/state").readText()).optJSONObject("now")
+                val now = JSONObject(open("$server/api/ytm/state", token).inputStream.bufferedReader().use { it.readText() }).optJSONObject("now")
                 val t = now?.optString("title").orEmpty()
                 val a = now?.optString("artist").orEmpty()
                 val p = now?.optBoolean("playing") ?: false
@@ -124,8 +125,8 @@ class PlaybackService : Service() {
 
     private fun transport(action: String) = thread {
         try {
-            (URL("$server/api/ytm").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 2000; readTimeout = 2000
+            open("$server/api/ytm", token, "POST").apply {
+                doOutput = true
                 setRequestProperty("Content-Type", "application/json")
                 outputStream.use { it.write("""{"type":"transport","action":"$action"}""".toByteArray()) }
                 responseCode; disconnect()
