@@ -17,15 +17,36 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // A persistent release key, so each new version installs over the last one. CI provides it through
+    // environment variables; without them builds fall back to the throwaway debug key.
+    val releaseKey = System.getenv("PF_KEYSTORE")?.takeIf { file(it).exists() }
+    signingConfigs {
+        if (releaseKey != null) {
+            create("pocketfader") {
+                storeFile = file(releaseKey)
+                storePassword = System.getenv("PF_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("PF_KEY_ALIAS")
+                keyPassword = System.getenv("PF_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+    val appSigning = if (releaseKey != null) signingConfigs.getByName("pocketfader") else signingConfigs.getByName("debug")
+
     buildTypes {
         release {
             // R8 shrinks the code and resources: a smaller APK that starts faster on older phones.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Pre-releases are signed with the auto-generated debug key. A persistent release
-            // keystore comes later, so for now builds from different machines can't update each other.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = appSigning
+        }
+        // The same app without shrinking, signed with the same key: a fallback if the shrunk build misbehaves.
+        create("unshrunk") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = appSigning
+            matchingFallbacks += "release"
         }
     }
     compileOptions {

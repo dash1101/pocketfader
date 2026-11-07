@@ -18,6 +18,32 @@ class PfApi(private val cfg: ServerConfig) {
     fun post(path: String, body: JSONObject, timeoutMs: Int = 15000): JSONObject =
         call("POST", path, body, timeoutMs)
 
+    /** Streams a file from the server into [dest] (used for app updates). */
+    fun download(path: String, dest: java.io.File, timeoutMs: Int = 120000) {
+        val conn = URL(cfg.url.trimEnd('/') + path).openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
+            conn.instanceFollowRedirects = false
+            if (cfg.token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${cfg.token}")
+            if (cfg.hasCloudflareToken) {
+                conn.setRequestProperty("CF-Access-Client-Id", cfg.cfClientId)
+                conn.setRequestProperty("CF-Access-Client-Secret", cfg.cfClientSecret)
+            }
+            val code = conn.responseCode
+            if (code != 200) {
+                val msg = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw ApiException(code, runCatching { JSONObject(msg).optString("error") }.getOrNull()?.ifBlank { null } ?: "Download failed ($code)")
+            }
+            dest.parentFile?.mkdirs()
+            val tmp = java.io.File(dest.path + ".part")
+            conn.inputStream.use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            tmp.renameTo(dest)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun call(method: String, path: String, body: JSONObject?, timeoutMs: Int): JSONObject {
         val conn = URL(cfg.url.trimEnd('/') + path).openConnection() as HttpURLConnection
         try {

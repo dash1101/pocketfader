@@ -66,6 +66,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.transform.RoundedCornersTransformation
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -82,6 +86,28 @@ fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28) {
             AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
             Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * A small cover for lists. It is decoded at its own size with the rounded corners baked into the bitmap, so
+ * scrolling a long list doesn't make the GPU clip every picture on every frame (the main cause of jank on
+ * older tablets).
+ */
+@Composable
+fun Thumb(url: String?, sizeDp: Int, cornerDp: Int = 10, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val density = LocalDensity.current.density
+    val px = (sizeDp * density).toInt().coerceAtLeast(32)
+    val shape = RoundedCornerShape(cornerDp.dp)
+    Box(modifier.size(sizeDp.dp).background(MaterialTheme.colorScheme.surfaceVariant, shape), contentAlignment = Alignment.Center) {
+        if (url != null) {
+            val request = remember(url, px) {
+                ImageRequest.Builder(ctx).data(url).size(px).crossfade(false).allowRgb565(true)
+                    .transformations(RoundedCornersTransformation(cornerDp * density)).build()
+            }
+            AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -263,6 +289,7 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val prefs by Settings.prefs.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }          // 0 = up next, 1 = lyrics
     var playedOpen by rememberSaveable { mutableStateOf(false) }
+    var menuTrack by remember { mutableStateOf<Track?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ui = rememberLyrics(s.now, active = tab == 1)
@@ -283,13 +310,14 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
                 }
             }
             if (tab == 0) {
-                queueItems(s, playedOpen) { playedOpen = !playedOpen }
+                queueItems(s, playedOpen, { playedOpen = !playedOpen }) { menuTrack = it }
             } else {
                 item(key = "ly-controls") { LyricsControls(ui) }
-                lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true)
+                lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
             }
             item(key = "pad") { Spacer(Modifier.height(88.dp)) }
         }
+        menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
         val showMini by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
         if (showMini) {
             MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier.align(Alignment.BottomCenter))
@@ -310,7 +338,7 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
         shadowElevation = 6.dp,
     ) {
         Row(Modifier.clickable(onClick = onTap).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(now.art, Modifier.size(44.dp), corner = 10)
+            Thumb(now.art, 44)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(now.title.ifBlank { "Nothing playing" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(now.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -334,8 +362,10 @@ fun PlayerPane(s: RemoteState, modifier: Modifier = Modifier) {
 @Composable
 fun QueuePane(s: RemoteState, modifier: Modifier = Modifier) {
     var playedOpen by rememberSaveable { mutableStateOf(false) }
+    var menuTrack by remember { mutableStateOf<Track?>(null) }
+    menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
     LazyColumn(modifier.fillMaxSize()) {
-        queueItems(s, playedOpen) { playedOpen = !playedOpen }
+        queueItems(s, playedOpen, { playedOpen = !playedOpen }) { menuTrack = it }
         item(key = "pad") { Spacer(Modifier.height(24.dp)) }
     }
 }

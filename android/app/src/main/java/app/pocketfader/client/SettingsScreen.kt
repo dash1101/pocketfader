@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
@@ -121,12 +122,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Translations", "Show a translation under each line when a source has one.", p.lyricsTranslation) { v ->
                 Settings.update { it.copy(lyricsTranslation = v) }
             }
+            Choice(
+                "Sync", "Shift the lyrics if they run early or late on this device. You can also nudge them while viewing lyrics.",
+                listOf("-500" to "−0.5 s", "-200" to "−0.2 s", "0" to "On time", "200" to "+0.2 s", "500" to "+0.5 s"), p.lyricsOffsetMs.toString(),
+            ) { v -> Settings.update { it.copy(lyricsOffsetMs = v.toInt()) } }
             Choice("Text size", null, listOf("0" to "Small", "1" to "Normal", "2" to "Large"), p.lyricsSize.toString()) { v ->
                 Settings.update { it.copy(lyricsSize = v.toInt()) }
             }
             Choice(
                 "Preferred source", "Used first when it has the song. You can also switch while viewing lyrics.",
-                listOf("auto" to "Automatic", "lrclib" to "LRCLIB", "netease" to "NetEase", "ytm" to "YouTube Music"), p.lyricsSource,
+                listOf("auto" to "Automatic", "kugou" to "KuGou", "lrclib" to "LRCLIB", "netease" to "NetEase", "ytm" to "YouTube Music"), p.lyricsSource,
             ) { v -> Settings.update { it.copy(lyricsSource = v) } }
         }
 
@@ -136,6 +141,31 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 listOf("fast" to "Fast", "normal" to "Normal", "battery" to "Battery saver"), p.pollSpeed,
             ) { v -> Settings.update { it.copy(pollSpeed = v) } }
             Toggle("Reduce animations", "Fewer moving parts; smoother on older devices.", p.reduceMotion) { v -> Settings.update { it.copy(reduceMotion = v) } }
+        }
+
+        Section("Updates") {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val info = UpdateManager.info
+            val newer = UpdateManager.available(ctx)
+            Info("Installed", version.ifBlank { "unknown" })
+            Info("Latest release", info?.latest?.ifBlank { null } ?: "Not checked yet")
+            UpdateManager.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilledTonalButton(onClick = { scope.launch { UpdateManager.check(ctx, refresh = true) } }, enabled = !UpdateManager.checking && s.online) {
+                    Text(if (UpdateManager.checking) "Checking…" else "Check now")
+                }
+                if (newer) {
+                    androidx.compose.material3.Button(onClick = { scope.launch { UpdateManager.install(ctx) } }, enabled = !UpdateManager.downloading) {
+                        Text(if (UpdateManager.downloading) "Downloading…" else "Download & install")
+                    }
+                }
+            }
+            Toggle("Check automatically", "Looks for a new version when the app opens (the computer checks GitHub, at most every few hours).", p.autoUpdate) { v ->
+                Settings.update { it.copy(autoUpdate = v) }
+            }
+            if (info != null && newer && info.notes.isNotBlank()) {
+                Text(info.notes.lines().take(14).joinToString("\n"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
         Section("About") {

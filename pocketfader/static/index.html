@@ -484,7 +484,12 @@
   #lyricsbody .lyl.on { opacity:1; transform:scale(1.04); }
   #lyricsbody .lyl.on .t { color:var(--accent); }
   #lyricsbody.plain .lyl { opacity:.9; }
-  #lyricsbody .lygap { text-align:center; color:var(--dim2); opacity:.4; padding:4px; }
+  #lyricsbody .lyl.gap { text-align:center; opacity:.45; }
+  #lyricsbody .lyl.gap .t { font-size:30px; font-weight:400; transition:font-size .2s; }
+  #lyricsbody .lyl.gap.on { opacity:1; transform:none; }
+  #lyricsbody .lyl.gap.on .t { font-size:38px; color:var(--accent); }
+  #lyricsbody .lw { background:linear-gradient(90deg, var(--accent) var(--p,0%), color-mix(in srgb, var(--text) 40%, transparent) var(--p,0%));
+                    -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent; }
   #lyricsbody .lymsg { color:var(--dim); text-align:center; padding:40px 16px; font-size:14px; }
   /* ---------- in-page dialog (the native prompt/confirm don't exist inside the Android WebView) ---------- */
   #askwrap { position:fixed; inset:0; z-index:95; display:none; align-items:center; justify-content:center;
@@ -2452,9 +2457,16 @@ async function loadLyrics(refresh) {
   if (lyr.source !== 'auto') q.set('source', lyr.source);
   if (refresh) q.set('refresh', '1');
   try { const r = await fetch('/api/lyrics?' + q); const j = await r.json(); if (lyr.key !== key) return;
-    if (!r.ok) throw new Error(j.error || r.status); lyr.data = j; }
+    if (!r.ok) throw new Error(j.error || r.status); lyr.data = j;
+    if (j.pending && !refresh) setTimeout(() => { if (lyr.key === key) { const k = lyr.key; lyr.key = null; loadLyricsQuiet(k); } }, 2500); }
   catch (e) { if (lyr.key !== key) return; lyr.error = String(e.message || e); }
   lyr.loading = false; paintLyrics();
+}
+async function loadLyricsQuiet(key) {   // a second look once the slower sources have answered; no spinner
+  const n = lastNow; if (!n || lyricsKey() !== key) return;
+  const q = new URLSearchParams({ title:n.title, artist:n.artist || '', duration:Math.round(n.duration || 0) });
+  if (n.videoId) q.set('videoId', n.videoId); if (lyr.source !== 'auto') q.set('source', lyr.source);
+  try { const j = await (await fetch('/api/lyrics?' + q)).json(); if (lyricsKey() !== key) return; lyr.key = key; lyr.data = j; paintLyrics(); } catch (e) { lyr.key = key; }
 }
 function paintLyrics() {
   const body = $('#lyricsbody'); body.innerHTML = '';
@@ -2468,7 +2480,7 @@ function paintLyrics() {
   const note = el('div', 'lynote'); note.textContent = (L.synced ? 'Live lyrics follow the song. Tap a line to jump to it.' : "These lyrics aren't time-synced.") + (L.credit ? '  ' + L.credit : '');
   body.appendChild(note);
   L.lines.forEach((ln, i) => {
-    if (!ln.text.trim()) { const g = el('div', 'lygap'); g.textContent = '♪'; body.appendChild(g); return; }
+    if (!ln.text.trim()) { const g = el('div', 'lyl gap'); g.dataset.i = i; const gt = el('div', 't'); gt.textContent = '♪'; g.appendChild(gt); body.appendChild(g); return; }
     const row = el('div', 'lyl'); row.dataset.i = i;
     const t = el('div', 't'); t.textContent = ln.text; row.appendChild(t);
     if (lyr.rom && ln.rom) { const r = el('div', 'r'); r.textContent = ln.rom; row.appendChild(r); }
@@ -2481,23 +2493,40 @@ function paintLyrics() {
 function lyricsControls(d) {
   const box = el('div', 'lyctl');
   const chip = (label, on, fn, off) => { const b = el('button', 'lychip' + (on ? ' on' : '')); b.textContent = label; b.disabled = !!off; b.addEventListener('click', fn); box.appendChild(b); return b; };
-  (d.sources || []).forEach(s => chip(s.label + (s.found && s.synced ? ' · synced' : ''), d.source === s.id, () => { lyr.source = s.id; lsSet('vmr-ly-src', s.id); lyr.key = null; loadLyrics(false); }, !s.found));
+  (d.sources || []).forEach(s => chip(s.label + (s.found && s.words ? ' · word-by-word' : s.found && s.synced ? ' · synced' : ''), d.source === s.id, () => { lyr.source = s.id; lsSet('vmr-ly-src', s.id); lyr.key = null; loadLyrics(false); }, !s.found));
   chip('↻', false, () => { lyr.key = null; loadLyrics(true); }).title = 'Look again';
+  if (d.lyrics && d.lyrics.synced) { const off = lsGet('vmr-ly-off', 0);
+    chip('−0.1s', false, () => { lsSet('vmr-ly-off', Math.max(-2000, off - 100)); paintLyrics(); }).title = 'Lyrics earlier';
+    chip('+0.1s', false, () => { lsSet('vmr-ly-off', Math.min(2000, off + 100)); paintLyrics(); }).title = 'Lyrics later';
+    if (off) chip((off > 0 ? '+' : '') + (off / 1000).toFixed(1) + 's · reset', true, () => { lsSet('vmr-ly-off', 0); paintLyrics(); }); }
   if (d.lyrics && d.lyrics.lines.some(l => l.rom)) chip('Romanize', lyr.rom, () => { lyr.rom = !lyr.rom; lsSet('vmr-ly-rom', lyr.rom); paintLyrics(); });
   if (d.lyrics && d.lyrics.lines.some(l => l.tr)) chip('Translation', lyr.tr, () => { lyr.tr = !lyr.tr; lsSet('vmr-ly-tr', lyr.tr); paintLyrics(); });
   return box;
 }
 let lyPause = 0;
+function lyPos() { const n = lastNow || {}; return (n.position || 0) + (n.playing ? (performance.now() - lastNowAt) / 1000 : 0) + lsGet('vmr-ly-off', 0) / 1000 + 0.1; }
+/* word-by-word: the line being sung fills in word by word, smoothly inside each word */
+let wordRow = null;
+function wordTick() {
+  const d = lyr.data; if (railMode !== 'lyrics' || !d || !d.found || !d.lyrics.synced) return;
+  const row = $('#lyricsbody').querySelector('.lyl.on'); if (!row || row.classList.contains('gap')) return;
+  const ln = d.lyrics.lines[+row.dataset.i]; if (!ln || !ln.w) return;
+  if (wordRow !== row) { wordRow = row; const t = row.querySelector('.t'); t.textContent = '';
+    ln.w.forEach(w => { const sp = el('span', 'lw'); sp.textContent = w[2]; t.appendChild(sp); }); }
+  const pos = lyPos(), spans = row.querySelectorAll('.lw');
+  ln.w.forEach((w, k) => { const f = Math.max(0, Math.min(1, (pos - w[0]) / Math.max(0.05, w[1] - w[0]))); spans[k].style.setProperty('--p', (f * 100).toFixed(0) + '%'); });
+}
+setInterval(wordTick, 90);
 $('#lyricsbody').addEventListener('wheel', () => { lyPause = Date.now() + 6000; }, { passive:true });
 $('#lyricsbody').addEventListener('touchmove', () => { lyPause = Date.now() + 6000; }, { passive:true });
 function lyricsFollow(force) {
   const d = lyr.data; if (railMode !== 'lyrics' || !d || !d.found || !d.lyrics.synced) return;
-  const n = lastNow || {}; const pos = (n.position || 0) + (n.playing ? (performance.now() - lastNowAt) / 1000 : 0) + 0.25;
+  const n = lastNow || {}; const pos = lyPos();
   const L = d.lyrics.lines; let lo = 0, hi = L.length - 1, idx = -1;
   while (lo <= hi) { const mid = (lo + hi) >> 1; const t = L[mid].t == null ? Infinity : L[mid].t; if (t <= pos) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
   if (idx === lyr.active && !force) return;
   lyr.active = idx;
-  const body = $('#lyricsbody'); body.querySelectorAll('.lyl.on').forEach(e => e.classList.remove('on'));
+  const body = $('#lyricsbody'); wordRow = null; body.querySelectorAll('.lyl.on').forEach(e => { e.classList.remove('on'); const ln0 = d.lyrics.lines[+e.dataset.i]; if (ln0 && ln0.w && !e.classList.contains('gap')) e.querySelector('.t').textContent = ln0.text; });
   const row = body.querySelector('.lyl[data-i="' + idx + '"]');
   if (row) { row.classList.add('on'); if (Date.now() > lyPause) body.scrollTo({ top: Math.max(0, row.offsetTop - body.clientHeight / 3), behavior:'smooth' }); }
 }

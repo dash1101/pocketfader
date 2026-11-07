@@ -86,10 +86,22 @@ data class SearchItem(
 data class Shelf(val title: String, val items: List<SearchItem>)
 
 @Immutable
-data class LyricLine(val t: Double?, val text: String, val rom: String?, val tr: String?)
+data class LyricWord(val start: Double, val end: Double, val text: String)
 
 @Immutable
-data class LyricSource(val id: String, val label: String, val found: Boolean, val synced: Boolean)
+data class LyricLine(val t: Double?, val text: String, val rom: String?, val tr: String?, val words: List<LyricWord>? = null)
+
+@Immutable
+data class UpdateInfo(
+    val latest: String = "",
+    val notes: String = "",
+    val url: String = "",
+    val apk: Boolean = false,
+    val error: String? = null,
+)
+
+@Immutable
+data class LyricSource(val id: String, val label: String, val found: Boolean, val synced: Boolean, val words: Boolean = false)
 
 @Immutable
 data class LyricsResult(
@@ -99,6 +111,7 @@ data class LyricsResult(
     val synced: Boolean = false,
     val lines: List<LyricLine> = emptyList(),
     val credit: String? = null,
+    val pending: Boolean = false,        // slower sources are still being asked
 )
 
 fun JSONObject.str(key: String): String? =
@@ -211,7 +224,7 @@ fun parseShelves(o: JSONObject): List<Shelf> =
 
 fun parseLyrics(o: JSONObject): LyricsResult {
     val sources = o.optJSONArray("sources").mapObjects {
-        LyricSource(it.optString("id"), it.optString("label"), it.optBoolean("found"), it.optBoolean("synced"))
+        LyricSource(it.optString("id"), it.optString("label"), it.optBoolean("found"), it.optBoolean("synced"), it.optBoolean("words"))
     }
     val l = o.optJSONObject("lyrics")
     val lines = l?.optJSONArray("lines").mapObjects {
@@ -220,9 +233,18 @@ fun parseLyrics(o: JSONObject): LyricsResult {
             text = it.optString("text"),
             rom = it.str("rom"),
             tr = it.str("tr"),
+            words = it.optJSONArray("w")?.let { arr ->
+                val out = ArrayList<LyricWord>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val w = arr.optJSONArray(i) ?: continue
+                    out.add(LyricWord(w.optDouble(0), w.optDouble(1), w.optString(2)))
+                }
+                out.takeIf { it.isNotEmpty() }
+            },
         )
     }
     return LyricsResult(
+        pending = o.optBoolean("pending", false),
         found = o.optBoolean("found") && lines.isNotEmpty(),
         source = o.str("source"),
         sources = sources,
@@ -235,4 +257,27 @@ fun parseLyrics(o: JSONObject): LyricsResult {
 fun formatTime(seconds: Double): String {
     val s = if (seconds.isNaN() || seconds < 0) 0 else seconds.toInt()
     return "%d:%02d".format(s / 60, s % 60)
+}
+
+fun parseUpdate(o: JSONObject) = UpdateInfo(
+    latest = o.optString("latest", ""),
+    notes = o.optString("notes", ""),
+    url = o.optString("url", ""),
+    apk = o.optBoolean("apk", false),
+    error = o.str("error"),
+)
+
+/** "0.1.0-alpha.4" / "v0.1.0a4" -> comparable list (final releases sort after their alphas); null if not a version. */
+fun versionKey(text: String): List<Int>? {
+    val m = Regex("""v?(\d+)\.(\d+)\.(\d+)(?:[-._]?(alpha|beta|rc|a|b)[-._]?(\d+))?""", RegexOption.IGNORE_CASE).matchEntire(text.trim()) ?: return null
+    val g = m.groupValues
+    val stage = when (g[4].lowercase()) { "" -> 9; "a", "alpha" -> 0; "b", "beta" -> 1; else -> 2 }
+    return listOf(g[1].toInt(), g[2].toInt(), g[3].toInt(), stage, g[5].ifEmpty { "0" }.toInt())
+}
+
+fun isNewer(latest: String, current: String): Boolean {
+    val a = versionKey(latest) ?: return false
+    val b = versionKey(current) ?: return true
+    for (i in a.indices) if (a[i] != b[i]) return a[i] > b[i]
+    return false
 }

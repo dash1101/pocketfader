@@ -35,10 +35,13 @@ data class Prefs(
     val lyricsRoman: Boolean = false,
     val lyricsTranslation: Boolean = false,
     val lyricsSize: Int = 1,                 // 0 small, 1 normal, 2 large
-    val lyricsSource: String = "auto",       // auto | lrclib | netease | ytm
+    val lyricsSource: String = "auto",       // auto | kugou | lrclib | netease | ytm
+    val lyricsOffsetMs: Int = 0,             // nudge the lyrics earlier (-) or later (+)
     // performance
     val pollSpeed: String = "normal",        // fast | normal | battery
     val reduceMotion: Boolean = false,
+    // updates
+    val autoUpdate: Boolean = true,
     // start screen
     val startTab: String = "playing",        // playing | search | library | mixer
 )
@@ -76,7 +79,8 @@ object Settings {
             notification = b("notification", d.notification), volumeKeys = b("volumeKeys", d.volumeKeys),
             volumeStep = i("volumeStep", d.volumeStep), haptics = b("haptics", d.haptics),
             lyricsRoman = b("lyricsRoman", d.lyricsRoman), lyricsTranslation = b("lyricsTranslation", d.lyricsTranslation),
-            lyricsSize = i("lyricsSize", d.lyricsSize), lyricsSource = s("lyricsSource", d.lyricsSource),
+            lyricsSize = i("lyricsSize", d.lyricsSize), lyricsSource = s("lyricsSource", d.lyricsSource), lyricsOffsetMs = i("lyricsOffsetMs", d.lyricsOffsetMs),
+            autoUpdate = b("autoUpdate", d.autoUpdate),
             pollSpeed = s("pollSpeed", d.pollSpeed), reduceMotion = b("reduceMotion", d.reduceMotion),
             startTab = s("startTab", d.startTab),
         )
@@ -92,6 +96,7 @@ object Settings {
             .putInt("volumeStep", p.volumeStep).putBoolean("haptics", p.haptics)
             .putBoolean("lyricsRoman", p.lyricsRoman).putBoolean("lyricsTranslation", p.lyricsTranslation)
             .putInt("lyricsSize", p.lyricsSize).putString("lyricsSource", p.lyricsSource)
+            .putInt("lyricsOffsetMs", p.lyricsOffsetMs).putBoolean("autoUpdate", p.autoUpdate)
             .putString("pollSpeed", p.pollSpeed).putBoolean("reduceMotion", p.reduceMotion)
             .putString("startTab", p.startTab)
             .apply()

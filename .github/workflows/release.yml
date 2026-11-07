@@ -107,14 +107,28 @@ jobs:
         with: { distribution: temurin, java-version: "17" }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
+      - name: Signing key (when the repository has one)
+        env:
+          PF_KEYSTORE_B64: ${{ secrets.PF_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$PF_KEYSTORE_B64" ]; then
+            echo "$PF_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/pf-release.jks"
+            echo "PF_KEYSTORE=$RUNNER_TEMP/pf-release.jks" >> "$GITHUB_ENV"
+            echo "Signing with the persistent release key."
+          else
+            echo "::warning::No PF_KEYSTORE_B64 secret: the APKs are signed with a throwaway key, so they cannot update an installed copy."
+          fi
       - name: Build APK
         working-directory: android
-        run: gradle --no-daemon :app:assembleRelease :app:assembleDebug -PpfVersionName="${GITHUB_REF_NAME#v}" -PpfVersionCode="${GITHUB_RUN_NUMBER}"
+        env:
+          PF_KEYSTORE_PASSWORD: ${{ secrets.PF_KEYSTORE_PASSWORD }}
+          PF_KEY_ALIAS: ${{ secrets.PF_KEY_ALIAS }}
+        run: gradle --no-daemon :app:assembleRelease :app:assembleUnshrunk -PpfVersionName="${GITHUB_REF_NAME#v}" -PpfVersionCode="${GITHUB_RUN_NUMBER}"
       - name: Collect
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk pocketfader-android.apk
           # An unshrunk build, in case the shrunk one misbehaves on some device.
-          cp android/app/build/outputs/apk/debug/app-debug.apk pocketfader-android-unshrunk.apk
+          cp android/app/build/outputs/apk/unshrunk/app-unshrunk.apk pocketfader-android-unshrunk.apk
       - uses: actions/upload-artifact@v4
         with: { name: android, path: "pocketfader-android*.apk" }
 

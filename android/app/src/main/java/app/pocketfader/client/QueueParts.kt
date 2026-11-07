@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -105,7 +103,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
  * The queue as list items: modes, tracks already played (collapsed), the current track, what's up next,
  * and YouTube Music's autoplay suggestions, which can be added to the queue from here.
  */
-fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit) {
+fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit, onMore: (Track) -> Unit) {
     val main = s.queue.filter { it.section != "autoplay" }
     val auto = s.queue.filter { it.section == "autoplay" }
     val now = s.now
@@ -144,16 +142,16 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
             }
         }
         if (playedOpen) {
-            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1)
+            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1, onMore = onMore)
         }
     }
     if (current != null) {
         item(key = "q-now-h") { SectionHeader("Now playing", null) }
-        item(key = "q-now") { TrackRow(current, dimmed = false, canMove = false, lastIndex = main.size - 1, suggestion = false) }
+        item(key = "q-now", contentType = "track") { TrackRow(current, dimmed = false, suggestion = false, onMore = onMore) }
     }
     if (upcoming.isNotEmpty()) {
         item(key = "q-up-h") { SectionHeader("Up next · ${upcoming.size}", null) }
-        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1)
+        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1, onMore = onMore)
     }
     if (auto.isNotEmpty()) {
         item(key = "q-auto-h") {
@@ -173,15 +171,16 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
                 if (s.bridge && a != null) Switch(checked = a, onCheckedChange = { Remote.setAutoplay(it) })
             }
         }
-        items2(auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0, suggestion = true)
+        items2(auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0, suggestion = true, onMore = onMore)
     }
 }
 
 private fun LazyListScope.items2(
-    list: List<Track>, prefix: String, dimmed: Boolean, canMove: Boolean, lastIndex: Int, suggestion: Boolean = false,
+    list: List<Track>, prefix: String, dimmed: Boolean, canMove: Boolean, lastIndex: Int,
+    suggestion: Boolean = false, onMore: (Track) -> Unit,
 ) {
     for (t in list) {
-        item(key = "$prefix-${t.index}-${t.videoId}") { TrackRow(t, dimmed, canMove, lastIndex, suggestion) }
+        item(key = "$prefix-${t.index}-${t.videoId}", contentType = "track") { TrackRow(t, dimmed, suggestion, onMore) }
     }
 }
 
@@ -193,66 +192,73 @@ private fun SectionHeader(title: String, note: String?) {
     }
 }
 
+/** One light row. No per-row menus or layers: everything heavy lives in [TrackActionsDialog]. */
 @Composable
-private fun TrackRow(t: Track, dimmed: Boolean, canMove: Boolean, lastIndex: Int, suggestion: Boolean) {
-    var menu by remember { mutableStateOf(false) }
+private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, onMore: (Track) -> Unit) {
+    val title = if (t.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+    val fade = if (dimmed) 0.55f else 1f
     Row(
         Modifier
             .fillMaxWidth()
-            .alpha(if (dimmed) 0.55f else 1f)
             .clickable(enabled = t.videoId != null) { Remote.queuePlayAt(t) }
             .padding(horizontal = 16.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box {
-            Cover(t.art, Modifier.size(46.dp), corner = 10)
+            Thumb(t.art, 46)
             if (t.selected) {
                 Icon(Icons.Filled.Equalizer, "Playing now", Modifier.align(Alignment.Center).size(24.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
         Column(Modifier.weight(1f)) {
             Text(
-                t.title, style = MaterialTheme.typography.bodyLarge,
-                color = if (t.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                t.title, style = MaterialTheme.typography.bodyLarge, color = title.copy(alpha = fade),
                 fontWeight = if (t.selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Text(
                 listOf(t.artist, t.duration).filter { it.isNotBlank() }.joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall, color = sub.copy(alpha = fade), maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         if (suggestion) {
             // one tap puts a suggestion on the end of your real queue
             IconButton(onClick = { Remote.queueAddEnd(t) }) { Icon(Icons.Filled.Add, "Add to your queue") }
         }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play now") }, leadingIcon = { Icon(Icons.Filled.PlayArrow, null) },
-                    onClick = { menu = false; Remote.queuePlayAt(t) })
-                if (!t.selected) {
-                    DropdownMenuItem(text = { Text("Play next") }, leadingIcon = { Icon(Icons.Filled.SkipNext, null) },
-                        onClick = { menu = false; Remote.queueMoveNext(t) })
-                }
-                if (suggestion) {
-                    DropdownMenuItem(text = { Text("Add to end of queue") }, leadingIcon = { Icon(Icons.Filled.Add, null) },
-                        onClick = { menu = false; Remote.queueAddEnd(t) })
-                }
-                if (canMove && t.index > 0) {
-                    DropdownMenuItem(text = { Text("Move up") }, leadingIcon = { Icon(Icons.Filled.KeyboardArrowUp, null) },
-                        onClick = { menu = false; Remote.queueMove(t, t.index - 1) })
-                }
-                if (canMove && t.index < lastIndex) {
-                    DropdownMenuItem(text = { Text("Move down") }, leadingIcon = { Icon(Icons.Filled.KeyboardArrowDown, null) },
-                        onClick = { menu = false; Remote.queueMove(t, t.index + 1) })
-                }
-                if (canMove) {
-                    DropdownMenuItem(text = { Text("Remove") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                        onClick = { menu = false; Remote.queueRemove(t) })
-                }
-            }
+        IconButton(onClick = { onMore(t) }) { Icon(Icons.Filled.MoreVert, "More") }
+    }
+}
+
+/** The actions for one queue track, shown only when its ⋮ is tapped. */
+@Composable
+fun TrackActionsDialog(t: Track, queueSize: Int, onDone: () -> Unit) {
+    val suggestion = t.section == "autoplay"
+    val canMove = !suggestion
+    val last = queueSize - 1
+    @Composable
+    fun Action(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, run: () -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().clickable { onDone(); run() }.padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, Modifier.size(22.dp))
+            Text(label, Modifier.padding(start = 16.dp), style = MaterialTheme.typography.bodyLarge)
         }
     }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(t.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                Action(Icons.Filled.PlayArrow, "Play now") { Remote.queuePlayAt(t) }
+                if (!t.selected) Action(Icons.Filled.SkipNext, "Play next") { Remote.queueMoveNext(t) }
+                if (suggestion) Action(Icons.Filled.Add, "Add to end of queue") { Remote.queueAddEnd(t) }
+                if (canMove && t.index > 0) Action(Icons.Filled.KeyboardArrowUp, "Move up") { Remote.queueMove(t, t.index - 1) }
+                if (canMove && t.index < last) Action(Icons.Filled.KeyboardArrowDown, "Move down") { Remote.queueMove(t, t.index + 1) }
+                if (canMove) Action(Icons.Filled.Delete, "Remove") { Remote.queueRemove(t) }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDone) { Text("Close") } },
+    )
 }

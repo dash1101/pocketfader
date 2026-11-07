@@ -122,7 +122,10 @@ object Remote {
 
     private fun pollOnce(a: PfApi) {
         val t0 = SystemClock.elapsedRealtime()
+        val ytmStart = SystemClock.elapsedRealtime()
         val ytm = a.get("/api/ytm/state")
+        // The server sampled the position about halfway through this request, not when it began.
+        val sampled = (ytmStart + SystemClock.elapsedRealtime()) / 2
         // Volume, outputs and the equalizer change rarely, so ask for them every other poll
         // (and always right after something was sent).
         val full = tick++ % 2 == 0 || t0 < fastUntil
@@ -131,7 +134,7 @@ object Remote {
         val settling = SystemClock.elapsedRealtime() < settleUntil
         val nowJson = ytm.optJSONObject("now")
         val now = parseNow(nowJson)
-        _progress.value = Progress(parsePosition(nowJson), t0)
+        _progress.value = Progress(parsePosition(nowJson), sampled)
         val queue = parseQueue(ytm)
         val source = ytm.str("source")
         val bridge = ytm.optBoolean("connected", false) && source == "ytm"
@@ -306,6 +309,13 @@ object Remote {
         if (refresh) q.append("&refresh=1")
         return parseLyrics(need().get(q.toString(), 25000))
     }
+
+    // ---- app updates (the computer finds the release, the phone just asks it)
+
+    fun updateInfo(refresh: Boolean): UpdateInfo =
+        parseUpdate(need().get("/api/update" + if (refresh) "?refresh=1" else "", 20000))
+
+    fun downloadUpdate(dest: java.io.File) = need().download("/api/update/apk", dest)
 
     // ---- volume / outputs / EQ
 

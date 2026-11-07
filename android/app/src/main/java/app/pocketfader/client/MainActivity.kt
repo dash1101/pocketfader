@@ -208,6 +208,12 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
 
     BackHandler(enabled = showSettings) { showSettings = false }
     LaunchedEffect(Unit) { Remote.messages.collect { snackbar.showSnackbar(it) } }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val updateScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Once the computer is reachable, look for a new version of the app (the computer asks GitHub).
+    LaunchedEffect(s.online, prefs.autoUpdate) {
+        if (s.online && prefs.autoUpdate && UpdateManager.info == null) UpdateManager.check(ctx, refresh = false)
+    }
     LaunchedEffect(s.error, s.online) {
         val e = s.error
         if (e != null && s.online) snackbar.showSnackbar(e)
@@ -240,6 +246,18 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         snackbarHost = { SnackbarHost(snackbar) },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
+            if (!showSettings && !UpdateManager.dismissed && UpdateManager.available(ctx)) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(
+                            "A new version is ready: ${UpdateManager.info?.latest}",
+                            Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        androidx.compose.material3.TextButton(onClick = { showSettings = true }) { Text("Update") }
+                        androidx.compose.material3.TextButton(onClick = { UpdateManager.dismissed = true }) { Text("Later") }
+                    }
+                }
+            }
             if (!s.online && !showSettings) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                     Text(

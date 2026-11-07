@@ -38,6 +38,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,19 +72,24 @@ fun rememberLyrics(now: Now?, active: Boolean): LyricsUi {
     var force by remember { mutableStateOf(false) }
     val key = now?.takeIf { it.title.isNotBlank() }?.let { it.title + "|" + it.artist + "|" + it.duration.toInt() }
 
-    LaunchedEffect(key, prefs.lyricsSource, refreshTick, active) {
-        if (!active) return@LaunchedEffect
+    LaunchedEffect(key, prefs.lyricsSource, refreshTick) {
         val n = now
         if (n == null || key == null) { result = null; error = null; return@LaunchedEffect }
         val refresh = force
         force = false
-        loading = true
+        delay(if (refresh) 0 else 500)          // skipping through tracks shouldn't start a lookup for each one
+        loading = result == null
         error = null
         try {
-            result = withContext(Dispatchers.IO) { Remote.lyrics(n, prefs.lyricsSource, refresh) }
+            var r = withContext(Dispatchers.IO) { Remote.lyrics(n, prefs.lyricsSource, refresh) }
+            result = r
+            if (r.pending) {                      // a slower source (often the word-by-word one) was still working
+                delay(2500)
+                r = withContext(Dispatchers.IO) { Remote.lyrics(n, prefs.lyricsSource, false) }
+                result = r
+            }
         } catch (e: Exception) {
-            result = null
-            error = e.friendly()
+            if (result == null) error = e.friendly()
         }
         loading = false
     }
@@ -92,6 +102,7 @@ fun rememberLyrics(now: Now?, active: Boolean): LyricsUi {
 @Composable
 fun rememberActiveLine(lines: List<LyricLine>, synced: Boolean, playing: Boolean): Int {
     val reduce = LocalReduceMotion.current
+    val offsetMs = Settings.prefs.collectAsStateWithLifecycle().value.lyricsOffsetMs
     val progress = Remote.progress.collectAsStateWithLifecycle()
     var tick by remember { mutableLongStateOf(0L) }
     LaunchedEffect(playing, synced, reduce) {
@@ -100,19 +111,19 @@ fun rememberActiveLine(lines: List<LyricLine>, synced: Boolean, playing: Boolean
             tick = SystemClock.elapsedRealtime()
         }
     }
-    val index by remember(lines, synced, playing) {
+    val index by remember(lines, synced, playing, offsetMs) {
         derivedStateOf {
             if (!synced) return@derivedStateOf -1
             val p = progress.value
             val clock = maxOf(tick, p.at)
-            val pos = p.position + if (playing) (clock - p.at) / 1000.0 else 0.0
+            val pos = p.position + (if (playing) (clock - p.at) / 1000.0 else 0.0) + offsetMs / 1000.0 + 0.1
             var lo = 0
             var hi = lines.size - 1
             var found = -1
             while (lo <= hi) {                         // last line whose time has passed
                 val mid = (lo + hi) ushr 1
                 val t = lines[mid].t ?: Double.MAX_VALUE
-                if (t <= pos + 0.25) { found = mid; lo = mid + 1 } else hi = mid - 1
+                if (t <= pos) { found = mid; lo = mid + 1 } else hi = mid - 1
             }
             found
         }
@@ -153,7 +164,7 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
                     selected = r.source == src.id,
                     onClick = { Settings.update { it.copy(lyricsSource = src.id) } },
                     enabled = src.found,
-                    label = { Text(src.label + if (src.found && src.synced) " · synced" else "") },
+                    label = { Text(src.label + if (src.found && src.words) " · word-by-word" else if (src.found && src.synced) " · synced" else "") },
                 )
             }
             IconButton(onClick = ui.refresh, enabled = !ui.loading) { Icon(Icons.Filled.Refresh, "Look again") }
@@ -175,6 +186,18 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
                     )
                 }
             }
+            if (r.synced) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sync", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
+                    TextButton(onClick = { Settings.update { it.copy(lyricsOffsetMs = (it.lyricsOffsetMs - 100).coerceAtLeast(-2000)) } }) { Text("−0.1 s") }
+                    TextButton(onClick = { Settings.update { it.copy(lyricsOffsetMs = (it.lyricsOffsetMs + 100).coerceAtMost(2000)) } }) { Text("+0.1 s") }
+                    if (prefs.lyricsOffsetMs != 0) {
+                        TextButton(onClick = { Settings.update { it.copy(lyricsOffsetMs = 0) } }) {
+                            Text("%+.1f s · reset".format(prefs.lyricsOffsetMs / 1000.0))
+                        }
+                    }
+                }
+            }
             val note = buildString {
                 append(if (r.synced) "Live lyrics follow the song. Tap a line to jump to it." else "These lyrics aren't time-synced.")
                 r.credit?.let { append("  ").append(it) }
@@ -185,7 +208,7 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
 }
 
 /** The lyric lines themselves, as list items (so they can live inside a bigger scrolling page). */
-fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics: Boolean, hasTrack: Boolean) {
+fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics: Boolean, hasTrack: Boolean, playing: Boolean) {
     val r = ui.result
     when {
         !hasTrack -> item(key = "ly-none") { LyricsMessage("Nothing is playing.") }
@@ -199,19 +222,26 @@ fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics
         }
         else -> {
             val base = when (prefs.lyricsSize) { 0 -> 18 else -> if (prefs.lyricsSize == 2) 26 else 22 }
-            itemsLines(r, active, prefs, base)
+            itemsLines(r, active, prefs, base, playing)
         }
     }
 }
 
-private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs, base: Int) {
+private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs, base: Int, playing: Boolean) {
     val lines = r.lines
     for (i in lines.indices) {
         item(key = "ly-$i") {
             val ln = lines[i]
             val isActive = r.synced && i == active
             if (ln.text.isBlank()) {
-                Text("♪", Modifier.fillMaxWidth().padding(vertical = 6.dp).alpha(0.4f), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+                // an instrumental break: a big ♪ that lights up while it lasts
+                Text(
+                    "♪",
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    textAlign = TextAlign.Center,
+                    fontSize = (if (isActive) 38 else 30).sp,
+                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                )
             } else {
                 Column(
                     Modifier.fillMaxWidth()
@@ -219,13 +249,17 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
                         .padding(horizontal = 20.dp, vertical = 7.dp)
                         .alpha(if (!r.synced || isActive) 1f else 0.45f),
                 ) {
-                    Text(
-                        ln.text,
-                        fontSize = (if (isActive) base + 2 else base).sp,
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
-                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        lineHeight = ((base + 6)).sp,
-                    )
+                    if (isActive && ln.words != null) {
+                        WordLine(ln, base + 2, playing, prefs.lyricsOffsetMs)
+                    } else {
+                        Text(
+                            ln.text,
+                            fontSize = (if (isActive) base + 2 else base).sp,
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            lineHeight = ((base + 6)).sp,
+                        )
+                    }
                     if (prefs.lyricsRoman && ln.rom != null) {
                         Text(ln.rom, fontSize = (base - 5).sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -237,6 +271,42 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
         }
     }
     item(key = "ly-end") { Spacer(Modifier.height(120.dp)) }
+}
+
+/** The line being sung, filling in word by word (and letter by letter inside the current word). */
+@Composable
+private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int) {
+    val reduce = LocalReduceMotion.current
+    val progress = Remote.progress.collectAsStateWithLifecycle()
+    var tick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(playing, reduce) {
+        while (playing) {
+            delay(if (reduce) 140 else 70)
+            tick = SystemClock.elapsedRealtime()
+        }
+    }
+    val on = MaterialTheme.colorScheme.primary
+    val off = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    val p = progress.value
+    val clock = maxOf(tick, p.at)
+    val pos = p.position + (if (playing) (clock - p.at) / 1000.0 else 0.0) + offsetMs / 1000.0 + 0.1
+    val text = buildAnnotatedString {
+        for (w in ln.words.orEmpty()) {
+            val f = ((pos - w.start) / (w.end - w.start).coerceAtLeast(0.05)).coerceIn(0.0, 1.0)
+            when {
+                f >= 1.0 -> withStyle(SpanStyle(color = on)) { append(w.text) }
+                f <= 0.0 -> withStyle(SpanStyle(color = off)) { append(w.text) }
+                else -> {
+                    val filled = f * w.text.length
+                    for ((i, c) in w.text.withIndex()) {
+                        val k = (filled - i).coerceIn(0.0, 1.0).toFloat()
+                        withStyle(SpanStyle(color = lerp(off, on, k))) { append(c) }
+                    }
+                }
+            }
+        }
+    }
+    Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp)
 }
 
 @Composable
@@ -260,6 +330,6 @@ fun LyricsPane(s: RemoteState, modifier: Modifier = Modifier) {
     FollowLyrics(state, firstLineIndex = 1, active = active, enabled = true)
     LazyColumn(modifier.fillMaxSize(), state = state) {
         item(key = "ly-controls") { LyricsControls(ui) }
-        lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true)
+        lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
     }
 }

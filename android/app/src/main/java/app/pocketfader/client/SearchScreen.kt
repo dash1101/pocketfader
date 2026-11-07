@@ -126,7 +126,7 @@ private fun ResultRow(item: SearchItem) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Cover(item.thumb, Modifier.size(52.dp), corner = 10)
+        Thumb(item.thumb, 52, 10)
         Column(Modifier.weight(1f)) {
             Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(

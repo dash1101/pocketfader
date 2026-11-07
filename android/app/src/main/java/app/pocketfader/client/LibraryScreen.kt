@@ -185,7 +185,7 @@ private fun HomeTab(onOpen: (SearchItem) -> Unit) {
                 LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
                     items(shelf.items, key = { (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind }) { card ->
                         Column(Modifier.width(144.dp).padding(horizontal = 4.dp).clickable { activate(card, onOpen) }) {
-                            Cover(card.thumb, Modifier.size(136.dp), corner = 14)
+                            Thumb(card.thumb, 136, 14)
                             Text(card.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (card.subtitle.isNotBlank()) {
                                 Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -222,7 +222,7 @@ private fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Cover(p.thumb, Modifier.size(56.dp), corner = 12)
+                        Thumb(p.thumb, 56, 12)
                         Column(Modifier.weight(1f)) {
                             Text(p.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (p.subtitle.isNotBlank()) {
@@ -323,7 +323,7 @@ private fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modif
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Cover(item.thumb, Modifier.size(200.dp), corner = 20)
+                        Thumb(item.thumb, 200, 20)
                         Text("${list.size} tracks", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(onClick = { pid?.let { Remote.startPlaylist(it, false) } }, enabled = pid != null) {
@@ -349,7 +349,7 @@ private fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modif
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Cover(t.thumb, Modifier.size(48.dp), corner = 10)
+                        Thumb(t.thumb, 48, 10)
                         Column(Modifier.weight(1f)) {
                             Text(t.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(t.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
