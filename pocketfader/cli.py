@@ -5,6 +5,7 @@ import sys
 import time
 
 from . import __version__
+from .beacon import Beacon
 from .backends import AUDIO_CHOICES, MEDIA_CHOICES, make_audio_and_engine, make_media
 from .config import DEFAULT_PORT, JsonFile, config_dir, get_or_create_token
 from .runner import Runner
@@ -75,7 +76,7 @@ def main(argv=None):
     audio, engine = make_audio_and_engine(a.audio, runner, eq=a.eq)
     media = make_media(a.media, runner)
     app = App(audio, engine, media, prefs=JsonFile(config_dir() / "prefs.json"),
-              token=token, allowed_hosts=a.allow_host)
+              token=token, allowed_hosts=a.allow_host, beacon=Beacon(dry_run=a.dry_run))
 
     hosts = ["127.0.0.1"]
     ts = tailscale_ip()

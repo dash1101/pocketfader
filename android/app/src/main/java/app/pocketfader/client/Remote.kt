@@ -31,6 +31,7 @@ data class RemoteState(
     val outputs: List<Output> = emptyList(),
     val canOutputs: Boolean = false,
     val canLyrics: Boolean = false,
+    val canBeacon: Boolean = false,
 )
 
 /**
@@ -172,6 +173,7 @@ object Remote {
                 eq = if (st == null) cur.eq else parseEq(st),
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
                 canLyrics = st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
+                canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
                 outputs = if (settling) cur.outputs else (outs ?: cur.outputs),
             )
         }
@@ -201,9 +203,14 @@ object Remote {
             try {
                 val r = a.post("/api/ytm", body)
                 if (r.has("error")) {
+                    val err = r.optString("error")
                     notify(
-                        if (r.optString("error") == "extension_offline") "The YouTube Music extension isn't connected"
-                        else r.optString("error")
+                        when {
+                            err == "extension_offline" -> "The YouTube Music extension isn't connected"
+                            err.startsWith("no_shuffle_button") || err.startsWith("no_repeat_button") ->
+                                "Couldn't find that button on YouTube Music. In your browser, reload the Pocketfader extension, then refresh the YouTube Music tab."
+                            else -> err.take(160)
+                        }
                     )
                 }
                 onResult?.invoke(r)
@@ -334,6 +341,20 @@ object Remote {
         if (source != null && source != "auto") q.append("&source=").append(enc(source))
         if (refresh) q.append("&refresh=1")
         return parseLyrics(need().get(q.toString(), 25000))
+    }
+
+    // ---- Discord presence (YTM Beacon, relayed by the computer; the phone never talks to Beacon itself)
+
+    fun beaconStatus(): BeaconStatus = parseBeacon(need().get("/api/beacon", 6000), SystemClock.elapsedRealtime())
+
+    fun beaconVisibility(show: Boolean, minutes: Int? = null) {
+        val body = JSONObject().put("action", if (show) "show" else "hide")
+        if (!show && minutes != null) body.put("minutes", minutes)
+        need().post("/api/beacon/visibility", body, 8000)
+    }
+
+    fun beaconSetting(key: String, value: Any) {
+        need().post("/api/beacon/settings", JSONObject().put(key, value), 8000)
     }
 
     // ---- app updates (the computer finds the release, the phone just asks it)

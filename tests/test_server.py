@@ -5,6 +5,7 @@ from http.server import ThreadingHTTPServer
 
 import threading
 
+from pocketfader.beacon import Beacon
 from pocketfader.config import JsonFile
 from pocketfader.server import App, Handler
 
@@ -23,7 +24,8 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.audio, self.media, self.engine = FakeAudio(), FakeMedia(self.media_avail), self.engine_cls()
         self.app = App(self.audio, self.engine, self.media,
-                       prefs=JsonFile(Path(self.tmp.name) / "prefs.json"), token=self.token)
+                       prefs=JsonFile(Path(self.tmp.name) / "prefs.json"), token=self.token,
+                       beacon=Beacon(ports=(), dry_run=True))
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.app = self.app
         threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.02), daemon=True).start()

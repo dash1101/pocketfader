@@ -12,6 +12,7 @@
  */
 (() => {
   "use strict";
+  const EXT_VERSION = "1.5.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -125,7 +126,8 @@
   // Some YouTube Music builds put the player bar inside shadow roots, where document.querySelector can't see it.
   let barCache = null, barAt = 0;
   const bar = () => {
-    if (barCache && barCache.isConnected && Date.now() - barAt < 4000) return barCache;
+    // a "not here" answer is remembered too, so a page without the bar isn't searched end to end on every state push
+    if (Date.now() - barAt < 4000 && (barCache === null || barCache.isConnected)) return barCache;
     barCache = document.querySelector("ytmusic-player-bar") ||
       deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-BAR")[0] || null;
     barAt = Date.now();
@@ -133,7 +135,15 @@
   };
   const BTN = /^(button|tp-yt-paper-icon-button|yt-icon-button|ytmusic-toggle-button-renderer|yt-button-shape)$/i;
   // The control for "shuffle" / "repeat", found by what it's called when the bar's own markup isn't recognised.
+  const ctlCache = {};
   function labelControl(word) {
+    const c = ctlCache[word];
+    if (c && Date.now() - c.at < 4000 && (c.el === null || c.el.isConnected)) return c.el;
+    const el = findLabelControl(word);
+    ctlCache[word] = { el, at: Date.now() };
+    return el;
+  }
+  function findLabelControl(word) {
     const w = word.toLowerCase();
     const label = (el) => ((el.getAttribute("aria-label") || el.getAttribute("title") || "") + " " + (el.className && el.className.baseVal === undefined ? el.className : "")).toLowerCase();
     const hits = deepAll(document, (el) => BTN.test(el.tagName) && label(el).includes(w) && !el.closest("ytmusic-player-queue-item, ytmusic-menu-renderer"));
@@ -146,14 +156,23 @@
   //   repeat  -> attribute repeat-mode = NONE | ALL | ONE on <ytmusic-player-bar>
   //   shuffle -> attribute shuffle-on present on <ytmusic-player-bar>
   //   autoplay-> <tp-yt-paper-toggle-button id="automix">.checked  (queue.autoplayEnabled mirrors it)
+  // Last resort when this page has no recognisable shuffle / repeat buttons: the player's own API (setShuffle, setLoop,
+  // setLoopVideo). It can't be read back, so what we last set is remembered here.
+  const apiModes = { repeat: "NONE", shuffle: false };
+  const apiPlayer = () => { const p = mp(); return p && typeof p.setShuffle === "function" ? p : null; };
   function repeatMode() {
     const m = bar() && bar().getAttribute("repeat-mode");
     if (m) return m === "ALL" || m === "ONE" ? m : "NONE";
     const c = labelControl("repeat");                                   // fall back to the button's own label
+    if (!c) return apiModes.repeat;                                     // no button at all: what we last set through the player
     const t = c ? ((c.getAttribute("aria-label") || c.getAttribute("title") || "")).toLowerCase() : "";
     return /\bone\b|single|track/.test(t) ? "ONE" : /\ball\b|queue|playlist/.test(t) || pressed(c) ? "ALL" : "NONE";
   }
-  const shuffleOn = () => bar() ? bar().hasAttribute("shuffle-on") : pressed(labelControl("shuffle"));
+  const shuffleOn = () => {
+    if (bar()) return bar().hasAttribute("shuffle-on");
+    const c = labelControl("shuffle");
+    return c ? pressed(c) : apiModes.shuffle;
+  };
   const autoplayToggle = () => document.querySelector("tp-yt-paper-toggle-button#automix");
   function autoplayOn() {
     const t = autoplayToggle();
@@ -200,11 +219,13 @@
       shuffle: shuffleOn(),
       autoplay: autoplayOn(),                       // true | false | null (unknown)
       playlistId: (p.getPlaylistId && p.getPlaylistId()) || null,
+      ext: EXT_VERSION,                             // which version of this script the page is running
     };
   }
   // Read the current song's like state from the player-bar like button.
   function likeStatus() {
-    const lb = document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+    const lb = (bar() && bar().querySelector("ytmusic-like-button-renderer")) ||
+      document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
     if (!lb) return null;
     const s = lb.getAttribute("like-status") || (lb.data && lb.data.likeStatus);
     if (s) return s;
@@ -422,11 +443,28 @@
     return direct || labelControl(cls);
   };
   const missing = (what) => `no_${what}_button (player bar ${bar() ? "found" : "not found"}, ${deepAll(document, (el) => BTN.test(el.tagName)).length} buttons on the page; reload the extension, then use Settings to send the diagnostics)`;
+  function apiRepeat(mode) {
+    const p = apiPlayer();
+    if (!p) return { ok: false, error: missing("repeat") };
+    try {
+      if (typeof p.setLoopVideo === "function") p.setLoopVideo(mode === "ONE");
+      if (typeof p.setLoop === "function") p.setLoop(mode === "ALL");
+    } catch (e) { return { ok: false, error: "player_api_failed" }; }
+    apiModes.repeat = mode;
+    return { ok: true, repeat: mode, via: "player" };
+  }
+  function apiShuffle(on) {
+    const p = apiPlayer();
+    if (!p) return { ok: false, error: missing("shuffle") };
+    try { p.setShuffle(on); } catch (e) { return { ok: false, error: "player_api_failed" }; }
+    apiModes.shuffle = on;
+    return { ok: true, shuffle: on, via: "player" };
+  }
   async function setRepeat(mode) {
     if (!["NONE", "ALL", "ONE"].includes(mode)) return { ok: false, error: "bad_mode" };
     for (let i = 0; i < 3 && repeatMode() !== mode; i++) {
       const b = barButton("repeat");
-      if (!b) return { ok: false, error: missing("repeat") };
+      if (!b) return apiRepeat(mode);
       const before = repeatMode();
       b.click();
       await waitFor(() => repeatMode() !== before, 1200);
@@ -436,7 +474,7 @@
   async function setShuffle(on) {
     if (shuffleOn() !== on) {
       const b = barButton("shuffle");
-      if (!b) return { ok: false, error: missing("shuffle") };
+      if (!b) return apiShuffle(on);
       b.click();
       await waitFor(() => shuffleOn() === on, 1500);
       await sleep(350);   // the queue reorders just after the flag flips

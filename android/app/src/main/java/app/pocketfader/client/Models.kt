@@ -281,3 +281,60 @@ fun isNewer(latest: String, current: String): Boolean {
     for (i in a.indices) if (a[i] != b[i]) return a[i] > b[i]
     return false
 }
+
+// ---- YTM Beacon (Discord presence), as relayed by the computer
+
+@Immutable
+data class BeaconSettings(
+    val privateMode: Boolean = false,
+    val showPaused: Boolean = true,
+    val pauseTimeoutMinutes: Int = 5,
+    val showProgress: Boolean = true,
+    val showStateIcon: Boolean = true,
+    val showButtons: Boolean = true,
+    val showAlbumArt: Boolean = true,
+    val statusDisplay: String = "name",    // name | state | details
+)
+
+@Immutable
+data class BeaconSong(val title: String, val artist: String, val playing: Boolean)
+
+@Immutable
+data class BeaconStatus(
+    val reachable: Boolean = false,
+    val version: String = "",
+    val headline: String = "unreachable",
+    val detail: String? = null,
+    val visible: Boolean = false,
+    val snoozeSec: Int = 0,
+    val discordUser: String? = null,
+    val song: BeaconSong? = null,
+    val settings: BeaconSettings = BeaconSettings(),
+    val receivedAt: Long = 0L,              // SystemClock.elapsedRealtime() when this arrived (counts the hide timer down)
+)
+
+fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
+    val s = o.optJSONObject("settings")
+    val np = o.optJSONObject("nowPlaying")
+    return BeaconStatus(
+        reachable = o.optBoolean("reachable", false),
+        version = o.str("version").orEmpty(),
+        headline = o.str("headline") ?: "unreachable",
+        detail = o.str("detail"),
+        visible = o.optBoolean("visible", false),
+        snoozeSec = o.optInt("snoozeSec", 0),
+        discordUser = o.optJSONObject("discord")?.str("user"),
+        song = if (np == null) null else BeaconSong(np.str("title").orEmpty(), np.str("artist").orEmpty(), np.optString("state") == "playing"),
+        settings = if (s == null) BeaconSettings() else BeaconSettings(
+            privateMode = s.optBoolean("privateMode", false),
+            showPaused = s.optBoolean("showPaused", true),
+            pauseTimeoutMinutes = s.optInt("pauseTimeoutMinutes", 5),
+            showProgress = s.optBoolean("showProgress", true),
+            showStateIcon = s.optBoolean("showStateIcon", true),
+            showButtons = s.optBoolean("showButtons", true),
+            showAlbumArt = s.optBoolean("showAlbumArt", true),
+            statusDisplay = s.str("statusDisplay") ?: "name",
+        ),
+        receivedAt = receivedAt,
+    )
+}

@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MusicNote
@@ -76,8 +77,11 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark", "black" to "Black"), p.theme,
             ) { v -> Settings.update { it.copy(theme = v) } }
             if (Build.VERSION.SDK_INT >= 31) {
-                Toggle("Material You colours", "Use colours from your wallpaper.", p.dynamicColor) { v -> Settings.update { it.copy(dynamicColor = v) } }
+                Toggle("Material You colours", "Use colours from your wallpaper (when the accent colour below is on Auto).", p.dynamicColor) { v -> Settings.update { it.copy(dynamicColor = v) } }
             }
+            AccentPicker(p)
+            Toggle("Cover colours in the background", "Tint the Now playing screen with the cover's colour.", p.coverWash) { v -> Settings.update { it.copy(coverWash = v) } }
+            Toggle("Lyric highlight follows the cover", "Off: the line being sung uses your accent colour.", p.coverHighlight) { v -> Settings.update { it.copy(coverHighlight = v) } }
             Choice(
                 "Open on", "The screen shown when the app starts.",
                 listOf("playing" to "Playing", "search" to "Search", "library" to "Library", "mixer" to "Mixer"), p.startTab,
@@ -153,6 +157,14 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Reduce animations", "Fewer moving parts; smoother on older devices.", p.reduceMotion) { v -> Settings.update { it.copy(reduceMotion = v) } }
         }
 
+        Section("Discord presence") {
+            Toggle(
+                "Show the Discord presence card",
+                "In Mixer: see whether YTM Beacon is showing your music on Discord, and switch it on or off. Needs YTM Beacon on the computer.",
+                p.showBeacon,
+            ) { v -> Settings.update { it.copy(showBeacon = v) } }
+        }
+
         Section("Updates") {
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             val info = UpdateManager.info
@@ -160,6 +172,9 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Info("Installed", version.ifBlank { "unknown" })
             Info("Latest release", info?.latest?.ifBlank { null } ?: "Not checked yet")
             UpdateManager.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (UpdateManager.needsReinstall) {
+                OutlinedButton(onClick = { UpdateManager.openReleasePage(ctx) }) { Text("Open the download page") }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(onClick = { scope.launch { UpdateManager.check(ctx, refresh = true) } }, enabled = !UpdateManager.checking && s.online) {
                     Text(if (UpdateManager.checking) "Checking…" else "Check now")
@@ -200,7 +215,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     val icon = when (title) {
         "Connection" -> Icons.Filled.Link; "Appearance" -> Icons.Filled.Palette; "Screen & always-on" -> Icons.Filled.Smartphone
         "Controls" -> Icons.Filled.TouchApp; "Lyrics" -> Icons.Filled.MusicNote; "Performance" -> Icons.Filled.Speed
-        "Updates" -> Icons.Filled.SystemUpdate; else -> Icons.Filled.Info
+        "Updates" -> Icons.Filled.SystemUpdate; "Discord presence" -> Icons.Filled.Chat; else -> Icons.Filled.Info
     }
     Column {
         Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -22,7 +22,7 @@ import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The colour used for highlights (the lyric being sung): the cover's colour, lightened so it stays readable. */
+/** Highlight colour taken from the cover (only when the setting asks for it); null means use the theme accent. */
 val LocalAccent = compositionLocalOf<Color?> { null }
 
 /** The main colour of the current cover (small, cached copy of the picture; computed once per track). */
@@ -44,17 +44,20 @@ fun rememberArtTint(url: String?): State<Color?> {
     return tint
 }
 
-/** A soft wash of the cover's colour fading into the background, and the matching highlight colour. */
+/**
+ * A soft wash of the cover's colour fading into the background. It is weakened as needed so the normal text colour
+ * always stays easy to read on top of it (a dark cover on the light theme, a bright one on the dark theme).
+ */
 @Composable
-fun artBackground(tint: Color?, black: Boolean): Pair<Brush, Color?> {
+fun artBackground(tint: Color?, black: Boolean): Brush {
     val reduce = LocalReduceMotion.current
     val base = MaterialTheme.colorScheme.background
+    val text = MaterialTheme.colorScheme.onBackground
     val target = tint ?: base
     val animated by animateColorAsState(target, tween(if (reduce) 0 else 700), label = "art")
-    val strength = if (black) 0.22f else 0.42f
-    val brush = Brush.verticalGradient(
+    var strength = if (black) 0.22f else 0.42f
+    while (strength > 0.02f && contrast(text, lerp(base, animated, strength)) < 7f) strength *= 0.8f
+    return Brush.verticalGradient(
         0f to lerp(base, animated, strength), 0.55f to lerp(base, animated, strength * 0.35f), 1f to base,
     )
-    val accent = tint?.let { lerp(it, Color.White, 0.5f) }
-    return brush to accent
 }

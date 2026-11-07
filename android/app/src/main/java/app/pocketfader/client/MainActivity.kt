@@ -222,11 +222,15 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
 
     val tint by rememberArtTint(s.now?.art)
     val showArt = !showSettings && (wide || dest == Dest.Playing)
-    val (washBrush, accent) = artBackground(if (showArt) tint else null, prefs.theme == "black")
-    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides (if (showArt) accent else null)) {
+    val washBrush = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
+    val pageBg = MaterialTheme.colorScheme.background
+    val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight) {
     Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        // Without this, text that doesn't name a colour falls back to black, which vanishes on the dark themes.
+        contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),

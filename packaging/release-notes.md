@@ -16,23 +16,32 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.5
+### What's new in alpha.6
 
-- **Shuffle and loop errors fixed (needs the extension reloaded)**: some YouTube Music layouts hide the player bar in a
-  shadow tree, so the extension couldn't find the shuffle and loop buttons. It now finds them there, or by their label,
-  and a failure says what it saw. **Reload extension 1.4 and refresh the YouTube Music tab.**
-- **Buttons no longer flicker**: shuffle, loop, autoplay, like and play/pause keep what you just tapped for a few seconds,
-  so a poll that arrives before the computer has applied the change can't flip them back and forth. Lyrics no longer reload
-  when the track length arrives a moment after the title, and the source chips respond at once.
-- **Jump to the current line**: a button appears when the line being sung is off screen.
-- **Lyrics layout** (Settings → Lyrics, or **Aa Layout** on the lyrics screen): alignment (left, centered, right), text size,
-  line spacing and how faint the other lines are, with a live sample.
-- **A new look** for the Android app: the Now playing screen takes its colour from the cover and the current lyric uses
-  it too, a bigger cover that eases back when paused, bolder titles, playlists as a cover grid, icons on the Settings sections.
-- Earlier in alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and updates.
+- **Readable on every theme (Android)**: text that didn't name a colour fell back to black, which vanished on the Dark and
+  Black themes. Every screen now starts from the theme's own text colour. On the light theme, the line being sung is now
+  your accent colour instead of a washed-out grey.
+- **Accent colour (Android)**: Settings → Appearance. Pick Auto, one of ten colours, or any colour with sliders or a hex code.
+  It can never disappear into the theme: a dark accent on the Black theme (or a pale one on Light) is shown a little
+  lighter or darker, and the setting tells you when it did that. The cover's colour is now a separate, optional tint
+  (**Cover colours in the background**, **Lyric highlight follows the cover**), and the tint is weakened whenever it
+  would make the text hard to read.
+- **Discord presence**: if you use [YTM Beacon](https://github.com/dash1101/ytm-beacon) (0.1.4+) on the computer, the
+  Android app (Mixer) and the web app (Settings) show whether it's working, switch it on or off, hide it for 30 min, 1 h or
+  3 h, and change what it shows. See [docs/BEACON.md](docs/BEACON.md).
+- **Update installer**: if Android would refuse an update because it was signed with a different key (older test builds
+  used a temporary key), the app now says so and points you to the download page, instead of ending in "App not installed".
+  This version and later are signed with the permanent key and install over each other. If you're on alpha.4 or earlier,
+  uninstall once, then install this one.
+- **Shuffle and loop**: the extension (now **1.5**) searches more of the page for the buttons, falls back to the player's
+  own shuffle and loop controls when a layout has none, no longer searches the whole page on every update, and reports
+  its version. **Reload the extension in your browser and refresh the YouTube Music tab** (an old tab keeps running the old
+  version until you do). The app now says that, in plain words, if the button still can't be found.
 
-**In-place Android updates still need the signing key uploaded to the repository** (see `docs/RELEASING.md`). Until then this
-release is signed with a throwaway key and must be installed after uninstalling the previous one.
+### Earlier
+
+- alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons, cover-tinted Now playing screen.
+- alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and in-app updates.
 
 ### Quick start
 

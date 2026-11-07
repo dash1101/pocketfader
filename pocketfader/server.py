@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from . import __version__
+from .beacon import Beacon, BadRequest, BeaconError
 from .bridge import Bridge
 from .lyrics import LyricsService
 from .updater import Updater
@@ -40,11 +41,12 @@ COOKIE = "pf_token"
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
         self.updater = updater or Updater()
+        self.beacon = beacon or Beacon()
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
         self.token = token
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
@@ -70,6 +72,7 @@ class App:
             "media": bool(self.media.snapshot().get("available")),
             "ytm_bridge": self.bridge.connected,
             "lyrics": True,
+            "beacon": True,
         }
 
     def state(self):
@@ -318,6 +321,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(502, {"error": str(e)})
             return self._send(200, f.read_bytes(), "application/vnd.android.package-archive",
                               [("Content-Disposition", f'attachment; filename="{f.name}"')])
+        if path == "/api/beacon":
+            try:
+                return self._json(200, app.beacon.status())
+            except BeaconError as e:
+                return self._json(502, {"error": e.message})
         if path == "/api/prefs":
             return self._json(200, app.prefs.load())
         if path == "/api/state":
@@ -369,6 +377,18 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body.get("type"), str):
                 return self._json(400, {"error": "type must be a string"})
             return self._json(200, app.ytm_command(body))
+
+        if path in ("/api/beacon/visibility", "/api/beacon/settings"):
+            try:
+                if path.endswith("visibility"):
+                    return self._json(200, app.beacon.set_visibility(body))
+                return self._json(200, app.beacon.set_settings(body))
+            except BadRequest as e:
+                return self._json(400, {"error": str(e)})
+            except BeaconError as e:
+                if e.code == "NOT_RUNNING":
+                    return self._json(503, {"error": "YTM Beacon isn't running on the computer"})
+                return self._json(502, {"error": e.message})
 
         if path == "/api/volume":
             if not app.audio.snapshot().get("available"):

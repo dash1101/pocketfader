@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val Violet = Color(0xFF8B5CF6)
+private val Violet = Color(0xFF6B3FD6)
 
 private val Dark = darkColorScheme(
     primary = Color(0xFFB69CFF),
@@ -64,7 +64,7 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
     }
     val ctx = LocalContext.current
     var scheme = when {
-        prefs.dynamicColor && Build.VERSION.SDK_INT >= 31 ->
+        prefs.dynamicColor && prefs.accent == 0 && Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         dark -> Dark
         else -> Light
@@ -76,6 +76,8 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
             surfaceVariant = Color(0xFF1B1B20),
         )
     }
+    // A custom accent is checked against the real background, so it can never vanish into it.
+    if (prefs.accent != 0) scheme = withAccent(scheme, Color(prefs.accent), dark)
     val view = LocalView.current
     SideEffect {
         val window = (view.context as? Activity)?.window
@@ -86,6 +88,9 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
         }
     }
     CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        MaterialTheme(colorScheme = scheme) {
+            // The base layer gives every piece of text a readable default colour, whatever theme is chosen.
+            androidx.compose.material3.Surface(color = scheme.background, contentColor = scheme.onBackground, content = content)
+        }
     }
 }

@@ -135,6 +135,6 @@ safely. Settings and the access token live in `~/.config/pocketfader/` (`%APPDAT
 
 ## More
 
-[Cloudflare guide](docs/CLOUDFLARE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
+[Cloudflare guide](docs/CLOUDFLARE.md) · [Discord presence](docs/BEACON.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
 
 MIT licensed.

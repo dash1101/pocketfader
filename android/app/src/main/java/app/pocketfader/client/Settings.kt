@@ -19,6 +19,10 @@ data class Prefs(
     // appearance
     val theme: String = "system",            // system | light | dark | black
     val dynamicColor: Boolean = true,        // Material You colours on Android 12+
+    val accent: Int = 0,                     // chosen accent colour (ARGB); 0 = automatic
+    val coverWash: Boolean = true,           // tint the background with the cover's colour
+    val coverHighlight: Boolean = false,     // lyric highlight takes the cover's colour instead of the accent
+    val showBeacon: Boolean = true,          // Discord presence card in Mixer (when the computer supports it)
     // display
     val keepAwake: String = "off",           // off | playing | always
     val dimAfterMin: Int = 0,                // 0 = never; dims while kept awake and untouched
@@ -77,6 +81,8 @@ object Settings {
         fun i(k: String, v: Int) = sp.getInt(k, v)
         return Prefs(
             theme = s("theme", d.theme), dynamicColor = b("dynamicColor", d.dynamicColor),
+            accent = i("accent", d.accent), coverWash = b("coverWash", d.coverWash),
+            coverHighlight = b("coverHighlight", d.coverHighlight), showBeacon = b("showBeacon", d.showBeacon),
             keepAwake = s("keepAwake", d.keepAwake), dimAfterMin = i("dimAfterMin", d.dimAfterMin),
             immersive = b("immersive", d.immersive), pixelShift = b("pixelShift", d.pixelShift),
             pixelShiftMin = i("pixelShiftMin", d.pixelShiftMin), pixelShiftDp = i("pixelShiftDp", d.pixelShiftDp),
@@ -95,6 +101,8 @@ object Settings {
     private fun write(p: Prefs) {
         sp.edit()
             .putString("theme", p.theme).putBoolean("dynamicColor", p.dynamicColor)
+            .putInt("accent", p.accent).putBoolean("coverWash", p.coverWash)
+            .putBoolean("coverHighlight", p.coverHighlight).putBoolean("showBeacon", p.showBeacon)
             .putString("keepAwake", p.keepAwake).putInt("dimAfterMin", p.dimAfterMin)
             .putBoolean("immersive", p.immersive).putBoolean("pixelShift", p.pixelShift)
             .putInt("pixelShiftMin", p.pixelShiftMin).putInt("pixelShiftDp", p.pixelShiftDp)

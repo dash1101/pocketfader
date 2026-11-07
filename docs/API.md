@@ -19,6 +19,7 @@ same-origin `Origin` on POSTs (non-browser clients send none — that's fine).
 | `GET /api/update[?refresh=1]` | The newest release on GitHub and whether it's newer than this server: `{current, latest, available, notes, url, apk, wheel, self_update}`. The computer does the asking, so phones need no GitHub login. |
 | `GET /api/update/apk` | The newest Android app (checked against the release's SHA256SUMS) for the app to install. |
 | `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
+| `GET /api/beacon` | Discord presence through [YTM Beacon](https://github.com/dash1101/ytm-beacon), if it runs on this computer: `{reachable, version, headline, visible, snoozeSec, discord, extension, nowPlaying, presenceActive, settings, fetchedAt}`. `headline` is one of `unreachable`, `unsupported`, `off`, `snoozed`, `discord-down`, `extension-missing`, `extension-quiet`, `idle`, `filtered`, `paused-hidden`, `paused-timeout`, `showing`, `waiting`. Never fails when Beacon isn't running (`reachable: false`). See [docs/BEACON.md](BEACON.md). |
 
 ```jsonc
 // /api/state
@@ -80,3 +81,15 @@ third-party and best-effort. `capabilities.lyrics` is `true` on servers that hav
 
 `GET /api/events` (Server-Sent Events replacing polling), `GET /api/stats`, mDNS advertisement, a
 `/api/v1` prefix and a published OpenAPI document. See [ANDROID_PLAN.md](ANDROID_PLAN.md).
+
+## Discord presence (YTM Beacon)
+
+Pocketfader relays a small, fixed set of YTM Beacon's controls; nothing else of Beacon's API is reachable through it.
+
+| Endpoint | Body | Notes |
+|---|---|---|
+| `POST /api/beacon/visibility` | `{"action":"show"}` or `{"action":"hide"}` or `{"action":"hide","minutes":60}` | `minutes` is a whole number from 1 to 1440 and only goes with `hide`; the card comes back by itself. Replies `{enabled, snoozeSec, visible}`. `show` and `hide` can safely be repeated. |
+| `POST /api/beacon/settings` | any of `privateMode`, `showPaused`, `showProgress`, `showStateIcon`, `showButtons`, `showAlbumArt` (true/false), `pauseTimeoutMinutes` (0–1440, 0 = never), `statusDisplay` (`name`\|`state`\|`details`) | Only the keys you send change. Anything else, or a wrong type, is rejected with `400`. Replies with the new settings. |
+
+`503` means Beacon isn't running; `502` means Beacon refused the change (the message says why).
+`/api/state` has `capabilities.beacon: true` when this version of the server can do this.

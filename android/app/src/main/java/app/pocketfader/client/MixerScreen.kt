@@ -32,6 +32,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -41,6 +43,7 @@ import kotlin.math.roundToInt
 
 @Composable
 fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
     // While this screen is open, keep the device list fresh.
     DisposableEffect(Unit) {
         Remote.setWantOutputs(true)
@@ -58,6 +61,8 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
             )
             VolumeRow(s.volume)
         }
+
+        if (s.canBeacon && prefs.showBeacon) BeaconCard(s.online)
 
         if (s.canOutputs && s.outputs.isNotEmpty()) {
             Panel("Output devices") {

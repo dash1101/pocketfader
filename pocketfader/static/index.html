@@ -1005,7 +1005,9 @@ async function post(path, body) {
 }
 // YTM command via the extension relay
 async function ytm(cmd, quiet) { const r = await post('/api/ytm', cmd);
-  if (r && r.error && !quiet) toast(r.error === 'extension_offline' ? 'YT Music bridge offline' : r.error);
+  if (r && r.error && !quiet) toast(r.error === 'extension_offline' ? 'YT Music bridge offline'
+      : /^no_(shuffle|repeat)_button/.test(r.error) ? "Couldn't find that button. Reload the Pocketfader extension, then refresh the YouTube Music tab."
+      : r.error);
   return r; }
 
 /* ==================== themes ==================== */
@@ -1774,6 +1776,9 @@ function renderSettingsTail(m) {
     for (const a of caps.engine_actions) { const [l, d] = ACTION_INFO[a] || [a, '']; mkBtn(l, d, () => post('/api/engine', { action:a })); }
     m.appendChild(en);
   }
+
+  // ---- Discord presence (YTM Beacon on the host) ----
+  if (caps.beacon) m.appendChild(beaconSection());
 
   // ---- Status ----
   const eng = mixerState && mixerState.engine && mixerState.engine.connected;
@@ -2697,6 +2702,89 @@ async function commitMove(from, to) {
   const r = await ytm({ type:'queueMove', section:'queue', index:from, videoId:q.videoId, to }, true);
   if (r && r.ok) { toast('Queue updated'); queueSettleUntil = Date.now() + 1200; }
   else { toast('Could not reorder' + (r && r.error ? ' (' + r.error + ')' : '')); queueSettleUntil = 0; }
+}
+
+/* ==================== Discord presence (YTM Beacon, relayed by the host) ==================== */
+const BEACON_TEXT = {
+  showing:['Showing on Discord.','good'], waiting:['Getting ready to show…','good'], idle:['Ready. Nothing is playing.','good'],
+  off:['Switched off. Nothing is shown on Discord.','off'], snoozed:['Hidden for a while. It comes back by itself.','warn'],
+  'paused-hidden':['Not shown while paused. Turn on “Show when paused” to keep it.','warn'],
+  'paused-timeout':['Hidden because the song was paused a while. It returns when you press play.','warn'],
+  filtered:['Not shown: this song matches one of your never-show words.','warn'],
+  'extension-quiet':['The browser extension went quiet. Check that YouTube Music is open in your browser.','warn'],
+  'extension-missing':["The YTM Beacon browser extension isn't set up yet. Install it on the host computer.",'bad'],
+  'discord-down':["Can't reach Discord. Open the Discord app on the host computer.",'bad'],
+  unsupported:['YTM Beacon on the host is out of date. Update it there.','bad'],
+  unreachable:["YTM Beacon isn't running on the host computer. Start it there.",'bad'],
+};
+function beaconSection() {
+  const sec = el('div', 'setsec'); sec.appendChild(Object.assign(el('h3'), { textContent:'Discord presence' }));
+  const box = el('div'); sec.appendChild(box);
+  let st = null, heldUntil = 0, misses = 0, rcvAt = 0;
+  const call = async (path, body) => { const r = await post(path, body); if (!r || r.error) { toast((r && r.error) || 'Could not reach the host'); return null; } return r; };
+  const row = (k, d, ctl) => { const r = el('div', 'setrow'); const t = el('div');
+    t.appendChild(Object.assign(el('div', 'k'), { textContent:k })); if (d) t.appendChild(Object.assign(el('div', 'd'), { textContent:d }));
+    r.appendChild(t); if (ctl) r.appendChild(ctl); return r; };
+  const toggle = (on, fn, off) => { const t = el('button', 'toggle'); t.classList.toggle('on', !!on); t.disabled = !!off;
+    t.addEventListener('click', () => fn(!on)); return t; };
+  function paint() {
+    box.textContent = '';
+    if (!st) { box.appendChild(row('Status', 'Checking…')); return; }
+    const [txt, tone] = BEACON_TEXT[st.headline] || BEACON_TEXT.unreachable;
+    const dot = { good:'#2eb872', warn:'#e0a100', bad:'#e5484d', off:'var(--dim)' }[tone];
+    const head = row('Status', txt + (st.detail ? ' (' + st.detail + ')' : ''));
+    const v = el('div', 'val'); v.innerHTML = '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' + dot + '"></span>'; head.appendChild(v);
+    box.appendChild(head);
+    if (st.nowPlaying) box.appendChild(row((st.nowPlaying.state === 'playing' ? '▶ ' : '⏸ ') + st.nowPlaying.title, st.nowPlaying.artist));
+    const usable = st.reachable && st.headline !== 'unsupported';
+    box.appendChild(row('Show on Discord', st.discord && st.discord.user ? 'as ' + st.discord.user : '',
+      toggle(st.visible, on => act('/api/beacon/visibility', { action: on ? 'show' : 'hide' }, { visible:on, snoozeSec:0 }), !usable)));
+    if (st.visible && usable) {
+      const r = row('Hide for…', 'It comes back by itself.'); const g = el('div'); g.style.cssText = 'display:flex;gap:8px';
+      [['30 min',30],['1 hour',60],['3 hours',180]].forEach(([l, m]) => { const b = el('button', 'pill ghost'); b.textContent = l; b.style.height = '38px';
+        b.addEventListener('click', () => act('/api/beacon/visibility', { action:'hide', minutes:m }, { visible:false, snoozeSec:m * 60 })); g.appendChild(b); });
+      r.appendChild(g); box.appendChild(r);
+    } else if (st.snoozeSec > 0 && usable) {
+      const left = Math.max(0, st.snoozeSec - Math.floor((Date.now() - rcvAt) / 1000));
+      const b = el('button', 'pill ghost'); b.textContent = 'Show now'; b.style.height = '38px';
+      b.addEventListener('click', () => act('/api/beacon/visibility', { action:'show' }, { visible:true, snoozeSec:0 }));
+      box.appendChild(row('Hidden for ' + (left >= 60 ? Math.ceil(left / 60) + ' more min' : left + ' more s'), '', b));
+    }
+    if (usable) {
+      const S = st.settings || {};
+      [['privateMode','Private mode','Only say “Listening to music”: no song, artist, picture or button.'],
+       ['showPaused','Show when paused','Keep the song on your profile while paused.'],
+       ['showProgress','Progress bar',''],['showStateIcon','Play / pause icon',''],
+       ['showButtons','Listen button','A button on the card that opens the song.'],['showAlbumArt','Album art','']].forEach(([k, l, d]) =>
+        box.appendChild(row(l, d, toggle(S[k], on => act('/api/beacon/settings', { [k]:on }, null, k, on)))));
+      const sel = el('select'); [['name','YouTube Music'],['state','Artist'],['details','Song title']].forEach(([v, l]) => { const o = el('option'); o.value = v; o.textContent = l; sel.appendChild(o); });
+      sel.value = S.statusDisplay || 'name'; sel.style.cssText = 'height:38px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 8px';
+      sel.addEventListener('change', () => act('/api/beacon/settings', { statusDisplay:sel.value }, null, 'statusDisplay', sel.value));
+      box.appendChild(row('Name next to your username', '', sel));
+    }
+  }
+  // What you tap shows at once and is kept for a few seconds, so a poll that lands first can't flip it back.
+  async function act(path, body, visPatch, key, val) {
+    const prev = st; heldUntil = Date.now() + 4000;
+    if (visPatch) st = { ...st, ...visPatch };
+    if (key) st = { ...st, settings: { ...st.settings, [key]: val } };
+    rcvAt = Date.now(); paint();
+    const r = await call(path, body);
+    if (!r) { st = prev; heldUntil = 0; paint(); } else refresh(true);
+  }
+  async function refresh(force) {
+    if (!sec.isConnected) return;
+    try {
+      const r = await fetch('/api/beacon'); const j = await r.json();
+      if (j.headline === 'unreachable') misses++; else misses = 0;
+      if (j.headline === 'unreachable' && misses < 2 && st && st.reachable) return;
+      if (!force && Date.now() < heldUntil) return;
+      st = j; rcvAt = Date.now(); paint();
+    } catch (e) {}
+  }
+  setTimeout(() => refresh(true), 60);   // after the settings sheet has attached this section
+  const timer = setInterval(() => { if (!sec.isConnected) { clearInterval(timer); return; } if (!document.hidden) refresh(); }, 5000);
+  return sec;
 }
 
 /* ==================== mixer (volume + optional EQ/meter, depending on the backend's capabilities) ==================== */
