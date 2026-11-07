@@ -27,6 +27,11 @@ jobs:
         with: { distribution: temurin, java-version: "17" }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
-      - name: Compile the Android app
+      - name: Compile the Android app (debug and release)
         working-directory: android
-        run: gradle --no-daemon :app:assembleDebug
+        run: gradle --no-daemon :app:assembleDebug :app:assembleRelease
+      - name: Show the APK's minimum Android version
+        run: |
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep -E "^package|sdkVersion|targetSdkVersion|application-label:"
+          ls -la android/app/build/outputs/apk/release/app-release.apk

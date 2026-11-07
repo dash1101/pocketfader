@@ -21,8 +21,9 @@ drives YouTube Music running in the browser on your computer.
 ## Download
 
 Ready-made builds are on the repository's **Releases** page: a Linux binary, a Windows `.zip`,
-an **Android app**, and a Python package. The Android app is optional — any phone with a browser works
-as the remote — but adds lock-screen controls and lets the phone's volume buttons control the computer.
+an **Android app** (Android 5.0+), and a Python package. The Android app is optional — any phone with a
+browser works as the remote — but it is a native app with lock-screen controls, a queue and search screen,
+output and equalizer controls, and it lets the phone's volume buttons control the computer.
 
 ## Install (host computer, from source)
 
@@ -107,6 +108,6 @@ safely. Settings and the access token live in `~/.config/pocketfader/` (`%APPDAT
 
 ## More
 
-[Cloudflare guide](docs/CLOUDFLARE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app (WebView edition)](android/legacy-webview/README.md)
+[Cloudflare guide](docs/CLOUDFLARE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
 
 MIT licensed.

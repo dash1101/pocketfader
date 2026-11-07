@@ -103,10 +103,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
       - name: Build APK
-        working-directory: android/legacy-webview
-        run: gradle --no-daemon :app:assembleRelease
+        working-directory: android
+        run: gradle --no-daemon :app:assembleRelease -PpfVersionName="${GITHUB_REF_NAME#v}" -PpfVersionCode="${GITHUB_RUN_NUMBER}"
       - name: Collect
-        run: cp android/legacy-webview/app/build/outputs/apk/release/app-release.apk pocketfader-android.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk pocketfader-android.apk
       - uses: actions/upload-artifact@v4
         with: { name: android, path: pocketfader-android.apk }
 

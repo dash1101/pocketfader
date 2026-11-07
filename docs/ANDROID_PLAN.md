@@ -1,8 +1,17 @@
-# Plan: from WebView wrapper to a real Android app
+# Android app: status and plan
 
-Today's [legacy shell](../android/legacy-webview/README.md) is a `WebView` that loads the server's web
-app plus a notification service. It works, but everything is a web page: no true background behaviour,
-WebView timers freeze with the screen off, and native integrations are bolted on through a JS bridge.
+**Status.** A native app now lives in [`android/`](../android/README.md) (Kotlin, Jetpack Compose,
+Material 3, Android 5.0+). It covers now-playing, transport, the YouTube Music queue with loop-aware
+autoplay separation, search, output devices with per-device levels, the built-in equalizer, a media
+session with lock-screen controls, and hardware volume keys that control the computer. Home shelves,
+playlists and playlist editing are shown through the server's web app in a **Library** tab until they
+are ported. The sections below are the original plan.
+
+*Done:* skeleton, connection dialog (with Cloudflare Access service tokens), now-playing, media session,
+volume keys, queue, search, mixer. *Still to do:* QR pairing / mDNS discovery, push updates (SSE) instead
+of polling, native playlists and playlist editing, home screen widget and quick-settings tile, system stats.
+
+---
 
 ## Goals
 1. **Feels native**: Material 3 / Material You, instant start, no browser chrome, smooth sliders.
@@ -12,7 +21,7 @@ WebView timers freeze with the screen off, and native integrations are bolted on
 5. **Keeps the YouTube Music remote** as the flagship (search, queue, mixes, likes) — now in native UI.
 
 ## Architecture
-- **Kotlin + Jetpack Compose**, single-activity, MVVM. Min SDK 26.
+- **Kotlin + Jetpack Compose**, single-activity, MVVM. Min SDK 21.
 - **Networking**: OkHttp + kotlinx.serialization against the documented [HTTP API](API.md);
   `Authorization: Bearer <token>`; SSE client for live state (falls back to short polling on older servers).
 - **Discovery/pairing**: `NsdManager` for `_pocketfader._tcp`; scan a QR code from the server to get address + token.

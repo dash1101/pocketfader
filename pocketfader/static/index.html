@@ -465,6 +465,27 @@
 
   /* ---------- custom color picker ---------- */
   .ce .sw { width:34px; height:30px; border-radius:7px; border:1px solid rgba(255,255,255,.12); flex:none; cursor:pointer; }
+  /* ---------- in-page dialog (the native prompt/confirm don't exist inside the Android WebView) ---------- */
+  #askwrap { position:fixed; inset:0; z-index:95; display:none; align-items:center; justify-content:center;
+             background:rgba(0,0,0,.55); padding:20px; }
+  #askwrap.show { display:flex; animation:pop .16s ease; }
+  #askwrap .ask { width:min(420px,100%); background:var(--panel); border:1px solid var(--line); border-radius:22px;
+                  padding:20px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #askwrap .ask h3 { margin:0 0 6px; font-size:17px; }
+  #askwrap .ask p { margin:0 0 14px; color:var(--dim); font-size:14px; line-height:1.4; }
+  #askwrap .ask input { width:100%; box-sizing:border-box; padding:12px 14px; border-radius:12px; border:1px solid var(--line);
+                        background:var(--card); color:var(--text); font-size:16px; margin-bottom:14px; outline:none; }
+  #askwrap .ask input:focus { border-color:var(--accent); }
+  #askwrap .ask .btns { display:flex; gap:10px; justify-content:flex-end; }
+  .pill.danger { background:#e5484d; color:#fff; }
+  /* playlist edit mode */
+  .li.editing { cursor:default; }
+  .li .ebtn { width:36px; height:36px; border:0; border-radius:50%; background:transparent; color:var(--dim); flex:none;
+              display:flex; align-items:center; justify-content:center; transition:background .15s, color .15s, transform .12s; }
+  .li .ebtn svg { width:20px; height:20px; fill:currentColor; }
+  .li .ebtn:active { transform:scale(.88); background:var(--card2); }
+  .li .ebtn:disabled { opacity:.25; pointer-events:none; }
+  .li .ebtn.del:active { color:#e5484d; }
   .cpwrap { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:70; }
   .cpwrap.show { display:flex; animation:pop .16s ease; }
   .cp { width:300px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:0 20px 50px rgba(0,0,0,.5); }
@@ -666,7 +687,8 @@
   .detailhead .acts { flex-wrap:wrap; gap:8px; }
   @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     .detailhead { flex-direction:column; align-items:flex-start; gap:14px; }
-    .detailhead .art { width:150px; height:150px; }
+    .detailhead .art { width:min(68vw, 240px); height:min(68vw, 240px); align-self:center; }
+    .detailhead > div:not(.art) { width:100%; }
     .detailhead .t { font-size:23px; }
     .detailhead .acts { width:100%; }
     .detailhead .acts .pill { flex:1 1 auto; justify-content:center; padding:0 14px; }
@@ -834,6 +856,7 @@
       <button class="qm" id="qm-shuffle" title="Shuffle (double-tap to reshuffle)"><svg viewBox="0 0 24 24"><path d="M10.6 9.2L5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2.0 2-12.5 12.5 1.4 1.4L17.9 7.4l2.1 2.1V4h-5.5zm.4 9.8l-1.4 1.4 3.3 3.3-2.1 2.1H20v-5.5l-2.0 2-3.1-3.3z"/></svg><span>Shuffle</span></button>
       <button class="qm" id="qm-repeat" title="Loop"><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg><span id="qm-repeat-l">Loop off</span></button>
       <button class="qm" id="qm-auto" title="Autoplay"><svg viewBox="0 0 24 24"><path d="M5 4l9 8-9 8V4zm11 0h3v16h-3z"/></svg><span>Autoplay</span></button>
+      <button class="qm" id="qm-save" title="Save the queue as a playlist"><svg viewBox="0 0 24 24"><path d="M3 6h12v2H3zm0 4h12v2H3zm0 4h8v2H3zm13 0h2v3h3v2h-3v3h-2v-3h-3v-2h3z"/></svg><span>Save</span></button>
     </div>
     <div class="railbody" id="railbody"></div>
   </aside>
@@ -847,6 +870,12 @@
   <button id="mini-pp"><svg id="mini-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
   <button id="mini-next" class="mbtn"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
 </div>
+
+<div id="askwrap"><div class="ask">
+  <h3 id="ask-t"></h3><p id="ask-p"></p>
+  <input id="ask-in" autocomplete="off" maxlength="150">
+  <div class="btns"><button class="pill ghost" id="ask-no">Cancel</button><button class="pill primary" id="ask-yes">OK</button></div>
+</div></div>
 
 <div id="sheet"><div id="sheetcard">
   <div id="sheethead"><img class="art" id="sheet-art"><div style="min-width:0">
@@ -888,6 +917,33 @@ const WIDE_MQ = window.matchMedia('(min-width:1101px), (min-width:820px) and (mi
 const isWide = () => WIDE_MQ.matches;   // landscape tablets and desktops get the two-pane layout
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600); }
+
+/* Small in-page dialog. Resolves to the typed text (input mode) or true (confirm mode); null when cancelled. */
+function askBox(o) {
+  return new Promise(res => {
+    const w = $('#askwrap'), inp = $('#ask-in'), yes = $('#ask-yes'), no = $('#ask-no');
+    $('#ask-t').textContent = o.title || ''; $('#ask-p').textContent = o.text || '';
+    $('#ask-p').style.display = o.text ? '' : 'none';
+    inp.style.display = o.input ? '' : 'none'; inp.value = o.value || ''; inp.placeholder = o.placeholder || '';
+    yes.textContent = o.ok || 'OK';
+    yes.className = 'pill ' + (o.danger ? 'danger' : 'primary');
+    const done = v => { w.classList.remove('show'); yes.onclick = no.onclick = w.onclick = inp.onkeydown = null; res(v); };
+    yes.onclick = () => { const v = inp.value.trim(); if (o.input && !v) { inp.focus(); return; } done(o.input ? v : true); };
+    no.onclick = () => done(null);
+    w.onclick = e => { if (e.target === w) done(null); };
+    inp.onkeydown = e => { if (e.key === 'Enter') yes.click(); else if (e.key === 'Escape') no.click(); };
+    w.classList.add('show');
+    if (o.input) setTimeout(() => { inp.focus(); inp.select(); }, 60);
+  });
+}
+/* Runs a playlist change on the extension; true when YouTube Music accepted it. */
+async function plOp(cmd, okMsg) {
+  const r = await ytm(cmd, true);
+  if (r && r.ok) { if (okMsg) toast(okMsg); return true; }
+  toast(r && r.error === 'extension_offline' ? 'YT Music bridge offline'
+      : "Couldn't change the playlist" + (r && r.error ? ': ' + r.error : ''));
+  return false;
+}
 
 // Heads-up display for hardware keys (volume level / media action).
 let hudT;
@@ -1459,6 +1515,17 @@ async function doSearch(q) {
 
 async function renderPlaylists(m) {
   m.innerHTML = ''; m.appendChild(topbar('Library'));
+  const mkRow = el('div', 'acts'); mkRow.style.padding = '0 4px 12px';
+  const mkBtn = el('button', 'pill ghost');
+  mkBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>New playlist';
+  mkBtn.addEventListener('click', async () => {
+    const name = await askBox({ title:'New playlist', input:true, placeholder:'Playlist name', ok:'Create' });
+    if (!name) return;
+    const r = await ytm({ type:'playlistCreate', title:name }, true);
+    if (r && r.ok) { toast('Created “' + name + '”'); cache.playlists = null; render(); }
+    else toast(r && r.error === 'extension_offline' ? 'YT Music bridge offline' : "Couldn't create the playlist");
+  });
+  mkRow.appendChild(mkBtn); m.appendChild(mkRow);
   if (!cache.playlists) { m.appendChild(el('div','spinner'));
     const r = await ytm({ type:'playlists' }); cache.playlists = (r && r.playlists) || []; if (view !== 'playlists') return; m.querySelector('.spinner')?.remove(); }
   const row = el('div', 'libgrid');   // even grid so the columns line up
@@ -1494,15 +1561,66 @@ async function renderDetail(m, d) {
   const moreBtn = el('button', 'pill ghost more'); moreBtn.title = 'More';
   moreBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
   moreBtn.addEventListener('click', () => openCollectionSheet(d, pid));
-  acts.append(playBtn, shufBtn, pinBtn, moreBtn);
+  // Editing is offered only for playlists the account owns (their tracks carry a setVideoId).
+  const editBtn = el('button', 'pill ghost'); editBtn.style.display = 'none';
+  const PEN = '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+  const TICK = '<svg viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+  acts.append(playBtn, shufBtn, editBtn, pinBtn, moreBtn);
   info.appendChild(acts); head.append(img, info); m.appendChild(head);
+  d.onRenamed = name => { d.title = name; const t = info.querySelector('.t'); if (t) t.textContent = name; };
 
   const list = el('div', 'list'); list.appendChild(el('div', 'spinner')); m.appendChild(list);
   const r = await ytm({ type:'playlistItems', playlistId: pid, browseId: d.browseId });
   list.innerHTML = '';
-  const items = (r && r.items) || [];
+  let items = (r && r.items) || [];
   if (!items.length) { list.appendChild(emptyMsg('Could not load tracks.')); return; }
-  for (const it of items) list.appendChild(listItem(it));
+  const editable = !!pid && items.some(i => i.setVideoId);
+  d.editable = editable;
+  let editing = false;
+
+  const I = { up:'<svg viewBox="0 0 24 24"><path d="M7.4 14.6L12 10l4.6 4.6L18 13.2l-6-6-6 6z"/></svg>',
+    down:'<svg viewBox="0 0 24 24"><path d="M7.4 9.4L12 14l4.6-4.6L18 10.8l-6 6-6-6z"/></svg>',
+    del:'<svg viewBox="0 0 24 24"><path d="M6 7h12v13a2 2 0 01-2 2H8a2 2 0 01-2-2zm3-4h6l1 2h4v2H4V5h4z"/></svg>' };
+  const mkBtn = (cls, icon, label, fn, off) => { const b = el('button', 'ebtn ' + cls); b.innerHTML = icon; b.title = label;
+    b.setAttribute('aria-label', label); b.disabled = !!off; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); return b; };
+
+  const paint = () => {
+    list.innerHTML = '';
+    items.forEach((it, i) => {
+      if (!editing) { list.appendChild(listItem(it)); return; }
+      const li = el('div', 'li editing');
+      const meta = el('div', 'meta');
+      const tt = el('div', 't'); tt.textContent = it.title;
+      const ss = el('div', 's'); ss.textContent = it.subtitle || '';
+      meta.append(tt, ss);
+      li.append(thumbBox(it.thumb), meta,
+        mkBtn('up', I.up, 'Move up', () => movePl(i, -1), i === 0),
+        mkBtn('down', I.down, 'Move down', () => movePl(i, 1), i === items.length - 1),
+        mkBtn('del', I.del, 'Remove from playlist', () => removePl(i)));
+      list.appendChild(li);
+    });
+  };
+  // A move sends "put this track before X" where X is the track that should end up right after it.
+  async function movePl(i, dir) {
+    const j = i + dir; if (j < 0 || j >= items.length) return;
+    const it = items[i], succ = dir < 0 ? items[j] : items[j + 1];
+    const prev = items.slice();
+    items.splice(i, 1); items.splice(j, 0, it); paint();
+    const ok = await plOp({ type:'playlistMove', playlistId:pid, setVideoId:it.setVideoId, before: succ ? succ.setVideoId : undefined });
+    if (!ok) { items = prev; paint(); } else cache.playlists = null;
+  }
+  async function removePl(i) {
+    const it = items[i], prev = items.slice();
+    items.splice(i, 1); paint();
+    const ok = await plOp({ type:'playlistRemove', playlistId:pid, setVideoId:it.setVideoId, videoId:it.videoId }, 'Removed from playlist');
+    if (!ok) { items = prev; paint(); } else cache.playlists = null;
+  }
+  if (editable) {
+    const setLabel = () => { editBtn.innerHTML = editing ? TICK + 'Done' : PEN + 'Edit'; editBtn.classList.toggle('primary', editing); editBtn.classList.toggle('ghost', !editing); };
+    setLabel(); editBtn.style.display = '';
+    editBtn.addEventListener('click', () => { editing = !editing; setLabel(); paint(); });
+  }
+  paint();
 }
 
 function renderMixerPage(m) { m.innerHTML = ''; m.appendChild(topbar('Mixer'));
@@ -1804,6 +1922,19 @@ function openCollectionSheet(d, pid) {
   add(isPinned(d) ? 'Remove from favorites' : 'Add to favorites', I.star,
     () => { const on = togglePin(d); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
   add('Share', I.share, () => shareItem({ playlistId:pid, title:d.title, subtitle:d.subtitle }));
+  if (d.editable) {
+    const pen = '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+    const bin = '<svg viewBox="0 0 24 24"><path d="M6 7h12v13a2 2 0 01-2 2H8a2 2 0 01-2-2zm3-4h6l1 2h4v2H4V5h4z"/></svg>';
+    add('Rename', pen, async () => {
+      const name = await askBox({ title:'Rename playlist', input:true, value:d.title, ok:'Rename' });
+      if (!name || name === d.title) return;
+      if (await plOp({ type:'playlistRename', playlistId:pid, name }, 'Renamed')) { cache.playlists = null; if (d.onRenamed) d.onRenamed(name); }
+    });
+    add('Delete playlist', bin, async () => {
+      const yes = await askBox({ title:'Delete this playlist?', text:'“' + d.title + '” will be removed from your YouTube Music library. This can’t be undone.', ok:'Delete', danger:true });
+      if (yes && await plOp({ type:'playlistDelete', playlistId:pid }, 'Playlist deleted')) { cache.playlists = null; setView('playlists'); }
+    });
+  }
   $('#sheet').classList.add('show');
 }
 
@@ -1876,6 +2007,7 @@ function openSheet(item) {
     add('Play now', I.play, () => { ytm({ type:'play', videoId:item.videoId }); toast('Playing'); setRailTab('queue'); });
     add('Play next', I.next, () => { ytm({ type:'queueAdd', videoId:item.videoId, query:item.title + ' ' + (item.subtitle||''), mode:'next' }); toast('Added — playing next'); });
     add('Add to queue', I.q, () => { ytm({ type:'queueAdd', videoId:item.videoId, query:item.title + ' ' + (item.subtitle||''), mode:'end' }); toast('Added to queue'); });
+    add('Add to playlist…', I.q, () => openAddToPlaylist(item));
     add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:item.videoId }); toast('Starting radio'); setRailTab('queue'); });
     add(isPinned(item) ? 'Remove from favorites' : 'Favorite', I.star, () => { const on = togglePin(item); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
     add('Like on YT Music', I.like, () => { ytm({ type:'like', videoId:item.videoId, action:'like' }, true); toast('Liked'); });
@@ -1883,6 +2015,34 @@ function openSheet(item) {
   }
   $('#sheet').classList.add('show');
 }
+async function openAddToPlaylist(item) {
+  $('#sheet-art').src = item.thumb || ART_FALLBACK;
+  $('#sheet-t').textContent = 'Add to playlist'; $('#sheet-s').textContent = item.title;
+  const acts = $('#sheet-acts'); acts.innerHTML = ''; acts.appendChild(el('div', 'spinner'));
+  $('#sheet').classList.add('show');
+  if (!cache.playlists) { const r = await ytm({ type:'playlists' }); cache.playlists = (r && r.playlists) || []; }
+  acts.innerHTML = '';
+  const ICON = '<svg viewBox="0 0 24 24"><path d="M4 6h12v2H4zm0 4h12v2H4zm0 4h8v2H4zm11 0h2v3h3v2h-3v3h-2v-3h-3v-2h3z"/></svg>';
+  const mk = (label, fn) => { const b = el('button', 'act'); b.innerHTML = ICON + '<span></span>';
+    b.querySelector('span').textContent = label; b.addEventListener('click', () => { closeSheet(); fn(); }); acts.appendChild(b); };
+  mk('New playlist…', async () => {
+    const name = await askBox({ title:'New playlist', text:'Starts with “' + item.title + '”.', input:true, placeholder:'Playlist name', ok:'Create' });
+    if (!name) return;
+    const r = await ytm({ type:'playlistCreate', title:name, videoIds:[item.videoId] }, true);
+    if (r && r.ok) { cache.playlists = null; toast('Created “' + name + '”'); } else toast("Couldn't create the playlist");
+  });
+  for (const p of cache.playlists) {
+    const id = p.playlistId || (p.browseId && p.browseId.replace(/^VL/, ''));
+    if (!id || id === 'LM' || id === 'SE') continue;   // Liked music / uploads can't be edited this way
+    mk(p.title, async () => { if (await plOp({ type:'playlistAdd', playlistId:id, videoId:item.videoId }, 'Added to ' + p.title)) cache.playlists = null; });
+  }
+}
+$('#qm-save').addEventListener('click', async () => {
+  const name = await askBox({ title:'Save queue as playlist', text:'Saves the tracks in your queue (not the autoplay suggestions) as a new private playlist.',
+    input:true, value:'Saved queue', ok:'Save' });
+  if (!name) return;
+  if (await plOp({ type:'queueSave', title:name }, 'Saved as “' + name + '”')) cache.playlists = null;
+});
 function closeSheet() { $('#sheet').classList.remove('show'); }
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
