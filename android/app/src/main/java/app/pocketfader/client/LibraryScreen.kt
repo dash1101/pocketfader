@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -222,7 +223,7 @@ private fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(lists, key = { it.playlistId ?: it.browseId ?: it.title }) { p ->
+                gridItems(lists, key = { it.playlistId ?: it.browseId ?: it.title }) { p ->
                     Column(Modifier.clickable { onOpen(p) }) {
                         Thumb(p.thumb, 150, 18)
                         Text(p.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
