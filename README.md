@@ -7,6 +7,9 @@ a master volume fader, now-playing with cover art, play/pause/skip/seek, and —
 feature — a **full YouTube Music remote** (search, queue, play next, mixes, playlists, likes) that
 drives YouTube Music running in the browser on your computer.
 
+- **Queue control for YouTube Music**: reorder by dragging, jump to any track, shuffle, loop modes and an autoplay switch, with autoplay suggestions shown separately (and labelled when they won't play, e.g. while looping).
+- **Switch the audio output** from your phone and set each device's level *before* switching to it.
+- **Built-in equalizer** (Linux/PipeWire): bass / mid / treble with presets; no extra software, off until you turn it on.
 - Works with the **normal system volume** (PipeWire / PulseAudio on Linux, the Windows volume on Windows). No special audio software.
 - Phone side is just a web page — **any phone, tablet or laptop with a browser**. Add it to the home screen and it behaves like an app.
 - Also controls **any media player** on the computer (Spotify, VLC, Firefox, phone sessions via KDE Connect…) through MPRIS on Linux.
@@ -57,6 +60,7 @@ Pick **one**:
 | | Best for | How |
 |---|---|---|
 | **Tailscale** (recommended) | Works anywhere, safest | Install [Tailscale](https://tailscale.com) on the computer and the phone, sign in to the same account. Open `http://<computer-name>:8777` on the phone. Pocketfader detects Tailscale automatically. |
+| **Cloudflare Tunnel** | Anywhere, over HTTPS, with a login in front | Step-by-step in the [Cloudflare guide](docs/CLOUDFLARE.md). |
 | **Home Wi-Fi** | Simple, at home only | Install with `./install.sh --lan` (or run `pocketfader --lan`). It also listens on your home-network address and **requires an access token**. Open the full link it prints (it includes `?token=…`) once per device. |
 
 Then use your browser's **Add to Home Screen** (Android Chrome: ⋮ → *Add to Home screen* / *Install app*;
@@ -103,6 +107,6 @@ safely. Settings and the access token live in `~/.config/pocketfader/` (`%APPDAT
 
 ## More
 
-[Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app (WebView edition)](android/legacy-webview/README.md)
+[Cloudflare guide](docs/CLOUDFLARE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app (WebView edition)](android/legacy-webview/README.md)
 
 MIT licensed.

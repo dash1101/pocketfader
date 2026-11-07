@@ -3,6 +3,7 @@
 #
 #   ./install.sh              install + start at login
 #   ./install.sh --lan        also listen on your home network (turns on an access token)
+#   ./install.sh --token --allow-host=music.example.com   behind a reverse proxy / Cloudflare Tunnel
 #   ./install.sh --uninstall  remove the service and the app (your settings are kept)
 #
 # Everything lives in your home directory; no root needed. It never touches your audio
@@ -21,6 +22,7 @@ for a in "$@"; do
   case "$a" in
     --lan) EXTRA_ARGS+=(--lan) ;;
     --token) EXTRA_ARGS+=(--token) ;;
+    --allow-host=*) EXTRA_ARGS+=(--allow-host "${a#--allow-host=}") ;;
     --no-systemd) NO_SYSTEMD=1 ;;
     --uninstall) UNINSTALL=1 ;;
     -h|--help) sed -n '2,9p' "$0"; exit 0 ;;

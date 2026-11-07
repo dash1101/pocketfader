@@ -50,7 +50,7 @@
   /* mini-player only exists on mobile */
   #miniplayer { display:none; }
   /* narrow / phone layout */
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     #app { grid-template-columns:1fr; grid-template-rows:1fr; grid-template-areas:"main"; }
     #main { grid-area:main; padding:0 16px calc(180px + var(--sa-bottom, env(safe-area-inset-bottom))); }
     /* the sheet grows out of the mini-player: scale + fade up from the bottom */
@@ -79,7 +79,7 @@
     #mini-pp svg { width:22px; height:22px; fill:currentColor; }
     .railclose { display:none; }   /* swipe down to dismiss instead */
   }
-  @media (min-width:1101px) { .railclose { display:none; } }
+  @media (min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape) { .railclose { display:none; } }
 
   /* ---------- nav ---------- */
   #nav { grid-area:nav; position:relative; background:var(--panel); border-right:1px solid var(--line);
@@ -106,7 +106,7 @@
   #nav .dot { width:9px; height:9px; border-radius:50%; background:var(--dim2); margin-top:6px; }
   #nav .dot.ok { background:var(--live); box-shadow:0 0 8px var(--live); }
   #nav .dot.bad { background:var(--danger); }
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     #nav { position:fixed; left:0; right:0; bottom:0; z-index:50; flex-direction:row; justify-content:space-around;
            border-right:0; border-top:1px solid var(--line); background:var(--panel);
            padding:6px 0 calc(6px + var(--sa-bottom, env(safe-area-inset-bottom))); }
@@ -244,7 +244,7 @@
               mask-image:linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 18px), transparent); }
   /* mobile: a drag handle atop the now-playing sheet */
   .raildrag { display:none; }
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     .raildrag { display:block; width:40px; height:5px; border-radius:3px; background:var(--dim2); opacity:.6;
                 margin:8px auto 2px; flex:none; }
     /* let the drag own the gesture instead of the scroller stealing it mid-swipe */
@@ -322,7 +322,7 @@
          padding:15px 16px; border-radius:12px; font-size:15px; font-weight:560; display:flex; gap:14px; align-items:center; }
   .act:active { background:var(--card2); }
   .act svg { width:21px; height:21px; fill:var(--accent2); flex:none; }
-  @media (min-width:1101px) {
+  @media (min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape) {
     #sheet { align-items:center; }
     #sheetcard { border-radius:18px; max-width:420px; }
   }
@@ -502,7 +502,7 @@
   .editrow button { display:flex; align-items:center; gap:8px; height:40px; padding:0 18px; border-radius:20px;
                     border:1px dashed var(--line); background:transparent; color:var(--dim); font-size:13px; font-weight:600; }
   .editrow button svg { width:15px; height:15px; fill:currentColor; }
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     /* breathing room against the camera cutout and the chin */
     #main { padding-top:var(--sa-top, env(safe-area-inset-top)); padding-bottom:calc(210px + var(--sa-bottom, env(safe-area-inset-bottom))); }
     #nav { padding:8px 10px calc(12px + var(--sa-bottom, env(safe-area-inset-bottom))); }
@@ -586,7 +586,7 @@
   .topbar { top:var(--sa-top, env(safe-area-inset-top)); margin-left:-26px; margin-right:-26px;
             padding-left:26px; padding-right:26px; }
   .topbar::after { left:26px; right:26px; }
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     .topbar { margin-left:-16px; margin-right:-16px; padding-left:16px; padding-right:16px; }
     .topbar::after { left:16px; right:16px; }
   }
@@ -661,7 +661,7 @@
   /* album / playlist header: never clip the action buttons on a narrow screen */
   .detailhead { flex-wrap:wrap; }
   .detailhead .acts { flex-wrap:wrap; gap:8px; }
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     .detailhead { flex-direction:column; align-items:flex-start; gap:14px; }
     .detailhead .art { width:150px; height:150px; }
     .detailhead .t { font-size:23px; }
@@ -670,7 +670,7 @@
     .detailhead .acts .pill.more { flex:0 0 46px; padding:0; }
   }
 
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     /* Page header is a fixed overlay (sticky-in-a-padded-scroller proved unreliable), so
        content can never render above it and it always hugs the status bar. */
     #statusbg { display:none; }
@@ -683,7 +683,7 @@
     #main { padding-top:calc(var(--sa-top, env(safe-area-inset-top)) + 74px); }
   }
 
-  @media (max-width:1100px) {
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
     /* The player scrolls away normally and a compact bar fades in over it. The bar is
        FIXED, so toggling it can't change scroll height — that feedback loop was what made
        the old collapse flicker back and forth while scrolling. */
@@ -704,6 +704,71 @@
     #npbar svg { width:22px; height:22px; fill:currentColor; }
   }
   #npbar { display:none; }
+
+  /* ---- queue modes, sections, reorder ---- */
+  .qmodes { display:flex; gap:8px; padding:2px 14px 10px; background:var(--panel); flex-wrap:wrap; }
+  .qm { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 13px 0 10px; border-radius:999px; border:1px solid var(--line);
+        background:var(--card); color:var(--dim); font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+        transition:background .25s cubic-bezier(.2,.8,.2,1), color .25s, border-color .25s, transform .18s cubic-bezier(.2,.8,.2,1); }
+  .qm svg { width:16px; height:16px; fill:currentColor; }
+  .qm.on { background:color-mix(in srgb, var(--accent) 22%, var(--card)); color:var(--accent2); border-color:color-mix(in srgb, var(--accent) 45%, transparent); }
+  .qm:active { transform:scale(.94); }
+  .qsec { padding:14px 12px 6px; }
+  .qsec .a { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--dim); }
+  .qsec .b { font-size:12px; color:var(--accent2); margin-top:2px; }
+  .qsec.off .b { color:var(--dim2); }
+  .qitem { transition:transform .22s cubic-bezier(.2,.8,.2,1), opacity .25s, background .2s, box-shadow .2s; will-change:transform; }
+  .qitem.played { opacity:.5; }
+  .qitem.wont { opacity:.42; }
+  .qitem.wont .t::after { content:""; }
+  .qitem.dragging { transition:none; z-index:5; position:relative; background:var(--card2); box-shadow:0 10px 30px rgba(0,0,0,.45); }
+  .qgrip { width:30px; height:36px; flex:none; border:0; background:transparent; color:var(--dim2); display:grid; place-items:center; touch-action:none; cursor:grab; border-radius:8px; }
+  .qgrip svg { width:18px; height:18px; fill:currentColor; }
+  .qgrip:active { cursor:grabbing; color:var(--text); }
+  /* ---- mixer extras: output + EQ switch ---- */
+  .outrow { display:flex; align-items:center; gap:10px; margin:10px 0 4px; }
+  .outrow .l, .eqtoggle .l { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--dim); }
+  .outbtn { flex:1; min-width:0; display:flex; align-items:center; justify-content:space-between; gap:8px; height:40px; padding:0 12px; border-radius:12px;
+            border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; font-size:13px; font-weight:560; cursor:pointer; }
+  .outbtn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .outbtn svg { width:16px; height:16px; fill:currentColor; flex:none; color:var(--dim); }
+  .eqtoggle { display:flex; align-items:center; justify-content:space-between; margin:12px 0 6px; }
+  .eqpresets { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 8px; }
+  .eqpresets button { height:28px; padding:0 11px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--dim); font:inherit; font-size:12px; cursor:pointer; }
+  .eqpresets button:active { transform:scale(.95); }
+  .eqstatus { font-size:12px; color:var(--dim); min-height:0; margin:2px 0; }
+  .eqstatus:empty { display:none; }
+  /* ---- output picker ---- */
+  #outsheet { position:fixed; inset:0; z-index:60; display:flex; align-items:flex-end; justify-content:center; pointer-events:none; }
+  #outsheet .osback { position:absolute; inset:0; background:rgba(0,0,0,.5); opacity:0; transition:opacity .28s; }
+  #outsheet .oscard { position:relative; width:min(560px,100%); max-height:82vh; overflow:auto; background:var(--panel); border-radius:22px 22px 0 0; padding:16px 16px calc(18px + env(safe-area-inset-bottom));
+                      transform:translateY(105%); transition:transform .38s cubic-bezier(.2,.9,.2,1); box-shadow:0 -12px 40px rgba(0,0,0,.4); }
+  #outsheet.show { pointer-events:auto; }
+  #outsheet.show .osback { opacity:1; }
+  #outsheet.show .oscard { transform:none; }
+  @media (min-width:700px) { #outsheet { align-items:center; } #outsheet .oscard { border-radius:22px; transform:translateY(24px) scale(.96); opacity:0; transition:transform .32s cubic-bezier(.2,.9,.2,1), opacity .25s; }
+                             #outsheet.show .oscard { transform:none; opacity:1; } }
+  .oshead { display:flex; align-items:center; justify-content:space-between; font-weight:700; font-size:16px; margin-bottom:10px; }
+  .osx { width:34px; height:34px; border:0; border-radius:50%; background:var(--card); color:var(--text); cursor:pointer; font-size:14px; }
+  .osrow { padding:12px; border-radius:14px; background:var(--card); margin-bottom:8px; border:1px solid transparent; }
+  .osrow.cur { border-color:color-mix(in srgb, var(--accent) 50%, transparent); }
+  .osrow .top { display:flex; align-items:center; gap:10px; }
+  .osrow .nm { flex:1; min-width:0; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .osrow .kind { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
+  .osrow .use { height:30px; padding:0 14px; border-radius:999px; border:0; background:var(--accent); color:#fff; font:inherit; font-size:12.5px; font-weight:650; cursor:pointer; }
+  .osrow .use[disabled] { background:var(--card2); color:var(--dim); cursor:default; }
+  .osrow .lv { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .osrow .lv input { flex:1; min-width:0; }
+  .osrow .lv .p { width:38px; text-align:right; font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .osrow .mu { width:32px; height:32px; border:0; border-radius:9px; background:transparent; color:var(--dim); cursor:pointer; font-size:15px; }
+  .oshint { font-size:12px; color:var(--dim); margin-top:6px; }
+  .osrow input[type=range], .qmodes, .eqtoggle { accent-color:var(--accent); }
+
+  /* two-pane layouts: size the cover from the screen height so the queue always has room */
+  @media (min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape) {
+    .artwrap { width:min(100%, clamp(150px, calc(100vh - 560px), 360px)); }
+    .np { padding-top:16px; }
+  }
 </style>
 </head>
 <body>
@@ -762,6 +827,11 @@
       </div>
     </div>
     <div class="railhead"><span class="l">Up Next</span><span class="c" id="qcount"></span></div>
+    <div class="qmodes" id="qmodes" style="display:none">
+      <button class="qm" id="qm-shuffle" title="Shuffle (double-tap to reshuffle)"><svg viewBox="0 0 24 24"><path d="M10.6 9.2L5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2.0 2-12.5 12.5 1.4 1.4L17.9 7.4l2.1 2.1V4h-5.5zm.4 9.8l-1.4 1.4 3.3 3.3-2.1 2.1H20v-5.5l-2.0 2-3.1-3.3z"/></svg><span>Shuffle</span></button>
+      <button class="qm" id="qm-repeat" title="Loop"><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg><span id="qm-repeat-l">Loop off</span></button>
+      <button class="qm" id="qm-auto" title="Autoplay"><svg viewBox="0 0 24 24"><path d="M5 4l9 8-9 8V4zm11 0h3v16h-3z"/></svg><span>Autoplay</span></button>
+    </div>
     <div class="railbody" id="railbody"></div>
   </aside>
 </div>
@@ -811,6 +881,8 @@ const ART_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
 const fmt = s => { if (!isFinite(s) || s < 0) s = 0; const m = Math.floor(s/60), r = Math.floor(s%60); return m + ':' + String(r).padStart(2,'0'); };
 
 let toastT;
+const WIDE_MQ = window.matchMedia('(min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape)');
+const isWide = () => WIDE_MQ.matches;   // landscape tablets and desktops get the two-pane layout
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600); }
 
@@ -973,7 +1045,7 @@ window.addEventListener('popstate', e => {
 // after each render so no ancestor can offset or clip it.
 function hoistTopbar() {
   const host = $('#topbarhost');
-  if (window.innerWidth > 1100) { host.replaceChildren(); return; }
+  if (isWide()) { host.replaceChildren(); return; }
   const tb = $('#main > .topbar');
   if (tb) host.replaceChildren(tb);
 }
@@ -1747,8 +1819,14 @@ function openQueueSheet(q) {
     mix:'<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-3l-2 2-1.4-1.4L12 7h2l-2-2h5V3zM3 6h5l3 3-1.4 1.4L7 8H3V6zm14 9v-3l4 4-4 4v-3h-2l-8-8H3v-2h5l8 8h1z"/></svg>',
     star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
     share:'<svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg>' };
-  add('Play now', I.play, () => { optimisticNow(q); ytm({ type:'play', videoId:q.videoId }); });
-  add('Move to play next', I.up, () => { ytm({ type:'queueMoveNext', videoId:q.videoId }, true); toast('Moved up next'); });
+  add('Play now', I.play, () => queueJump(q));
+  if ((q.section || 'queue') === 'queue') {
+    const m = qsplit().main, ci = m.findIndex(x => x.selected);
+    add('Move to play next', I.up, () => commitMove(m.indexOf(q), Math.min(m.length - 1, ci + 1)));
+    add('Move to end of queue', I.up, () => commitMove(m.indexOf(q), m.length - 1));
+  } else {
+    add('Play next', I.up, () => { ytm(Object.assign({ type:'queueMoveNext' }, qref(q)), true); toast('Added — playing next'); });
+  }
   add('Remove from queue', I.del, () => queueRemove(q));
   add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:q.videoId }); toast('Starting radio'); });
   add(isPinned(q) ? 'Remove from favorites' : 'Favorite', I.star,
@@ -1758,9 +1836,9 @@ function openQueueSheet(q) {
 }
 // Remove with an optimistic repaint so the row disappears immediately.
 function queueRemove(q) {
-  lastQueue = lastQueue.filter(x => x.videoId !== q.videoId);
-  queueSig = null; paintRailBody();
-  ytm({ type:'queueRemove', videoId:q.videoId }, true);
+  lastQueue = lastQueue.filter(x => x !== q);
+  queueSettleUntil = Date.now() + 2500; queueSig = null; paintRailBody();
+  ytm(Object.assign({ type:'queueRemove' }, qref(q)), true);
   toast('Removed from queue');
 }
 
@@ -1904,13 +1982,13 @@ function morphRail(open) {
 }
 function openNowPlaying() {
   const app = $('#app'); if (app.classList.contains('railopen')) return;
-  if (window.innerWidth > 1100) { app.classList.add('railopen'); }
+  if (isWide()) { app.classList.add('railopen'); }
   else morphRail(true);
   history.pushState({ railopen:true }, '');
 }
 function closeNowPlaying() {
   const app = $('#app'); if (!app.classList.contains('railopen')) return;
-  if (window.innerWidth > 1100) { app.classList.remove('railopen'); }
+  if (isWide()) { app.classList.remove('railopen'); }
   else morphRail(false);
 }
 let chipGestureEnd = 0;   // suppresses the synthetic click that follows a drag
@@ -2107,7 +2185,7 @@ $('.artwrap').addEventListener('click', (ev) => {
 const railEl = $('#rail');
 let collapseLock = 0;
 railEl.addEventListener('scroll', () => {
-  if (window.innerWidth <= 1100) {
+  if (!isWide()) {
     // Fade the compact bar in/out with hysteresis. The bar is fixed, so this never
     // reflows the scroller (which is what caused the old flicker).
     const s = railEl.scrollTop, on = railEl.classList.contains('compact');
@@ -2123,7 +2201,7 @@ railEl.addEventListener('scroll', () => {
 }, { passive: true });
 
 function paintNow(now, queue) {
-  lastNow = now; lastQueue = queue || [];
+  lastNow = now; if (Date.now() >= queueSettleUntil) lastQueue = queue || [];
   const live = now && (now.title || now.videoId);
   const art = $('#np-art');
   if (live && now.art) { if (art.tagName !== 'IMG') { const img = el('img','art'); img.id='np-art'; art.replaceWith(img); }
@@ -2170,38 +2248,117 @@ function paintNow(now, queue) {
   paintRailBody();
 }
 
-let queueSig = null;
-function paintRailBody() {
-  const body = $('#railbody');
-  const cur = lastNow && lastNow.videoId;
-  // Rebuilding this list every poll would interrupt taps mid-press, so only redraw
-  // when the queue contents or the current track actually change.
-  const sig = JSON.stringify([lastQueue.map(q => q.videoId), cur]);
-  if (sig === queueSig) return;
-  queueSig = sig;
-  $('#qcount').textContent = lastQueue.length ? lastQueue.length + ' tracks' : '';
-  body.innerHTML = '';
-  if (!lastQueue.length) { body.appendChild(emptyMsg('Queue is empty.')); return; }
-  let hitCur = false;
-  for (const q of lastQueue) {
-    const it = el('div', 'qitem' + (q.videoId === cur ? ' cur' : ''));
-    const meta = el('div'); meta.style.minWidth = '0'; meta.style.flex = '1';
-    meta.innerHTML = `<div class="t">${escapeHtml(q.title||'')}</div><div class="s">${escapeHtml(q.artist||'')}</div>`;
-    const rm = el('button', 'qrm'); rm.title = 'Remove from queue';
-    rm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7l1.4-1.4L10.6 10.6l6.3-6.3z"/></svg>';
-    rm.addEventListener('click', e => { e.stopPropagation(); queueRemove(q); });
-    it.append(thumbBox(q.art), meta, rm);
-    it.addEventListener('click', () => { if (q.videoId) { optimisticNow(q); ytm({ type:'play', videoId:q.videoId }); } });
-    // queue rows get the queue-specific menu, not the "add this" one
-    if (q.videoId) {
-      it.addEventListener('contextmenu', e => { e.preventDefault(); openQueueSheet(q); });
-      let lp = null;
-      it.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; lp = setTimeout(() => openQueueSheet(q), 480); });
-      const cancelLp = () => { if (lp) { clearTimeout(lp); lp = null; } };
-      it.addEventListener('pointerup', cancelLp); it.addEventListener('pointermove', cancelLp); it.addEventListener('pointercancel', cancelLp);
-    }
-    body.appendChild(it);
+let queueSig = null, queueSettleUntil = 0, dragState = null;
+const qref = q => ({ section: q.section || 'queue', index: q.index, videoId: q.videoId, setVideoId: q.setVideoId });
+function qsplit() {
+  const sec = lastQueue.some(q => q.section);
+  return { main: sec ? lastQueue.filter(q => q.section !== 'autoplay') : lastQueue, auto: sec ? lastQueue.filter(q => q.section === 'autoplay') : [] };
+}
+// Jump to a row INSIDE the current queue (a plain "play" would start a fresh radio and drop the playlist).
+function queueJump(q) { if (!q.videoId) return; optimisticNow(q); ytm(Object.assign({ type:'queuePlayAt' }, qref(q)), true); }
+
+function paintModes() {
+  const n = lastNow || {}, box = $('#qmodes'); if (!box) return;
+  box.style.display = n.repeat === undefined ? 'none' : '';   // only the YT Music bridge reports modes
+  $('#qm-shuffle').classList.toggle('on', !!n.shuffle);
+  const rp = n.repeat || 'NONE';
+  $('#qm-repeat').classList.toggle('on', rp !== 'NONE');
+  $('#qm-repeat-l').textContent = rp === 'ONE' ? 'Loop: track' : rp === 'ALL' ? 'Loop: queue' : 'Loop off';
+  const ap = $('#qm-auto'); ap.style.display = n.autoplay == null ? 'none' : ''; ap.classList.toggle('on', !!n.autoplay);
+}
+function setMode(patch, cmd) {
+  lastNow = Object.assign(lastNow || {}, patch); queueSettleUntil = Date.now() + 2500; queueSig = null; paintRailBody();
+  return ytm(cmd, true).then(r => { if (r && r.ok === false) toast('YT Music did not accept that'); return r; });
+}
+$('#qm-shuffle').addEventListener('click', () => { const on = !(lastNow || {}).shuffle; setMode({ shuffle:on }, { type:'setShuffle', on }); });
+$('#qm-shuffle').addEventListener('dblclick', () => { ytm({ type:'reshuffle' }, true); toast('Reshuffled'); });
+$('#qm-repeat').addEventListener('click', () => { const mode = { NONE:'ALL', ALL:'ONE', ONE:'NONE' }[(lastNow || {}).repeat || 'NONE']; setMode({ repeat:mode }, { type:'setRepeat', mode }); });
+$('#qm-auto').addEventListener('click', () => { const on = !(lastNow || {}).autoplay; setMode({ autoplay:on }, { type:'setAutoplay', on }); });
+
+function qrow(q, i, cls, main, curIdx) {
+  const it = el('div', 'qitem' + (q.selected || q.videoId === (lastNow && lastNow.videoId) ? ' cur' : '') + (cls ? ' ' + cls : ''));
+  if (main) it.dataset.main = '1';
+  const meta = el('div'); meta.style.minWidth = '0'; meta.style.flex = '1';
+  meta.innerHTML = `<div class="t">${escapeHtml(q.title||'')}</div><div class="s">${escapeHtml(q.artist||'')}</div>`;
+  const rm = el('button', 'qrm'); rm.title = 'Remove from queue';
+  rm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7l1.4-1.4L10.6 10.6l6.3-6.3z"/></svg>';
+  rm.addEventListener('click', e => { e.stopPropagation(); queueRemove(q); });
+  it.append(thumbBox(q.art), meta);
+  if (main && i > curIdx && q.canReorder !== false) {
+    const g = el('button', 'qgrip'); g.title = 'Drag to reorder';
+    g.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 5h2v2H9zm4 0h2v2h-2zM9 11h2v2H9zm4 0h2v2h-2zM9 17h2v2H9zm4 0h2v2h-2z"/></svg>';
+    g.addEventListener('click', e => e.stopPropagation());
+    g.addEventListener('pointerdown', e => startDrag(e, it, q, i, curIdx));
+    it.append(g);
   }
+  it.append(rm);
+  it.addEventListener('click', () => queueJump(q));
+  if (q.videoId) {
+    it.addEventListener('contextmenu', e => { e.preventDefault(); openQueueSheet(q); });
+    let lp = null;
+    it.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' || e.target.closest('.qgrip')) return; lp = setTimeout(() => openQueueSheet(q), 480); });
+    const cancelLp = () => { if (lp) { clearTimeout(lp); lp = null; } };
+    it.addEventListener('pointerup', cancelLp); it.addEventListener('pointermove', cancelLp); it.addEventListener('pointercancel', cancelLp);
+  }
+  return it;
+}
+
+function paintRailBody() {
+  const body = $('#railbody'), n = lastNow || {}, cur = n.videoId;
+  paintModes();
+  // Rebuilding this list every poll would interrupt taps mid-press, so only redraw when the
+  // queue, the current track or a mode actually changes (and never mid-drag).
+  const sig = JSON.stringify([lastQueue.map(q => q.videoId + (q.section || 'q')[0] + (q.selected ? '*' : '')), cur, n.repeat, n.autoplay, n.shuffle]);
+  if (sig === queueSig || dragState) return;
+  queueSig = sig;
+  const { main, auto } = qsplit();
+  $('#qcount').textContent = main.length ? main.length + ' in queue' + (auto.length ? ' · ' + auto.length + ' suggested' : '') : '';
+  body.innerHTML = '';
+  if (!main.length && !auto.length) { body.appendChild(emptyMsg('Queue is empty.')); return; }
+  let curIdx = main.findIndex(q => q.selected); if (curIdx < 0) curIdx = main.findIndex(q => q.videoId === cur);
+  main.forEach((q, i) => body.appendChild(qrow(q, i, i < curIdx ? 'played' : '', true, curIdx)));
+  if (auto.length) {
+    const loop = n.repeat && n.repeat !== 'NONE', will = !loop && n.autoplay !== false;
+    const why = loop ? (n.repeat === 'ONE' ? 'Won\'t play — this track is on repeat' : 'Won\'t play — your queue is on loop')
+      : n.autoplay === false ? 'Won\'t play — autoplay is off' : 'Plays when your queue ends';
+    const h = el('div', 'qsec' + (will ? '' : ' off'));
+    h.innerHTML = `<div class="a">Autoplay suggestions</div><div class="b">${why}</div>`;
+    body.appendChild(h);
+    auto.forEach((q, i) => body.appendChild(qrow(q, i, will ? '' : 'wont', false, curIdx)));
+  }
+}
+
+// ---- drag to reorder (pointer events; the other rows slide out of the way) ----
+function startDrag(e, row, q, i, curIdx) {
+  e.preventDefault(); e.stopPropagation();
+  const rows = [...$('#railbody').querySelectorAll('.qitem[data-main]')];
+  const rh = row.getBoundingClientRect().height + 2, y0 = e.clientY;
+  dragState = { from: i, to: i };
+  row.classList.add('dragging'); row.setPointerCapture(e.pointerId);
+  const move = ev => {
+    const dy = ev.clientY - y0;
+    const to = Math.max(curIdx + 1, Math.min(rows.length - 1, Math.round(i + dy / rh)));
+    dragState.to = to;
+    row.style.transform = `translateY(${dy}px) scale(1.02)`;
+    rows.forEach((r, k) => { if (r !== row) r.style.transform = (i < to && k > i && k <= to) ? `translateY(${-rh}px)` : (i > to && k < i && k >= to) ? `translateY(${rh}px)` : ''; });
+  };
+  const up = () => {
+    row.removeEventListener('pointermove', move); row.removeEventListener('pointerup', up); row.removeEventListener('pointercancel', up);
+    const { from, to } = dragState; dragState = null;
+    rows.forEach(r => { r.style.transform = ''; }); row.classList.remove('dragging');
+    if (to !== from) commitMove(from, to); else { queueSig = null; paintRailBody(); }
+  };
+  row.addEventListener('pointermove', move); row.addEventListener('pointerup', up); row.addEventListener('pointercancel', up);
+}
+async function commitMove(from, to) {
+  const m = qsplit().main, q = m[from]; if (!q || from === to) return;
+  const order = m.slice(); order.splice(to, 0, order.splice(from, 1)[0]);
+  lastQueue = order.concat(qsplit().auto);                 // optimistic: show the new order at once
+  order.forEach((x, k) => { x.index = k; });
+  queueSettleUntil = Date.now() + 15000; queueSig = null; paintRailBody(); toast('Reordering…');
+  const r = await ytm({ type:'queueMove', section:'queue', index:from, videoId:q.videoId, to }, true);
+  if (r && r.ok) { toast('Queue updated'); queueSettleUntil = Date.now() + 1200; }
+  else { toast('Could not reorder' + (r && r.error ? ' (' + r.error + ')' : '')); queueSettleUntil = 0; }
 }
 
 /* ==================== mixer (volume + optional EQ/meter, depending on the backend's capabilities) ==================== */
@@ -2227,6 +2384,11 @@ function buildMixer() {
     <div class="meter"><i id="meter"></i></div>
     <input type="range" id="vol" class="big" min="0" max="100" step="1" value="0">
     <button id="mute">Mute</button>
+    <div class="outrow" id="outrow" style="display:none"><span class="l">Output</span>
+      <button class="outbtn" id="outbtn"><span id="outname">—</span><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></button></div>
+    <div class="eqtoggle" id="eqtoggle" style="display:none"><span class="l">Equalizer</span><button class="toggle" id="eqsw" aria-label="Equalizer on/off"></button></div>
+    <div class="eqpresets" id="eqpresets" style="display:none"></div>
+    <div class="eqstatus" id="eqstatus"></div>
     <div class="eqhead"><span class="l">EQ</span><button id="eqreset">Reset</button></div>
     <div class="band"><label>Bass</label><input type="range" data-band="bass" min="-12" max="12" step="0.5" value="0"><span class="bd" id="bd-bass">0.0 dB</span></div>
     <div class="band"><label>Med</label><input type="range" data-band="mid" min="-12" max="12" step="0.5" value="0"><span class="bd" id="bd-mid">0.0 dB</span></div>
@@ -2247,6 +2409,14 @@ function buildMixer() {
     const rel = () => { holdEq[band] = false; if (eqPending[band] !== undefined) { post('/api/eq', {band, db:eqPending[band]}); delete eqPending[band]; } };
     inp.addEventListener('pointerup', rel); inp.addEventListener('pointercancel', rel);
     inp.addEventListener('input', () => { const v = parseFloat(inp.value); c.querySelector('#bd-'+band).textContent = fmtEq(v); sendEq(band, v); }); });
+  c.querySelector('#outbtn').addEventListener('click', openOutputs);
+  c.querySelector('#eqsw').addEventListener('click', async () => {
+    const on = !c.querySelector('#eqsw').classList.contains('on');
+    c.querySelector('#eqsw').classList.toggle('on', on);
+    const r = await post('/api/eq', { enabled:on });
+    if (r && r.error) { toast(r.error); c.querySelector('#eqsw').classList.toggle('on', !on); }
+    else toast(on ? 'Equalizer on' : 'Equalizer off');
+  });
   c.querySelector('#eqreset').addEventListener('click', async () => { for (const b of ['bass','mid','high']) await post('/api/eq', {band:b, db:0}); });
   return c;
 }
@@ -2279,13 +2449,75 @@ function applyMixer() {
     const mute = node.querySelector('#mute'); mute.classList.toggle('on', !!v.muted); mute.textContent = v.muted ? 'Muted' : 'Mute';
     node.querySelector('#meter').style.width = Math.min(100, (e.level||0)*140) + '%';
     node.querySelector('.meter').style.display = caps.meter ? '' : 'none';
-    for (const q of node.querySelectorAll('.eqhead, .band')) q.style.display = caps.eq ? '' : 'none';
+    // Output picker + EQ switch (shown only when the host supports them)
+    node.querySelector('#outrow').style.display = caps.outputs ? '' : 'none';
+    node.querySelector('#outname').textContent = v.device || 'Choose output';
+    node.querySelector('#eqtoggle').style.display = caps.eq_toggle ? '' : 'none';
+    node.querySelector('#eqsw').classList.toggle('on', !!e.enabled);
+    const eqLive = caps.eq && (!caps.eq_toggle || e.enabled);       // sliders only matter while the EQ is active
+    for (const q of node.querySelectorAll('.eqhead, .band')) q.style.display = eqLive ? '' : 'none';
+    const pr = node.querySelector('#eqpresets');
+    pr.style.display = caps.eq_toggle && e.enabled && (e.presets || []).length ? '' : 'none';
+    if (pr.style.display === '' && pr.childElementCount !== e.presets.length) {
+      pr.innerHTML = ''; for (const name of e.presets) { const b = el('button'); b.textContent = name.replace('-', ' '); b.addEventListener('click', () => post('/api/eq', { preset:name }).then(r => r && r.error && toast(r.error))); pr.appendChild(b); }
+    }
+    node.querySelector('#eqstatus').textContent = caps.eq_toggle ? (e.available === false ? e.reason : e.status || '') : '';
     const mn = node.querySelector('#mixnote');
     if (node.classList.contains('eqonly') && !caps.eq) { mn.style.display = 'block'; mn.innerHTML = 'EQ isn\'t available with this audio backend.'; continue; }
     for (const band of ['bass','mid','high']) { const val = eq[band]; if (val == null || holdEq[band]) continue;
       node.querySelector('[data-band="'+band+'"]').value = val; node.querySelector('#bd-'+band).textContent = fmtEq(val); }
     node.querySelector('#mixnote').innerHTML = notes.join(' ');
   }
+}
+
+
+/* ==================== output picker (switch device, set levels before switching) ==================== */
+let outTimer = null, outHold = false, outSig = '';
+const OUT_KIND = { bluetooth:'Bluetooth', usb:'USB', hdmi:'HDMI / display', analog:'Analog', virtual:'Virtual' };
+function closeOutputs() { const b = $('#outsheet'); if (b) b.classList.remove('show'); clearTimeout(outTimer); outTimer = null; }
+async function openOutputs() {
+  let box = $('#outsheet');
+  if (!box) {
+    box = el('div'); box.id = 'outsheet';
+    box.innerHTML = '<div class="osback"></div><div class="oscard"><div class="oshead"><span>Audio output</span><button class="osx" aria-label="Close">✕</button></div><div class="oslist"></div><div class="oshint">Set a device\'s level first, then tap Use to switch to it.</div></div>';
+    document.body.appendChild(box);
+    box.querySelector('.osback').addEventListener('click', closeOutputs); box.querySelector('.osx').addEventListener('click', closeOutputs);
+  }
+  outSig = ''; requestAnimationFrame(() => box.classList.add('show'));
+  refreshOutputs(true);
+}
+async function refreshOutputs(first) {
+  const box = $('#outsheet'); if (!box || !box.classList.contains('show') && !first) return;
+  try {
+    const r = await (await fetch('/api/outputs')).json();
+    const list = box.querySelector('.oslist'), outs = r.outputs || [];
+    const sig = JSON.stringify(outs.map(o => [o.name, o.default, o.muted]));
+    if (sig !== outSig) {                                   // structure changed: rebuild rows
+      outSig = sig; list.innerHTML = '';
+      for (const o of outs) list.appendChild(outputRow(o));
+    } else if (!outHold) {                                  // same rows: just sync the levels
+      for (const o of outs) { const row = list.querySelector(`[data-n="${CSS.escape(o.name)}"]`); if (!row) continue;
+        row.querySelector('input').value = o.percent; row.querySelector('.p').textContent = o.percent + '%'; }
+    }
+  } catch (e) {}
+  clearTimeout(outTimer); outTimer = setTimeout(() => refreshOutputs(false), 1500);
+}
+function outputRow(o) {
+  const row = el('div', 'osrow' + (o.default ? ' cur' : '')); row.dataset.n = o.name;
+  row.innerHTML = `<div class="top"><div class="nm"><div>${escapeHtml(o.description || o.name)}</div><div class="kind">${OUT_KIND[o.kind] || ''}${o.form_factor ? ' · ' + escapeHtml(o.form_factor) : ''}</div></div>
+    <button class="use" ${o.default ? 'disabled' : ''}>${o.default ? 'Current' : 'Use'}</button></div>
+    <div class="lv"><button class="mu" title="Mute">${o.muted ? '🔇' : '🔊'}</button><input type="range" min="0" max="100" value="${o.percent}"><span class="p">${o.percent}%</span></div>`;
+  const inp = row.querySelector('input'), pct = row.querySelector('.p'); let t = null;
+  inp.addEventListener('pointerdown', () => { outHold = true; });
+  const rel = () => { outHold = false; };
+  inp.addEventListener('pointerup', rel); inp.addEventListener('pointercancel', rel);
+  inp.addEventListener('input', () => { pct.textContent = inp.value + '%'; clearTimeout(t); t = setTimeout(() => post('/api/output/volume', { name:o.name, percent:parseInt(inp.value, 10) }), 70); });
+  row.querySelector('.mu').addEventListener('click', async () => { o.muted = !o.muted; row.querySelector('.mu').textContent = o.muted ? '🔇' : '🔊'; await post('/api/output/volume', { name:o.name, muted:o.muted }); });
+  row.querySelector('.use').addEventListener('click', async () => {
+    const r = await post('/api/output', { name:o.name });
+    if (r && r.error) toast(r.error); else { toast('Switched to ' + (o.description || o.name)); outSig = ''; refreshOutputs(true); }
+  });
+  return row;
 }
 
 /* ==================== polling ==================== */
@@ -2315,7 +2547,7 @@ function mixerActive() {
   return !document.hidden && (view === 'mixer' ||
     $('#app').classList.contains('railopen') ||                       // sheet shows the master slider
     document.querySelector('.widget[data-wid="mixer"], .widget[data-wid="eq"], .viz') ||
-    (window.matchMedia('(min-width:1101px)').matches));  // desktop shows the mixer meter in the rail
+    isWide());  // desktop shows the mixer meter in the rail
 }
 async function pollMixer() {
   const fast = mixerActive();
