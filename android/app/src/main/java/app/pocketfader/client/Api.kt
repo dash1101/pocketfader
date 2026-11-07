@@ -1,0 +1,72 @@
+package app.pocketfader.client
+
+import org.json.JSONException
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+class ApiException(val code: Int, message: String) : Exception(message)
+
+/**
+ * Minimal client for the server's HTTP API (docs/API.md). Plain HttpURLConnection so the app
+ * needs no networking library and can send Cloudflare Access service-token headers.
+ */
+class PfApi(private val cfg: ServerConfig) {
+
+    fun get(path: String, timeoutMs: Int = 4000): JSONObject = call("GET", path, null, timeoutMs)
+
+    fun post(path: String, body: JSONObject, timeoutMs: Int = 15000): JSONObject =
+        call("POST", path, body, timeoutMs)
+
+    private fun call(method: String, path: String, body: JSONObject?, timeoutMs: Int): JSONObject {
+        val conn = URL(cfg.url.trimEnd('/') + path).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = method
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
+            // A redirect here almost always means a Cloudflare Access login page, not our API.
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("User-Agent", "Pocketfader-Android")
+            if (cfg.token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${cfg.token}")
+            if (cfg.hasCloudflareToken) {
+                conn.setRequestProperty("CF-Access-Client-Id", cfg.cfClientId)
+                conn.setRequestProperty("CF-Access-Client-Secret", cfg.cfClientSecret)
+            }
+            if (body != null) {
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
+            val code = conn.responseCode
+            if (code in 300..399) {
+                throw ApiException(code, "Sign-in required. Add a Cloudflare Access service token in the connection settings.")
+            }
+            val stream = if (code >= 400) conn.errorStream else conn.inputStream
+            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code == 401) throw ApiException(code, "This server needs an access token.")
+            if (code == 403 && text.trimStart().startsWith("<")) {
+                throw ApiException(code, "Cloudflare Access rejected the service token.")
+            }
+            val json = try {
+                if (text.isBlank()) JSONObject() else JSONObject(text)
+            } catch (e: JSONException) {
+                throw ApiException(code, "That address didn't answer like a Pocketfader server.")
+            }
+            if (code >= 400) throw ApiException(code, json.optString("error").ifBlank { "Server error ($code)" })
+            return json
+        } finally {
+            conn.disconnect()
+        }
+    }
+}
+
+/** Human-readable text for whatever went wrong. */
+fun Throwable.friendly(): String = when (this) {
+    is ApiException -> message.orEmpty()
+    is java.net.UnknownHostException -> "Can't find that host. Check the address."
+    is java.net.SocketTimeoutException -> "The server didn't answer in time."
+    is java.net.ConnectException -> "Couldn't connect. Is Pocketfader running and reachable from this phone?"
+    is javax.net.ssl.SSLException -> "Secure connection failed (${message.orEmpty().take(80)})."
+    else -> message ?: javaClass.simpleName
+}

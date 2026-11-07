@@ -1,0 +1,9 @@
+<resources>
+    <!-- The window background avoids a white flash before Compose draws its first frame. -->
+    <style name="Theme.Pocketfader" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/pf_window</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <color name="pf_window">#0E0E12</color>
+</resources>
