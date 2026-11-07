@@ -36,25 +36,32 @@ object UpdateManager {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    @Suppress("DEPRECATION")
     private fun certs(pi: PackageInfo?): Set<String> {
         if (pi == null) return emptySet()
         val sigs: Array<Signature>? = if (Build.VERSION.SDK_INT >= 28) {
-            pi.signingInfo?.let { if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory }
+            val si = pi.signingInfo
+            if (si == null) null else if (si.hasMultipleSigners()) si.apkContentsSigners else si.signingCertificateHistory
         } else {
-            @Suppress("DEPRECATION") pi.signatures
+            pi.signatures
         }
         val md = MessageDigest.getInstance("SHA-256")
         return sigs.orEmpty().map { md.digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b) } }.toSet()
     }
 
     /** True only when both signing keys could be read and share none (so the installer would say "App not installed"). */
-    private fun signedByAnotherKey(ctx: Context, apk: File): Boolean = try {
-        val pm = ctx.packageManager
-        val flag = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
-        val mine = certs(pm.getPackageInfo(ctx.packageName, flag))
-        val theirs = certs(pm.getPackageArchiveInfo(apk.path, flag))
-        mine.isNotEmpty() && theirs.isNotEmpty() && mine.intersect(theirs).isEmpty()
-    } catch (e: Exception) { false }
+    @Suppress("DEPRECATION")
+    private fun signedByAnotherKey(ctx: Context, apk: File): Boolean {
+        return try {
+            val pm = ctx.packageManager
+            val flag = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+            val mine = certs(pm.getPackageInfo(ctx.packageName, flag))
+            val theirs = certs(pm.getPackageArchiveInfo(apk.path, flag))
+            mine.isNotEmpty() && theirs.isNotEmpty() && mine.intersect(theirs).isEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     fun currentVersion(ctx: Context): String =
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName.orEmpty() } catch (e: Exception) { "" }

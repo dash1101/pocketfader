@@ -68,11 +68,20 @@ object BeaconModel {
     private fun applyHeld(s: BeaconStatus): BeaconStatus {
         val now = SystemClock.elapsedRealtime()
         var out = s
-        heldVisible?.let { (vis, snooze, until) ->
-            if (now < until) out = out.copy(visible = vis, snoozeSec = snooze) else heldVisible = null
+        val hv = heldVisible
+        if (hv != null) {
+            if (now < hv.third) {
+                out = out.copy(visible = hv.first, snoozeSec = hv.second)
+            } else {
+                heldVisible = null
+            }
         }
         for ((k, v) in heldSettings.toMap()) {
-            if (now < v.second) out = out.copy(settings = out.settings.with(k, v.first)) else heldSettings.remove(k)
+            if (now < v.second) {
+                out = out.copy(settings = out.settings.withValue(k, v.first))
+            } else {
+                heldSettings.remove(k)
+            }
         }
         return out
     }
@@ -107,7 +116,7 @@ object BeaconModel {
     suspend fun setSetting(key: String, value: Any) {
         val prev = status ?: return
         heldSettings[key] = value to (SystemClock.elapsedRealtime() + 4000)
-        status = prev.copy(settings = prev.settings.with(key, value))
+        status = prev.copy(settings = prev.settings.withValue(key, value))
         try {
             withContext(Dispatchers.IO) { Remote.beaconSetting(key, value) }
             refresh()
@@ -119,7 +128,7 @@ object BeaconModel {
     }
 }
 
-private fun BeaconSettings.with(key: String, value: Any): BeaconSettings = when (key) {
+private fun BeaconSettings.withValue(key: String, value: Any): BeaconSettings = when (key) {
     "privateMode" -> copy(privateMode = value as Boolean)
     "showPaused" -> copy(showPaused = value as Boolean)
     "showProgress" -> copy(showProgress = value as Boolean)
