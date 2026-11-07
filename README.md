@@ -8,7 +8,7 @@ feature — a **full YouTube Music remote** (search, queue, play next, mixes, pl
 drives YouTube Music running in the browser on your computer.
 
 - **Queue control for YouTube Music**: reorder by dragging, jump to any track, shuffle, loop modes and an autoplay switch, with autoplay suggestions shown separately (and labelled when they won't play, e.g. while looping).
-- **Live lyrics** for what's playing: time-synced lines that follow the song, from several sources (LRCLIB, NetEase, YouTube Music) you can switch between, with romanization for Korean, Japanese kana, Cyrillic and Greek and translations where a source has them.
+- **Live lyrics** for what's playing: lines that follow the song (word by word where a source has it), from several sources (KuGou, LRCLIB, NetEase, YouTube Music) you can switch between, with romanization for Korean, Japanese kana, Cyrillic and Greek and translations where a source has them.
 - **A desktop window** for the server (GTK on Linux, Tk on Windows): start or stop it, start at login, and copy the addresses to open on your phone.
 - **Switch the audio output** from your phone and set each device's level *before* switching to it.
 - **Built-in equalizer** (Linux/PipeWire): bass / mid / treble with presets; no extra software, off until you turn it on.
@@ -81,6 +81,18 @@ iPhone Safari: Share → *Add to Home Screen*).
 The extension only talks to Pocketfader on the same computer (`127.0.0.1`); it opens no network port of its own.
 When the extension isn't connected, the app falls back to simple play/pause/next/seek for whatever
 media player *is* running.
+
+## Updates
+
+Pocketfader looks for new releases on GitHub. The **computer** does the asking, so a phone never needs a GitHub login:
+
+- the Android app shows a banner (and Settings → Updates) when a newer version exists and installs it through the computer;
+- the desktop window has an **Updates** row with **Update now**; or run `pocketfader --check-update` and `pocketfader --update`
+  (pip and `install.sh` installs; the packaged binaries link you to the download page).
+
+For a private repository, sign in on the computer with `gh auth login` (or set `GITHUB_TOKEN`). Set `POCKETFADER_REPO=owner/name`
+to follow a different repository. In-place Android updates need the app to be signed with the same key every time, see
+[docs/RELEASING.md](docs/RELEASING.md).
 
 ## The desktop window
 

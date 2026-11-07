@@ -16,6 +16,8 @@ same-origin `Origin` on POSTs (non-browser clients send none — that's fine).
 | `GET /api/state` | `{version, volume, media, engine, capabilities, limits}` (below). |
 | `GET /api/ytm/state` | Now-playing in YT-Music shape: `{connected, source: "ytm"\|"media"\|null, now: {title, artist, album, art, playing, position, duration, videoId?, liked?, volume?}, queue: []}`. `source` says whether it came from the extension or the host's media player. |
 | `GET /api/prefs` | Shared client prefs (favourites…), same on every device. |
+| `GET /api/update[?refresh=1]` | The newest release on GitHub and whether it's newer than this server: `{current, latest, available, notes, url, apk, wheel, self_update}`. The computer does the asking, so phones need no GitHub login. |
+| `GET /api/update/apk` | The newest Android app (checked against the release's SHA256SUMS) for the app to install. |
 | `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
 
 ```jsonc
@@ -44,13 +46,16 @@ same-origin `Origin` on POSTs (non-browser clients send none — that's fine).
               {"id": "ytm", "label": "YouTube Music", "found": false, "synced": false}],
   "lyrics": {
     "source": "lrclib", "label": "LRCLIB", "synced": true, "credit": "Source: LyricFind",   // credit is optional
-    "lines": [{"t": 12.4, "text": "…", "rom": "…romanized…", "tr": "…translation…"}]       // t is null when not synced
-  }
+    "lines": [{"t": 12.4, "text": "…", "rom": "…romanized…", "tr": "…translation…",
+               "w": [[12.4, 12.9, "word "], [12.9, 13.6, "word"]]}]              // t is null when not synced; w only with word-by-word sources
+  },
+  "pending": false                          // true while slower sources are still being asked (ask again in a few seconds)
 }
 ```
 
-The server asks the sources at the same time and keeps the answers for a few hours, so switching `source`
-is instant. When the chosen source has no romanization or translation, the lines borrow them from another
+The server asks the sources at the same time (`kugou` gives word-by-word timing), answers as soon as something
+time-synced is in, and keeps everything for a few hours, so switching `source` is instant. It also looks up the current
+track and the next two in the background when the track changes. When the chosen source has no romanization or translation, the lines borrow them from another
 source by timestamp. Only the title, artist, album and length are sent to those services. Sources are
 third-party and best-effort. `capabilities.lyrics` is `true` on servers that have this endpoint.
 
