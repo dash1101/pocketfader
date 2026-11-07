@@ -208,5 +208,20 @@ class HostOriginTests(Base):
         self.assertIsNone(r.getheader("Access-Control-Allow-Origin"))
 
 
+
+
+class TailscaleTests(unittest.TestCase):
+    def test_missing_binary_returns_immediately(self):
+        import time
+        from unittest import mock
+        from pocketfader import server
+        with mock.patch.object(server.shutil, "which", return_value=None), \
+                mock.patch.object(server.sys, "platform", "linux"):
+            t = time.time()
+            self.assertIsNone(server.tailscale_ip())
+            self.assertFalse(server.tailscale_installed())
+            self.assertLess(time.time() - t, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

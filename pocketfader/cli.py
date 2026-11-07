@@ -7,7 +7,7 @@ from . import __version__
 from .backends import AUDIO_CHOICES, MEDIA_CHOICES, make_audio_and_engine, make_media
 from .config import DEFAULT_PORT, JsonFile, config_dir, get_or_create_token
 from .runner import Runner
-from .server import App, lan_ip, serve_on, tailscale_ip
+from .server import App, bind_when_tailscale_up, lan_ip, serve_on, tailscale_installed, tailscale_ip
 
 
 def build_parser():
@@ -52,7 +52,7 @@ def main(argv=None):
               token=token, allowed_hosts=a.allow_host)
 
     hosts = ["127.0.0.1"]
-    ts = tailscale_ip(retries=15 if not (exposed) else 3)
+    ts = tailscale_ip()
     if ts:
         hosts.append(ts)
     if a.lan:
@@ -76,8 +76,12 @@ def main(argv=None):
     if not bound:
         sys.exit("nothing to listen on; is the port already in use? (try --port)")
 
-    if not ts and not exposed:
-        print("note: no Tailscale address found, so only this computer can reach it.")
+    q_for = lambda host: f"http://{host}:{a.port}{q}"  # noqa: E731
+    if not ts and tailscale_installed():
+        print("note: Tailscale is installed but not connected yet; will also listen on it once it is up.")
+        bind_when_tailscale_up(app, a.port, lambda ip: print(f"listening on {q_for(ip)}"))
+    elif not ts and not exposed:
+        print("note: no Tailscale found, so only this computer can reach it.")
         print("      To use it from your phone, install Tailscale (recommended) or run with --lan.")
     if token:
         print("access token required -- open the full link above once per device.")

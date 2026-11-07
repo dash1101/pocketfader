@@ -363,22 +363,46 @@ border:0;border-radius:8px;background:#58a6ff;color:#08101a;font-weight:600">Con
 
 # ---------------------------------------------------------------- networking helpers
 
-def tailscale_ip(retries=1):
-    """Tailscale may not be up yet at boot, so allow a retry window."""
-    exe = shutil.which("tailscale") or (r"C:\Program Files\Tailscale\tailscale.exe" if sys.platform == "win32" else None)
+def _tailscale_exe():
+    exe = shutil.which("tailscale")
+    if not exe and sys.platform == "win32":
+        win = r"C:\Program Files\Tailscale\tailscale.exe"
+        exe = win if Path(win).exists() else None
+    return exe
+
+
+def tailscale_installed():
+    return _tailscale_exe() is not None
+
+
+def tailscale_ip():
+    """This machine's Tailscale IPv4 address, or None (not installed, or not connected yet)."""
+    exe = _tailscale_exe()
     if not exe:
         return None
-    for attempt in range(retries):
-        try:
-            out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=10)
-            lines = [l.strip() for l in out.stdout.splitlines() if l.strip()]
-            if lines:
-                return lines[0]
-        except (OSError, subprocess.SubprocessError):
-            pass
-        if attempt < retries - 1:
-            time.sleep(2)
-    return None
+    try:
+        out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=4)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = [l.strip() for l in out.stdout.splitlines() if l.strip()]
+    return lines[0] if lines else None
+
+
+def bind_when_tailscale_up(app, port, announce, attempts=100, delay=3.0):
+    """Tailscale often isn't up yet at boot. Rather than delaying the whole server, serve on
+    loopback right away and join the tailnet address in the background once it appears."""
+    def run():
+        for _ in range(attempts):
+            time.sleep(delay)
+            ip = tailscale_ip()
+            if ip:
+                try:
+                    serve_on(app, ip, port)
+                    announce(ip)
+                except OSError as e:
+                    print(f"could not bind {ip}:{port} -- {e}")
+                return
+    threading.Thread(target=run, name="tailscale-wait", daemon=True).start()
 
 
 def lan_ip():

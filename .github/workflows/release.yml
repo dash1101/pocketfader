@@ -62,10 +62,17 @@ jobs:
         shell: pwsh
         run: |
           .\dist\pocketfader.exe --version
-          $p = Start-Process .\dist\pocketfader.exe -ArgumentList "--port 8799 --dry-run --audio none --media none" -PassThru
-          Start-Sleep 5
-          (Invoke-WebRequest http://127.0.0.1:8799/api/info -UseBasicParsing).Content
-          Stop-Process $p
+          $p = Start-Process .\dist\pocketfader.exe -PassThru `
+            -ArgumentList "--port 8799 --dry-run --audio none --media none" `
+            -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            Start-Sleep 1
+            try { (Invoke-WebRequest http://127.0.0.1:8799/api/info -UseBasicParsing).Content; $ok = $true; break } catch {}
+          }
+          Get-Content out.txt, err.txt -ErrorAction SilentlyContinue
+          Stop-Process $p -Force
+          if (-not $ok) { throw "server did not start" }
       - name: Package
         shell: pwsh
         run: |
