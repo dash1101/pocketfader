@@ -117,19 +117,52 @@
     if (videoId) kind = "song";
     else if (playlistId) kind = "playlist";
     else if (browseId) kind = browseId.startsWith("MPRE") ? "album" : "browse";
-    return { title, subtitle, thumb, videoId, browseId, playlistId, kind };
+    const setVideoId = r.playlistItemData?.playlistSetVideoId || null;
+    return { title, subtitle, thumb, videoId, browseId, playlistId, kind, setVideoId };
   }
 
   // ------------------------------------------------------------------ readers
+  const bar = () => document.querySelector("ytmusic-player-bar");
+  const queueEl = () => document.querySelector("ytmusic-player-queue");
+  // Loop / shuffle / autoplay state (verified live):
+  //   repeat  -> attribute repeat-mode = NONE | ALL | ONE on <ytmusic-player-bar>
+  //   shuffle -> attribute shuffle-on present on <ytmusic-player-bar>
+  //   autoplay-> <tp-yt-paper-toggle-button id="automix">.checked  (queue.autoplayEnabled mirrors it)
+  function repeatMode() {
+    const m = bar() && bar().getAttribute("repeat-mode");
+    return m === "ALL" || m === "ONE" ? m : "NONE";
+  }
+  const shuffleOn = () => !!(bar() && bar().hasAttribute("shuffle-on"));
+  const autoplayToggle = () => document.querySelector("tp-yt-paper-toggle-button#automix");
+  function autoplayOn() {
+    const t = autoplayToggle();
+    if (t && typeof t.checked === "boolean") return t.checked;
+    const q = queueEl();
+    return q && typeof q.autoplayEnabled === "boolean" ? q.autoplayEnabled : null;
+  }
+  // Album art. The player-bar <img> is often a blank placeholder (its src is just the page
+  // URL), which is why art used to come back empty. Prefer the browser's own media session
+  // artwork (the real cover), then the queue's current row, then the bar image.
+  function currentArt(videoId) {
+    try {
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      const list = md && md.artwork ? [...md.artwork] : [];
+      list.sort((a, b) => (parseInt(b.sizes, 10) || 0) - (parseInt(a.sizes, 10) || 0));
+      if (list[0] && list[0].src) return bigArt(list[0].src) || list[0].src;
+    } catch (e) {}
+    const sel = queueRows().find((r) => r.hasAttribute && r.hasAttribute("selected"));
+    const qt = sel && sel.data && pickThumb(sel.data.thumbnail);
+    if (qt) return bigArt(qt) || qt;
+    const img = document.querySelector("ytmusic-player-bar img.image, ytmusic-player-bar .thumbnail img, .middle-controls img");
+    if (img && /^https?:\/\/(lh\d|i\.ytimg|yt3)/.test(img.src || "")) return bigArt(img.src) || img.src;
+    return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  }
   function nowPlaying() {
     const p = mp();
     if (!p || !p.getVideoData) return { playing: false, paused: false, videoId: null };
     const vd = p.getVideoData() || {};
     const ps = p.getProgressState ? p.getProgressState() : {};
     const state = p.getPlayerState ? p.getPlayerState() : -1;
-    const img = document.querySelector(
-      "ytmusic-player-bar img.image, ytmusic-player-bar .thumbnail img, .middle-controls img"
-    );
     return {
       playing: state === 1,
       paused: state === 2,
@@ -137,11 +170,15 @@
       videoId: vd.video_id || null,
       title: vd.title || null,
       artist: vd.author || null,
-      art: bigArt(img && img.src),
+      art: currentArt(vd.video_id),
       position: ps.currentTime ?? (p.getCurrentTime ? p.getCurrentTime() : 0),
       duration: ps.duration ?? (p.getDuration ? p.getDuration() : 0),
-      volume: p.getVolume ? p.getVolume() : null,   // YTM's own 0-100, independent of Windows
+      volume: p.getVolume ? p.getVolume() : null,   // YTM's own 0-100, independent of the computer's
       liked: likeStatus(),                          // 'LIKE' | 'DISLIKE' | 'INDIFFERENT' | null
+      repeat: repeatMode(),                         // 'NONE' | 'ALL' | 'ONE'
+      shuffle: shuffleOn(),
+      autoplay: autoplayOn(),                       // true | false | null (unknown)
+      playlistId: (p.getPlaylistId && p.getPlaylistId()) || null,
     };
   }
   // Read the current song's like state from the player-bar like button.
@@ -155,25 +192,33 @@
     if (up) return up.getAttribute("aria-pressed") === "true" ? "LIKE" : "INDIFFERENT";
     return null;
   }
+  // The queue panel has TWO containers: #contents (the playlist/queue that will actually
+  // play) and #automix-contents (autoplay suggestions). Rows are tagged with their section.
+  function queueRows() {
+    const q = queueEl();
+    let rows = q ? [...q.querySelectorAll("ytmusic-player-queue-item")] : [];
+    return rows.length ? rows : queueItems();
+  }
+  const sectionOf = (row) => (row.parentElement && row.parentElement.id === "automix-contents" ? "autoplay" : "queue");
   function readQueue() {
-    const items = [];
-    const scan = (root) =>
-      root.querySelectorAll &&
-      root.querySelectorAll("ytmusic-player-queue-item").forEach((i) => items.push(i));
-    scan(document);
-    document.querySelectorAll("*").forEach((el) => el.shadowRoot && scan(el.shadowRoot));
-    const seen = new Set();
     const out = [];
-    for (const it of items) {
+    const counters = { queue: 0, autoplay: 0 };
+    for (const it of queueRows()) {
       const d = it.data || {};
-      if (!d.videoId || seen.has(it)) continue;
-      seen.add(it);
+      if (!d.videoId) continue;
+      const section = sectionOf(it);
+      const art = pickThumb(d.thumbnail);
       out.push({
         videoId: d.videoId,
         title: runText(d.title),
         artist: runText(d.longBylineText) || runText(d.shortBylineText),
-        art: pickThumb(d.thumbnail),
+        art: art ? bigArt(art) || art : null,
+        duration: runText(d.lengthText),
         selected: it.hasAttribute && it.hasAttribute("selected"),
+        section,                       // 'queue' | 'autoplay'
+        index: counters[section]++,    // position inside its section
+        setVideoId: d.playlistSetVideoId || null,
+        canReorder: !!d.canReorder,
       });
     }
     return out;
@@ -268,19 +313,39 @@
     }
     return { ok: true };
   }
+  /* Run a YouTube Music navigation endpoint. Older builds expose ytmusic-app.resolveCommand;
+     newer ones don't, but dispatching a `yt-navigate` event on the app works (verified live).
+     We try what exists, then check the player actually moved before reporting success. */
+  async function runEndpoint(ep, matches) {
+    const a = app();
+    if (!a) return { ok: false, error: "no_app" };
+    const attempts = [];
+    if (typeof a.resolveCommand === "function") attempts.push(["resolveCommand", () => a.resolveCommand(ep)]);
+    attempts.push(["yt-navigate", () => a.dispatchEvent(new CustomEvent("yt-navigate", { detail: { endpoint: ep }, bubbles: true, composed: true }))]);
+    for (const [via, fn] of attempts) {
+      try { fn(); } catch (e) { continue; }
+      const deadline = Date.now() + 4500;
+      while (Date.now() < deadline) {
+        await sleep(150);
+        if (matches()) return { ok: true, via };
+      }
+    }
+    return { ok: false, error: "endpoint_not_accepted" };
+  }
+  const curVideo = () => (mp() && mp().getVideoData && (mp().getVideoData() || {}).video_id) || null;
+  const curPlaylist = () => (mp() && mp().getPlaylistId && mp().getPlaylistId()) || null;
   function play(videoId, playlistId) {
     const ep = { watchEndpoint: { videoId } };
     if (playlistId) ep.watchEndpoint.playlistId = playlistId;
-    app().resolveCommand(ep);
-    return { ok: true };
+    return runEndpoint(ep, () => curVideo() === videoId);
   }
   function startPlaylist(playlistId, shuffle) {
+    playlistId = String(playlistId || "").replace(/^VL/, "");
     // Shuffle uses the same endpoint with a known shuffle params token.
     const ep = shuffle
       ? { watchPlaylistEndpoint: { playlistId, params: "wAEB8gECKAE%3D" } }
       : { watchPlaylistEndpoint: { playlistId } };
-    app().resolveCommand(ep);
-    return { ok: true, shuffle: !!shuffle };
+    return runEndpoint(ep, () => curPlaylist() === playlistId).then((r) => ({ ...r, shuffle: !!shuffle }));
   }
 
   // Row lookup + menu-simulation. resolveCommand(queueAddEndpoint) silently no-ops
@@ -321,13 +386,52 @@
     await sleep(250);
     return { ok: true, mode: mode === "next" ? "next" : "end" };
   }
-  /* --- per-queue-item actions -----------------------------------------------------------
-     A queue row only stamps its "Action menu" when it's the current track, so the menu you
-     need for any other row simply doesn't exist in the DOM — and synthetic hover can't
-     create it (untrusted events). The way in: force that row's <dom-if> templates to stamp,
-     which renders its real menu, then click the real menu item.
-     Verified live: Remove took the queue 51 → 50 with the target gone; Play next moved a
-     row from index 8 → 1 (straight after the current track). */
+  /* --- player modes ---------------------------------------------------------------------
+     Loop / shuffle / autoplay are driven through the real controls (verified live):
+     repeat cycles NONE -> ALL -> ONE; shuffle toggles and physically reorders the playlist
+     (toggling off restores the order); autoplay is a switch that shows/hides the suggestions. */
+  const waitFor = async (fn, ms = 1500, step = 60) => {
+    const end = Date.now() + ms;
+    for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) return null; await sleep(step); }
+  };
+  const barButton = (cls) => bar() && (bar().querySelector(`yt-icon-button.${cls} button`) || bar().querySelector(`.${cls} button`));
+  async function setRepeat(mode) {
+    if (!["NONE", "ALL", "ONE"].includes(mode)) return { ok: false, error: "bad_mode" };
+    for (let i = 0; i < 3 && repeatMode() !== mode; i++) {
+      const b = barButton("repeat");
+      if (!b) return { ok: false, error: "no_repeat_button" };
+      const before = repeatMode();
+      b.click();
+      await waitFor(() => repeatMode() !== before, 1200);
+    }
+    return { ok: repeatMode() === mode, repeat: repeatMode() };
+  }
+  async function setShuffle(on) {
+    if (shuffleOn() !== on) {
+      const b = barButton("shuffle");
+      if (!b) return { ok: false, error: "no_shuffle_button" };
+      b.click();
+      await waitFor(() => shuffleOn() === on, 1500);
+      await sleep(350);   // the queue reorders just after the flag flips
+    }
+    return { ok: shuffleOn() === on, shuffle: shuffleOn() };
+  }
+  async function reshuffle() {
+    if (shuffleOn()) await setShuffle(false);
+    return setShuffle(true);
+  }
+  async function setAutoplay(on) {
+    const t = autoplayToggle();
+    if (!t) return { ok: false, error: "no_autoplay_toggle" };
+    if (autoplayOn() !== on) { t.click(); await waitFor(() => autoplayOn() === on, 1500); await sleep(200); }
+    return { ok: autoplayOn() === on, autoplay: autoplayOn() };
+  }
+
+  /* --- queue rows & per-row actions -----------------------------------------------------
+     A queue row only stamps its "Action menu" when it's the current track, so the menu for
+     any other row doesn't exist until we force its <dom-if> templates to stamp; then we click
+     the real menu item. (Synthetic drag-and-drop does NOT reorder -- verified -- so reorder is
+     composed from these menu actions, see queueMove.) */
   function queueItems() {
     const out = [];
     const scan = (root) => root.querySelectorAll &&
@@ -336,14 +440,19 @@
     document.querySelectorAll("*").forEach((el) => el.shadowRoot && scan(el.shadowRoot));
     return out;
   }
-  async function queueItemMenu(videoId, label) {
-    const row = queueItems().find((i) => i.data && i.data.videoId === videoId);
-    if (!row) return { ok: false, error: "not_in_queue" };
-    // stamp the row's hidden templates so its real action menu exists
-    [...row.querySelectorAll("dom-if")].forEach((d) => {
-      try { d.if = true; if (d._render) d._render(); } catch (e) {}
-    });
-    await sleep(450);
+  function findRow(spec) {
+    const rows = queueRows();
+    if (spec.section != null && spec.index != null) {
+      const r = rows.filter((x) => sectionOf(x) === spec.section)[spec.index];
+      if (r && (!spec.videoId || (r.data && r.data.videoId === spec.videoId))) return r;
+    }
+    if (spec.setVideoId) {
+      const r = rows.find((x) => x.data && x.data.playlistSetVideoId === spec.setVideoId);
+      if (r) return r;
+    }
+    return rows.find((x) => x.data && x.data.videoId === spec.videoId) || null;
+  }
+  function findMenuButton(row) {
     let btn = null;
     const walk = (r) => {
       if (btn || !r.querySelectorAll) return;
@@ -353,19 +462,122 @@
       r.querySelectorAll("*").forEach((el) => el.shadowRoot && walk(el.shadowRoot));
     };
     walk(row);
+    return btn;
+  }
+  const escapeMenu = () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  async function rowMenu(row, label) {
+    if (!row) return { ok: false, error: "not_in_queue" };
+    [...row.querySelectorAll("dom-if")].forEach((d) => {
+      try { d.if = true; if (d._render) d._render(); } catch (e) {}
+    });
+    const btn = await waitFor(() => findMenuButton(row), 1500);
     if (!btn) return { ok: false, error: "no_menu" };
     btn.click();
-    await sleep(500);
-    const item = [...document.querySelectorAll("ytmusic-menu-service-item-renderer")]
-      .find((x) => (x.textContent || "").trim().startsWith(label));
-    if (!item) {
-      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-      return { ok: false, error: "menu_item_missing" };
-    }
+    // only look at items that are actually visible (the popup is a shared, reused element)
+    const item = await waitFor(() => [...document.querySelectorAll("ytmusic-menu-service-item-renderer")]
+      .filter((x) => x.offsetParent !== null)
+      .find((x) => (x.textContent || "").trim().startsWith(label)), 1800);
+    if (!item) { escapeMenu(); return { ok: false, error: "menu_item_missing" }; }
     item.click();
-    await sleep(600);
+    await sleep(260);
     return { ok: true };
   }
+  const queueRemove = (spec) => rowMenu(findRow(spec), "Remove from queue");
+  const queueMoveNext = (spec) => rowMenu(findRow(spec), "Play next");
+  const queueAddEnd = (spec) => rowMenu(findRow(spec), "Add to queue");
+
+  async function queuePlayAt(spec) {
+    const row = findRow(spec);
+    if (!row) return { ok: false, error: "not_in_queue" };
+    const d = row.data || {};
+    const ep = d.navigationEndpoint || { watchEndpoint: { videoId: d.videoId } };
+    return runEndpoint(ep, () => curVideo() === d.videoId);
+  }
+
+  /* Reorder the upcoming tracks. YouTube Music only offers drag handles that ignore scripted
+     input, so a move is built from the menu actions: insert fresh copies where they belong
+     ("Play next" = front of upcoming, "Add to queue" = end), then remove the old rows.
+     We pick whichever of the two directions needs fewer steps, and verify the final order.
+     If a build of YTM *moves* an existing row instead of duplicating it, the removals are
+     skipped automatically (detected from whether the row count grew). */
+  async function queueMove(spec) {
+    const upcomingRows = () => {
+      const rows = queueRows().filter((r) => sectionOf(r) === "queue");
+      return { rows, cur: rows.findIndex((r) => r.hasAttribute("selected")) };
+    };
+    const { rows: rows0, cur } = upcomingRows();
+    const src = findRow({ ...spec, section: "queue" });
+    if (!src) return { ok: false, error: "not_in_queue" };
+    const fromAbs = rows0.indexOf(src);
+    if (fromAbs <= cur) return { ok: false, error: "cannot_move_played_or_current" };
+    const base = cur + 1;
+    const U = rows0.slice(base).map((r) => ({ videoId: r.data.videoId }));
+    const len = U.length;
+    const from = fromAbs - base;
+    const dest = Math.max(0, Math.min(len - 1, Number(spec.to) - base));
+    if (from === dest) return { ok: true, noop: true };
+    const target = U.slice();
+    target.splice(dest, 0, target.splice(from, 1)[0]);
+    let k = 0; while (k < len && target[k] === U[k]) k++;
+    let l = len - 1; while (l >= 0 && target[l] === U[l]) l--;
+    const useFront = l + 1 <= len - k;
+    const seq = useFront ? target.slice(0, l + 1).reverse() : target.slice(k);
+    if (seq.length > 40) return { ok: false, error: "move_too_large" };
+    const want = target.map((t) => t.videoId);
+
+    let dup = null;   // does an insert duplicate the row (true) or move it (false)?
+    for (const entry of seq) {
+      const before = upcomingRows().rows.length;
+      const r = await rowMenu(queueRows().find((x) => x.data && x.data.videoId === entry.videoId),
+        useFront ? "Play next" : "Add to queue");
+      if (!r.ok) return { ok: false, error: r.error, step: "insert" };
+      if (dup === null) { await sleep(300); dup = upcomingRows().rows.length > before; }
+    }
+    if (dup) {
+      // Old rows now sit after the front-inserted copies, or before the end-appended ones.
+      const idx = useFront ? seq.map((e) => seq.length + U.indexOf(e)) : seq.map((e) => U.indexOf(e));
+      for (const i of idx.sort((a, b) => b - a)) {
+        const { rows, cur: c } = upcomingRows();
+        const r = await rowMenu(rows[c + 1 + i], "Remove from queue");
+        if (!r.ok) return { ok: false, error: r.error, step: "remove" };
+      }
+    }
+    await sleep(300);
+    const { rows: rowsN, cur: curN } = upcomingRows();
+    const got = rowsN.slice(curN + 1).map((r) => r.data.videoId);
+    const ok = got.length === want.length && got.every((v, i) => v === want[i]);
+    return { ok, steps: seq.length * (dup ? 2 : 1), via: useFront ? "front" : "end", ...(ok ? {} : { error: "order_mismatch", got }) };
+  }
+
+  // Legacy name used by older clients.
+  async function queueItemMenu(videoId, label) { return rowMenu(findRow({ videoId }), label); }
+
+  /* --- saved playlists (authenticated InnerTube; same endpoints the YTM site itself uses) --- */
+  const plId = (id) => String(id || "").replace(/^VL/, "");
+  async function playlistEdit(playlistId, actions) {
+    const j = await innertube("browse/edit_playlist", { playlistId: plId(playlistId), actions }, true);
+    return { ok: !!j && j.status === "STATUS_SUCCEEDED", status: (j && j.status) || null,
+      error: j && j.error && j.error.message ? j.error.message : undefined };
+  }
+  const playlistAdd = (c) => playlistEdit(c.playlistId, [{ action: "ACTION_ADD_VIDEO", addedVideoId: c.videoId,
+    dedupeOption: c.allowDuplicate ? "DEDUPE_OPTION_CHECK" : "DEDUPE_OPTION_SKIP" }]);
+  const playlistRemove = (c) => playlistEdit(c.playlistId, [{ action: "ACTION_REMOVE_VIDEO",
+    setVideoId: c.setVideoId, removedVideoId: c.videoId }]);
+  // Move a track so it sits immediately BEFORE `before` (a setVideoId). Omit `before` to send it to the end.
+  const playlistMove = (c) => playlistEdit(c.playlistId, [{ action: "ACTION_MOVE_VIDEO_BEFORE", setVideoId: c.setVideoId,
+    ...(c.before ? { movedSetVideoIdSuccessor: c.before } : {}) }]);
+  const playlistRename = (c) => playlistEdit(c.playlistId, [{ action: "ACTION_SET_PLAYLIST_NAME", playlistName: c.name }]);
+  async function playlistCreate(c) {
+    const j = await innertube("playlist/create", { title: c.title, description: c.description || "",
+      privacyStatus: c.privacy || "PRIVATE", videoIds: c.videoIds || [] }, true);
+    return { ok: !!(j && j.playlistId), playlistId: j && j.playlistId };
+  }
+  async function playlistDelete(c) {
+    const j = await innertube("playlist/delete", { playlistId: plId(c.playlistId) }, true);
+    return { ok: !!j && j.status === "STATUS_SUCCEEDED", status: (j && j.status) || null };
+  }
+  const queueSave = (c) => playlistCreate({ title: c.title || "Saved queue",
+    videoIds: readQueue().filter((q) => q.section === "queue").map((q) => q.videoId) });
 
   /* Clears the queue by driving YTM's own queue Action menu → "Dismiss queue".
      Verified live: queue went 51 → 0. */
@@ -395,8 +607,92 @@
 
   function startMix(videoId) {
     // A bare watchEndpoint auto-starts the song's radio (RDAMVM…) — that IS "start mix".
-    app().resolveCommand({ watchEndpoint: { videoId } });
-    return { ok: true };
+    return runEndpoint({ watchEndpoint: { videoId } }, () => curVideo() === videoId);
+  }
+
+  // ------------------------------------------------------------------- probe
+  /* Read-only structural dump of the player bar / queue, used to write selectors against the
+     real page. Never clicks anything, never changes state. */
+  function deepAll(root, pred, out = [], depth = 0) {
+    if (!root || depth > 40 || !root.querySelectorAll) return out;
+    root.querySelectorAll("*").forEach((el) => {
+      if (pred(el)) out.push(el);
+      if (el.shadowRoot) deepAll(el.shadowRoot, pred, out, depth + 1);
+    });
+    return out;
+  }
+  function attrs(el) {
+    const o = {};
+    for (const a of el.attributes || []) o[a.name] = String(a.value).slice(0, 80);
+    return o;
+  }
+  function chain(el) {
+    const out = [];
+    let n = el;
+    for (let i = 0; i < 8 && n; i++) {
+      out.push((n.tagName || "?").toLowerCase() + (n.id ? "#" + n.id : "") +
+        (n.classList && n.classList.length ? "." + [...n.classList].slice(0, 3).join(".") : ""));
+      n = n.parentNode && n.parentNode.host ? n.parentNode.host : n.parentElement;
+    }
+    return out;
+  }
+  function interestingProps(obj) {
+    const names = [];
+    try { for (const k in obj) if (/queue|shuffle|repeat|loop|automix|autoplay|playlist|radio/i.test(k)) names.push(k); } catch (e) {}
+    const vals = {};
+    for (const k of names.slice(0, 40)) {
+      try {
+        const v = obj[k];
+        vals[k] = typeof v === "function" ? "fn" : (typeof v === "object" && v) ? "obj:" + Object.keys(v).slice(0, 8).join(",") : v;
+      } catch (e) { vals[k] = "err"; }
+    }
+    return vals;
+  }
+  function probe() {
+    const out = {};
+    const bar = document.querySelector("ytmusic-player-bar");
+    out.playerBar = bar ? { attrs: attrs(bar), props: interestingProps(bar) } : null;
+    const q = document.querySelector("ytmusic-player-queue");
+    out.queuePanel = q ? { attrs: attrs(q), props: interestingProps(q) } : null;
+    const btnPred = (el) => /^(button|tp-yt-paper-icon-button|ytmusic-toggle-button-renderer|tp-yt-paper-toggle-button|yt-button-shape)$/i.test(el.tagName);
+    const describe = (el) => ({ tag: el.tagName.toLowerCase(), id: el.id || undefined, cls: [...(el.classList || [])].join(" ") || undefined,
+      aria: el.getAttribute("aria-label") || undefined, title: el.getAttribute("title") || undefined,
+      pressed: el.getAttribute("aria-pressed") || el.getAttribute("aria-checked") || el.getAttribute("active") || undefined,
+      in: chain(el).slice(1, 4).join(" < ") });
+    out.barButtons = bar ? deepAll(bar, btnPred).map(describe).slice(0, 40) : [];
+    out.queueButtons = q ? deepAll(q, btnPred).map(describe).slice(0, 40) : [];
+    const items = deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-QUEUE-ITEM");
+    out.queueItemCount = items.length;
+    out.itemChains = {};
+    items.forEach((it, i) => {
+      const key = chain(it).slice(1, 5).join(" < ");
+      (out.itemChains[key] = out.itemChains[key] || []).push(i);
+    });
+    for (const k in out.itemChains) {
+      const a = out.itemChains[k];
+      out.itemChains[k] = { count: a.length, first: a[0], last: a[a.length - 1] };
+    }
+    const first = items[0];
+    out.firstItem = first ? { attrs: attrs(first), dataKeys: Object.keys(first.data || {}).slice(0, 40) } : null;
+    const sel = items.findIndex((i) => i.hasAttribute && i.hasAttribute("selected"));
+    out.selectedIndex = sel;
+    out.queueContainers = q ? deepAll(q, (el) => el.id && /content|automix|queue|list|header|footer|tabs?/i.test(el.id)).map((el) =>
+      el.tagName.toLowerCase() + "#" + el.id + " children=" + el.children.length).slice(0, 30) : [];
+    const mpl = mp();
+    out.player = {};
+    for (const m of ["getPlaylistId", "getPlaylistIndex", "getPlaylist", "getVideoData", "getLoopMode", "getShuffle"]) {
+      try { const v = mpl && mpl[m] && mpl[m](); out.player[m] = Array.isArray(v) ? "array(" + v.length + ")" : (v && typeof v === "object" ? Object.keys(v).slice(0, 12) : v); } catch (e) { out.player[m] = "err"; }
+    }
+    out.playerMethods = mpl ? Object.keys(mpl).filter((k) => /list|loop|shuffle|repeat|queue|next|prev/i.test(k) && typeof mpl[k] === "function").slice(0, 40) : [];
+    const a = app();
+    out.app = a ? interestingProps(a) : null;
+    try {
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      out.mediaSession = md ? { title: md.title, artwork: (md.artwork || []).map((x) => x.sizes + " " + String(x.src).slice(0, 70)) } : null;
+    } catch (e) { out.mediaSession = "err"; }
+    out.barImgs = bar ? deepAll(bar, (el) => el.tagName === "IMG").map((i) => (i.className || "") + " " + String(i.src).slice(0, 90)).slice(0, 8) : [];
+    out.url = location.pathname + location.search;
+    return out;
   }
 
   // -------------------------------------------------------------- dispatch
@@ -404,9 +700,9 @@
     try {
       switch (cmd.type) {
         case "transport": return transport(cmd.action, cmd.position);
-        case "play": return play(cmd.videoId, cmd.playlistId);
-        case "startMix": return startMix(cmd.videoId);
-        case "startPlaylist": return startPlaylist(cmd.playlistId, cmd.shuffle);
+        case "play": return await play(cmd.videoId, cmd.playlistId);
+        case "startMix": return await startMix(cmd.videoId);
+        case "startPlaylist": return await startPlaylist(cmd.playlistId, cmd.shuffle);
         case "queueAdd": return await queueAdd(cmd.videoId, cmd.query, cmd.mode);
         case "stop": {
           // Pause/stop, then empty the queue. player.clearQueue() reports success but does
@@ -419,8 +715,22 @@
           const cleared = await dismissQueue();
           return { ok: true, queueCleared: cleared };
         }
-        case "queueRemove": return await queueItemMenu(cmd.videoId, "Remove from queue");
-        case "queueMoveNext": return await queueItemMenu(cmd.videoId, "Play next");
+        case "queueRemove": return await queueRemove(cmd);
+        case "queueMoveNext": return await queueMoveNext(cmd);
+        case "queueAddEnd": return await queueAddEnd(cmd);
+        case "queuePlayAt": return await queuePlayAt(cmd);
+        case "queueMove": return await queueMove(cmd);
+        case "queueSave": return await queueSave(cmd);
+        case "setRepeat": return await setRepeat(cmd.mode);
+        case "setShuffle": return await setShuffle(!!cmd.on);
+        case "reshuffle": return await reshuffle();
+        case "setAutoplay": return await setAutoplay(!!cmd.on);
+        case "playlistAdd": return await playlistAdd(cmd);
+        case "playlistRemove": return await playlistRemove(cmd);
+        case "playlistMove": return await playlistMove(cmd);
+        case "playlistRename": return await playlistRename(cmd);
+        case "playlistCreate": return await playlistCreate(cmd);
+        case "playlistDelete": return await playlistDelete(cmd);
         case "queueClear": return { ok: await dismissQueue() };
         case "search": return { items: await search(cmd.query) };
         case "suggest": return { suggestions: await searchSuggestions(cmd.query) };
@@ -454,6 +764,7 @@
         case "playlists": return { playlists: await playlists() };
         case "playlistItems": return { items: await playlistItems(cmd.playlistId || cmd.browseId) };
         case "nowplaying": return { now: nowPlaying(), queue: readQueue() };
+        case "probe": return probe();
         default: return { ok: false, error: "unknown_type", type: cmd.type };
       }
     } catch (e) {
@@ -474,12 +785,13 @@
   let last = "";
   setInterval(() => {
     const state = { now: nowPlaying(), queue: readQueue(), ts: Date.now() };
-    const sig = JSON.stringify([state.now, state.queue.map((q) => q.videoId), Math.round(state.now.position)]);
+    const sig = JSON.stringify([state.now, state.queue.map((q) => q.videoId + q.section[0] + (q.selected ? "*" : "")), Math.round(state.now.position)]);
     if (sig === last) return; // only push on change (position rounds to whole seconds)
     last = sig;
     window.postMessage({ __vmr: "state", state }, "*");
   }, 1000);
 
+  if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");
   console.log("[Pocketfader] YTM main-world bridge ready");
 })();

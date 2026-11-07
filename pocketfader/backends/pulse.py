@@ -27,6 +27,7 @@ class PulseAudio:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._sub = None
+        self.hidden_sinks = set()   # internal sinks (e.g. the EQ) that shouldn't appear in the output list
 
     # ---- lifecycle ----
     def start(self):
@@ -84,6 +85,63 @@ class PulseAudio:
         with self._lock:
             return dict(self._state)
 
+    # ---- output devices ----
+    def default_name(self):
+        return self.r.read([self.pactl, "get-default-sink"]).out.strip() or None
+
+    def outputs(self, include_hidden=False):
+        """Every playback device with its own level, plus which one is the default."""
+        default = self.default_name()
+        res = self.r.read([self.pactl, "--format=json", "list", "sinks"])
+        try:
+            sinks = json.loads(res.out) if res.ok else []
+        except ValueError:
+            sinks = []
+        return [describe_sink(s, default) for s in sinks
+                if include_hidden or s.get("name") not in self.hidden_sinks]
+
+    def _known(self, name):
+        return any(o["name"] == name for o in self.outputs(include_hidden=True))
+
+    def _is_real_pulseaudio(self):
+        if not hasattr(self, "_real_pa"):
+            info = self.r.read([self.pactl, "info"]).out
+            self._real_pa = "Server Name:" in info and "PipeWire" not in info.split("Server Name:")[1].splitlines()[0]
+        return self._real_pa
+
+    def set_output(self, name):
+        """Make `name` the default output. Only called when the user picks a device in the app."""
+        if not self._known(name):
+            return False
+        self.r.write([self.pactl, "set-default-sink", name])
+        if self._is_real_pulseaudio():
+            # Plain PulseAudio doesn't move running streams on its own. (PipeWire does, and
+            # moving streams there would pin them to this device, so we leave them alone.)
+            res = self.r.read([self.pactl, "--format=json", "list", "sink-inputs"])
+            try:
+                for si in json.loads(res.out) if res.ok else []:
+                    self.r.write([self.pactl, "move-sink-input", str(si["index"]), name])
+            except (ValueError, KeyError):
+                pass
+        self._after_write()
+        return True
+
+    def set_output_volume(self, name, percent):
+        """Set a specific device's level -- including one that isn't the current output."""
+        if not self._known(name):
+            return False
+        p = max(0, min(100, int(round(percent))))
+        self.r.write([self.pactl, "set-sink-volume", name, f"{p}%"])
+        self._after_write()
+        return True
+
+    def set_output_mute(self, name, muted):
+        if not self._known(name):
+            return False
+        self.r.write([self.pactl, "set-sink-mute", name, "1" if muted else "0"])
+        self._after_write()
+        return True
+
     # ---- writing ----
     def _after_write(self):
         self._wake.set()
@@ -117,4 +175,37 @@ def parse_sink(sink):
         "percent": max(vols) if vols else 0,
         "muted": bool(sink.get("mute")),
         "device": sink.get("description") or sink.get("name") or "",
+    }
+
+
+def classify_sink(sink):
+    """Rough device kind for the UI icon: bluetooth / usb / hdmi / analog / virtual."""
+    name = (sink.get("name") or "").lower()
+    props = sink.get("properties") or {}
+    desc = (sink.get("description") or "").lower()
+    port = (sink.get("active_port") or "").lower()
+    if name.startswith("bluez_") or props.get("device.api") == "bluez5":
+        return "bluetooth"
+    if "hdmi" in name or "hdmi" in port or "displayport" in port or "hdmi" in desc:
+        return "hdmi"
+    if props.get("device.bus") == "usb" or ".usb-" in name:
+        return "usb"
+    if (name.startswith(("easyeffects", "effect_", "combined", "pocketfader", "null"))
+            or props.get("node.virtual") == "true" or props.get("device.class") == "filter"
+            or not props.get("device.api") and not props.get("alsa.card")):
+        return "virtual"
+    return "analog"
+
+
+def describe_sink(sink, default_name):
+    st = parse_sink(sink)
+    return {
+        "name": sink.get("name"),
+        "description": st["device"],
+        "percent": st["percent"],
+        "muted": st["muted"],
+        "default": sink.get("name") == default_name,
+        "kind": classify_sink(sink),
+        "form_factor": (sink.get("properties") or {}).get("device.form_factor") or "",
+        "state": (sink.get("state") or "").lower(),
     }

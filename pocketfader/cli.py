@@ -18,6 +18,9 @@ def build_parser():
     p.add_argument("--audio", choices=AUDIO_CHOICES, default="auto",
                    help="volume backend (default: auto = PipeWire/PulseAudio on Linux, "
                         "Windows endpoint volume on Windows). 'voicemeeter' is an opt-in Windows extra.")
+    p.add_argument("--eq", choices=("auto", "builtin", "none"), default="auto",
+                   help="built-in equalizer on PipeWire (auto = offer it when PipeWire's filter-chain is installed). "
+                        "Nothing is created until you switch it on in the app.")
     p.add_argument("--media", choices=MEDIA_CHOICES, default="auto",
                    help="fallback player control when the YT Music extension isn't connected")
     p.add_argument("--lan", action="store_true",
@@ -46,7 +49,7 @@ def main(argv=None):
     token = get_or_create_token(cfg) if (a.token or exposed) else None
 
     runner = Runner(dry_run=a.dry_run)
-    audio, engine = make_audio_and_engine(a.audio, runner)
+    audio, engine = make_audio_and_engine(a.audio, runner, eq=a.eq)
     media = make_media(a.media, runner)
     app = App(audio, engine, media, prefs=JsonFile(config_dir() / "prefs.json"),
               token=token, allowed_hosts=a.allow_host)

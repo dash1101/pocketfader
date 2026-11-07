@@ -9,15 +9,25 @@ AUDIO_CHOICES = ("auto", "pulse", "windows", "voicemeeter", "none")
 MEDIA_CHOICES = ("auto", "mpris", "gsmtc", "none")
 
 
-def make_audio_and_engine(kind, runner: Runner):
-    """Returns (audio, engine). Voicemeeter = Windows volume + the Voicemeeter engine."""
+def make_audio_and_engine(kind, runner: Runner, eq="auto", store_dir=None):
+    """Returns (audio, engine). Voicemeeter = Windows volume + the Voicemeeter engine.
+    On PipeWire/PulseAudio the engine is the built-in EQ (eq=auto uses it when available)."""
     if kind == "auto":
         kind = "windows" if sys.platform == "win32" else "pulse"
     if kind == "none":
         return NullAudio(), NullEngine()
     if kind == "pulse":
         from .pulse import PulseAudio
-        return PulseAudio(runner), NullEngine()
+        audio = PulseAudio(runner)
+        if eq == "none":
+            return audio, NullEngine()
+        from .eq_pipewire import BuiltinEQ
+        from ..config import JsonFile, config_dir
+        d = store_dir or config_dir()
+        engine = BuiltinEQ(runner, audio, JsonFile(d / "eq.json"), d)
+        if eq == "auto" and not engine.available()[0]:
+            return audio, NullEngine()
+        return audio, engine
     if kind in ("windows", "voicemeeter"):
         if sys.platform != "win32":
             raise SystemExit(f"--audio {kind} only works on Windows.")

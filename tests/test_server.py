@@ -8,7 +8,7 @@ import threading
 from pocketfader.config import JsonFile
 from pocketfader.server import App, Handler
 
-from .fakes import FakeAudio, FakeEngine, FakeMedia
+from .fakes import FakeAudio, FakeEngine, FakeMedia, FakeToggleEQ
 from pocketfader.backends.base import NullEngine
 import tempfile
 from pathlib import Path
@@ -208,6 +208,70 @@ class HostOriginTests(Base):
         self.assertIsNone(r.getheader("Access-Control-Allow-Origin"))
 
 
+
+
+class OutputsTests(Base):
+    engine_cls = FakeToggleEQ
+
+    def test_list_switch_and_levels(self):
+        _, d, _ = self.req("GET", "/api/outputs")
+        self.assertEqual((d["default"], [o["name"] for o in d["outputs"]]), ("speakers", ["speakers", "headset"]))
+        # set a level on a device that is NOT the current output, then switch to it
+        self.assertEqual(self.req("POST", "/api/output/volume", {"name": "headset", "percent": 25})[0], 200)
+        self.assertEqual(self.audio.levels["headset"], 25)
+        self.assertEqual(self.audio.default, "speakers")
+        self.assertEqual(self.req("POST", "/api/output", {"name": "headset"})[0], 200)
+        self.assertEqual(self.audio.default, "headset")
+
+    def test_validation(self):
+        self.assertEqual(self.req("POST", "/api/output", {"name": "nope"})[0], 404)
+        self.assertEqual(self.req("POST", "/api/output", {})[0], 400)
+        self.assertEqual(self.req("POST", "/api/output/volume", {"name": "headset", "percent": 101})[0], 400)
+        self.assertEqual(self.req("POST", "/api/output/volume", {"name": "nope", "percent": 5})[0], 404)
+
+    def test_switching_with_eq_on_moves_the_eq_instead(self):
+        self.req("POST", "/api/eq", {"enabled": True})
+        self.assertTrue(self.engine.enabled)
+        self.req("POST", "/api/output", {"name": "headset"})
+        self.assertEqual(self.engine.targets, ["headset"])
+        self.assertNotIn(("output", "headset"), self.audio.calls)   # EQ stays the default output
+
+    def test_eq_toggle_and_presets(self):
+        _, st, _ = self.req("GET", "/api/state")
+        self.assertTrue(st["capabilities"]["eq_toggle"] and st["capabilities"]["outputs"])
+        self.assertEqual(self.req("POST", "/api/eq", {"enabled": True})[0], 200)
+        self.assertEqual(self.req("GET", "/api/state")[1]["engine"]["enabled"], True)
+        self.assertEqual(self.req("POST", "/api/eq", {"preset": "bass-boost"})[0], 200)
+        self.assertEqual(self.engine.eq["bass"], 6.0)
+        self.assertEqual(self.req("POST", "/api/eq", {"preset": "nope"})[0], 400)
+        self.assertEqual(self.req("POST", "/api/eq", {"enabled": False})[0], 200)
+
+
+class NoOutputsTests(Base):
+    def test_voicemeeter_style_backend_has_no_switching(self):
+        orig = FakeAudio.outputs
+        del FakeAudio.outputs
+        try:
+            self.assertEqual(self.req("GET", "/api/outputs")[0], 501)
+            self.assertFalse(self.req("GET", "/api/state")[1]["capabilities"]["outputs"])
+        finally:
+            FakeAudio.outputs = orig
+
+
+class ProxySafetyTests(Base):
+    token = "s3cret-token-value-123"
+
+    def test_tunnelled_requests_do_not_get_the_loopback_exemption(self):
+        # cloudflared connects from 127.0.0.1 and adds forwarding headers
+        for h in ({"X-Forwarded-For": "203.0.113.9"}, {"CF-Connecting-IP": "203.0.113.9"}, {"CF-Ray": "abc"}):
+            self.assertEqual(self.req("POST", "/ext/state", {"now": {}}, h)[0], 401, h)
+        self.assertEqual(self.req("POST", "/ext/state", {"now": {}})[0], 200)   # genuine local extension
+
+    def test_secure_cookie_over_https_proxy(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port)
+        c.request("GET", "/?token=" + self.token, headers={"X-Forwarded-Proto": "https"})
+        r = c.getresponse(); r.read(); c.close()
+        self.assertIn("Secure", r.getheader("Set-Cookie"))
 
 
 class TailscaleTests(unittest.TestCase):

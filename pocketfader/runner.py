@@ -7,6 +7,7 @@ Two jobs:
     `pocketfader --dry-run` exercise the whole stack without ever changing the volume,
     pausing music or switching outputs.
 """
+import os
 import subprocess
 import threading
 
@@ -19,9 +20,12 @@ class Result:
 
 
 class Runner:
-    def __init__(self, dry_run=False, timeout=3.0):
+    def __init__(self, dry_run=False, timeout=3.0, env=None):
         self.dry_run = dry_run
         self.timeout = timeout
+        # Extra environment for child processes (used by the integration tests to aim every
+        # command at an isolated sandbox instead of the real session).
+        self.env = ({**os.environ, **env} if env else None)
         self.log = []  # writes recorded in dry-run mode: list of argv lists
         self._lock = threading.Lock()
 
@@ -38,7 +42,7 @@ class Runner:
     def _exec(self, argv, timeout) -> Result:
         try:
             p = subprocess.run(argv, capture_output=True, text=True,
-                               timeout=timeout or self.timeout)
+                               timeout=timeout or self.timeout, env=self.env)
             return Result(p.returncode == 0, p.stdout, p.stderr)
         except (OSError, subprocess.SubprocessError) as e:
             return Result(False, "", str(e))

@@ -58,7 +58,9 @@ class App:
         return {
             "volume": bool(self.audio.snapshot().get("available")),
             "eq": bool(self.engine.capabilities.get("eq")),
+            "eq_toggle": bool(self.engine.capabilities.get("eq_toggle")),
             "meter": bool(self.engine.capabilities.get("meter")),
+            "outputs": hasattr(self.audio, "outputs"),
             "engine_actions": sorted(self.engine.actions),
             "engine_label": self.engine.label,
             "media": bool(self.media.snapshot().get("available")),
@@ -71,7 +73,7 @@ class App:
             "version": __version__,
             "volume": self.audio.snapshot(),
             "media": self.media.snapshot(),
-            "engine": {"connected": eng.get("connected", False), "level": eng.get("level", 0.0),
+            "engine": {**eng, "connected": eng.get("connected", False), "level": eng.get("level", 0.0),
                        "eq": eng.get("eq", {}), "routing": eng.get("routing", {})},
             "capabilities": self.capabilities(),
             "limits": {"eq_min": EQ_MIN, "eq_max": EQ_MAX},
@@ -209,11 +211,23 @@ class Handler(BaseHTTPRequestHandler):
                 return v
         return (query.get("token") or [""])[0]
 
+    FORWARD_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP", "CF-Connecting-IP", "CF-Ray", "CF-Visitor")
+
+    def _proxied(self):
+        """True when the request came through a reverse proxy / tunnel (cloudflared, nginx...).
+        Those arrive from 127.0.0.1 too, so loopback alone must not be trusted."""
+        return any(self.headers.get(h) for h in self.FORWARD_HEADERS)
+
+    def _https(self):
+        return (self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+                or '"https"' in (self.headers.get("CF-Visitor") or ""))
+
     def _authorized(self, path, query):
         tok = self.app.token
         if not tok or path in PUBLIC_PATHS:
             return True
-        if path.startswith("/ext/") and self.client_address[0] in ("127.0.0.1", "::1"):
+        if path.startswith("/ext/") and self.client_address[0] in ("127.0.0.1", "::1") \
+                and not self._proxied():
             return True  # the extension runs on this machine, outside any browser session
         return hmac.compare_digest(self._token_from_request(query), tok)
 
@@ -229,7 +243,7 @@ class Handler(BaseHTTPRequestHandler):
         # so the secret doesn't linger in the address bar or browser history.
         if tok and self.command == "GET" and "token" in query and \
                 hmac.compare_digest(query["token"][0], tok):
-            cookie = f"{COOKIE}={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
+            cookie = f"{COOKIE}={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000" + ("; Secure" if self._https() else "")
             return self._send(302, "", "text/plain", [("Location", u.path or "/"), ("Set-Cookie", cookie)])
         if not self._authorized(u.path, query):
             if "text/html" in (self.headers.get("Accept") or ""):
@@ -248,6 +262,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.prefs.load())
         if path == "/api/state":
             return self._json(200, app.state())
+        if path == "/api/outputs":
+            if not hasattr(app.audio, "outputs"):
+                return self._json(501, {"error": "output switching is not available with this audio backend"})
+            outs = app.audio.outputs()
+            return self._json(200, {"outputs": outs, "default": next((o["name"] for o in outs if o["default"]), None)})
         if path == "/api/info":
             return self._json(200, {"name": "pocketfader", "version": __version__,
                                     "api": 1, "auth": bool(app.token)})
@@ -317,9 +336,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "unknown action"})
             return self._json(200, fn() or {"ok": True})
 
+        if path in ("/api/output", "/api/output/volume"):
+            if not hasattr(app.audio, "set_output"):
+                return self._json(501, {"error": "output switching is not available with this audio backend"})
+            name = body.get("name")
+            if not isinstance(name, str) or not name:
+                return self._json(400, {"error": "name must be a string"})
+            if path == "/api/output":
+                # With the EQ on, move the EQ in front of the new device instead of bypassing it.
+                if getattr(app.engine, "enabled", False) and hasattr(app.engine, "retarget"):
+                    ok = app.engine.retarget(name)
+                else:
+                    ok = app.audio.set_output(name)
+                return self._json(200 if ok else 404, {"ok": bool(ok)} if ok else {"error": "unknown output"})
+            ok = True
+            if "percent" in body:
+                p = body["percent"]
+                if not isinstance(p, (int, float)) or isinstance(p, bool) or not 0 <= p <= 100:
+                    return self._json(400, {"error": "percent must be 0-100"})
+                ok = app.audio.set_output_volume(name, p) and ok
+            if "muted" in body:
+                ok = app.audio.set_output_mute(name, bool(body["muted"])) and ok
+            return self._json(200 if ok else 404, {"ok": bool(ok)} if ok else {"error": "unknown output"})
+
         if path == "/api/eq":
             if not app.engine.capabilities.get("eq"):
                 return self._json(501, {"error": "EQ is not available with this audio backend"})
+            if "enabled" in body:
+                if not hasattr(app.engine, "enable"):
+                    return self._json(400, {"error": "this EQ has no on/off switch"})
+                ok, why = app.engine.enable() if body["enabled"] else app.engine.disable()
+                if not ok:
+                    return self._json(409, {"error": why or "could not change the EQ"})
+                if "band" not in body and "preset" not in body:
+                    return self._json(200, {"ok": True})
+            if "preset" in body:
+                if not hasattr(app.engine, "set_preset") or not app.engine.set_preset(body["preset"]):
+                    return self._json(400, {"error": "unknown preset"})
+                return self._json(200, {"ok": True})
             band, db = body.get("band"), body.get("db")
             if band not in EQ_BANDS:
                 return self._json(400, {"error": f"band must be one of {sorted(EQ_BANDS)}"})
