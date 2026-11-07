@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="manifest" href="/manifest.json">
+<title>Pocketfader</title>
+<style>
+  :root {
+    --bg:#0a0a0c; --panel:#131318; --card:#1a1a21; --card2:#20212a; --line:#2b2c37;
+    --text:#f0f1f6; --dim:#9a9cab; --dim2:#6b6d7c;
+    --accent:#8b5cf6; --accent2:#a78bfa; --live:#3fb950; --danger:#f85149; --warn:#d29922;
+    --radius:16px;
+  }
+  /* ---------- themes ---------- */
+  :root[data-theme="light"]{ --bg:#f5f6fa; --panel:#ffffff; --card:#eceef4; --card2:#e0e3ec; --line:#d2d6e0;
+    --text:#181920; --dim:#5b6474; --dim2:#8b93a4; --accent:#7c3aed; --accent2:#6d28d9; --live:#12a150; --danger:#e5484d; --warn:#b7791f; }
+  :root[data-theme="oled"]{ --bg:#000000; --panel:#070708; --card:#0e0e11; --card2:#161619; --line:#242429; }
+  :root[data-theme="space"]{ --bg:#080a1e; --panel:#0d1030; --card:#141838; --card2:#1c2150; --line:#2a2f66;
+    --text:#e9ebff; --dim:#9aa0d4; --dim2:#6a6fa8; --accent:#6d8bff; --accent2:#9db3ff; --live:#3fe0c0; }
+  :root[data-theme="sunset"]{ --bg:#190d12; --panel:#241318; --card:#2e181e; --card2:#3b2027; --line:#4d2b32;
+    --text:#ffeef1; --dim:#d6a9ad; --dim2:#a07a7e; --accent:#ff7a52; --accent2:#ffa07a; --live:#ffbb4d; }
+  :root[data-theme="forest"]{ --bg:#091311; --panel:#0e1c17; --card:#13261e; --card2:#193026; --line:#254537;
+    --text:#e9f5ec; --dim:#9cc0a9; --dim2:#6f9a7f; --accent:#37b978; --accent2:#5fd196; --live:#7ee0a0; }
+  :root[data-theme="rose"]{ --bg:#160a11; --panel:#22101a; --card:#2c1522; --card2:#391b2b; --line:#4b2639;
+    --text:#ffeef7; --dim:#d6a9c1; --dim2:#a07a90; --accent:#f06baf; --accent2:#ff92c6; --live:#ff8fc4; }
+  :root[data-theme="space"] body { background-image:
+    radial-gradient(1100px 560px at 82% -12%, rgba(109,139,255,.18), transparent 60%),
+    radial-gradient(820px 480px at 8% 112%, rgba(150,120,255,.15), transparent 55%); background-attachment:fixed; }
+
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.5 -apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+    -webkit-user-select:none; user-select:none; overflow:hidden;
+  }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  img { display:block; }
+
+  /* ---------- app shell ---------- */
+  #app {
+    display:grid; height:100dvh;
+    grid-template-columns:84px 1fr minmax(320px, 400px);
+    grid-template-areas:"nav main rail";
+  }
+  /* mini-player only exists on mobile */
+  #miniplayer { display:none; }
+  /* narrow / phone layout */
+  @media (max-width:1100px) {
+    #app { grid-template-columns:1fr; grid-template-rows:1fr; grid-template-areas:"main"; }
+    #main { grid-area:main; padding:0 16px calc(180px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    /* the sheet grows out of the mini-player: scale + fade up from the bottom */
+    /* the chip is hidden by CSS whenever the sheet is open, so no inline state can stick */
+    #app.railopen #miniplayer { opacity:0; pointer-events:none; }
+    #rail { position:fixed; inset:0; z-index:60; border-left:0; transform-origin:50% 50%;
+            transform:none; opacity:0; pointer-events:none; transition:none; }
+    /* No CSS transition on #rail — the morph is driven entirely from JS. With one, the moment
+       the inline clip-path was cleared the sheet snapped to full screen and faded out over
+       ~0.26s: that was the flash on close. */
+    #app.railopen #rail { transform:none; opacity:1; pointer-events:auto; }
+    #app.railopen { overflow:hidden; }
+    /* on the phone sheet the whole thing scrolls — no sticky player for the queue to slide behind */
+    #rail .np { position:static; box-shadow:none; }
+    /* mini player pinned above the bottom nav */
+    #miniplayer { display:flex; position:fixed; left:10px; right:10px; z-index:45;
+                  bottom:calc(84px + var(--sa-bottom, env(safe-area-inset-bottom))); height:64px; align-items:center; gap:8px;
+                  padding:10px; border-radius:18px; background:var(--card2); border:1px solid var(--line);
+                  box-shadow:0 8px 24px rgba(0,0,0,.4); }
+    #mini-art { width:44px; height:44px; border-radius:9px; object-fit:cover; background:var(--panel); flex:none; }
+    #miniplayer .mm { flex:1; min-width:0; }
+    #mini-t { font-size:13.5px; font-weight:640; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #mini-s { font-size:11.5px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #mini-pp { width:44px; height:44px; flex:none; border:0; background:var(--accent); color:#0a0512; border-radius:11px;
+               display:flex; align-items:center; justify-content:center; }
+    #mini-pp svg { width:22px; height:22px; fill:currentColor; }
+    .railclose { display:none; }   /* swipe down to dismiss instead */
+  }
+  @media (min-width:1101px) { .railclose { display:none; } }
+
+  /* ---------- nav ---------- */
+  #nav { grid-area:nav; position:relative; background:var(--panel); border-right:1px solid var(--line);
+         display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 0; }
+  #nav .brand { width:40px; height:40px; border-radius:12px; margin-bottom:16px; flex:none; position:relative;
+                overflow:hidden; background:linear-gradient(140deg, var(--accent2), var(--accent) 55%, #4f7cff);
+                box-shadow:0 5px 16px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.4);
+                display:flex; align-items:center; justify-content:center; }
+  #nav .brand::after { content:''; position:absolute; inset:0; background:linear-gradient(155deg, rgba(255,255,255,.45), rgba(255,255,255,0) 45%); }
+  #nav .brand svg { width:22px; height:22px; fill:#fff; position:relative; filter:drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+  .navbtn { width:66px; height:62px; border:0; background:transparent; border-radius:14px;
+            color:var(--dim); display:flex; flex-direction:column; align-items:center;
+            justify-content:center; gap:5px; font-size:10.5px; font-weight:600; position:relative; }
+  .navbtn svg { width:23px; height:23px; fill:currentColor; }
+  /* glassy selected state */
+  .navbtn.sel { color:var(--text);
+    background:linear-gradient(140deg, color-mix(in srgb, var(--accent) 26%, transparent), color-mix(in srgb, var(--accent) 7%, transparent));
+    border:1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 4px 14px color-mix(in srgb, var(--accent) 22%, transparent);
+    backdrop-filter:blur(6px); }
+  .navbtn.sel svg { filter:drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); }
+  .navbtn:active { transform:scale(.9); }
+  #nav .spacer { flex:1; }
+  #nav .dot { width:9px; height:9px; border-radius:50%; background:var(--dim2); margin-top:6px; }
+  #nav .dot.ok { background:var(--live); box-shadow:0 0 8px var(--live); }
+  #nav .dot.bad { background:var(--danger); }
+  @media (max-width:1100px) {
+    #nav { position:fixed; left:0; right:0; bottom:0; z-index:50; flex-direction:row; justify-content:space-around;
+           border-right:0; border-top:1px solid var(--line); background:var(--panel);
+           padding:6px 0 calc(6px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    #nav .brand, #nav .spacer, #nav .dot { display:none; }
+    .navbtn { width:auto; flex:1; height:52px; }
+  }
+
+  /* ---------- main ---------- */
+  #main { grid-area:main; overflow-y:auto; overflow-x:hidden; padding:0 26px 40px; }
+  #main::-webkit-scrollbar { width:10px; } #main::-webkit-scrollbar-thumb { background:#2c2d38; border-radius:8px; }
+  /* sticky header sits flush at the scroll top (its own padding, none on #main) so nothing
+     can peek above it, and content fades out as it slides underneath */
+  .topbar { display:flex; align-items:center; gap:14px; margin-bottom:18px; position:sticky; top:0;
+            background:var(--bg); padding:16px 0 12px; z-index:8; }
+  .topbar::after { content:''; position:absolute; left:0; right:0; top:100%; height:26px; pointer-events:none;
+                   background:linear-gradient(var(--bg), transparent); }
+  .backbtn { width:40px; height:40px; border:0; border-radius:11px; background:var(--card); color:var(--dim); flex:none;
+             display:flex; align-items:center; justify-content:center; transition:background .15s, transform .12s; }
+  .backbtn:active { background:var(--card2); transform:scale(.9); }
+  .backbtn svg { width:20px; height:20px; fill:currentColor; }
+  h2.viewtitle { font-size:26px; font-weight:720; letter-spacing:-.02em; margin:0; flex:none; }
+  #searchform { flex:1; display:flex; }
+  #searchbox { flex:1; height:46px; border-radius:12px; border:1px solid var(--line);
+               background:var(--card); color:var(--text); padding:0 16px; font-size:15px; outline:none; }
+  #searchbox:focus { border-color:var(--accent); }
+
+  .shelf { margin-bottom:30px; }
+  .shelf h3 { font-size:17px; font-weight:680; margin:0 0 12px; letter-spacing:-.01em; }
+  .row { display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; scroll-snap-type:x proximity; }
+  .row::-webkit-scrollbar { height:8px; } .row::-webkit-scrollbar-thumb { background:#2c2d38; border-radius:8px; }
+  .tile { width:150px; flex:none; scroll-snap-align:start; }
+  .tile .art { width:150px; height:150px; border-radius:12px; object-fit:cover; background:var(--card2);
+               box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  .tile.round .art { border-radius:50%; }
+  .thumb { position:relative; }
+  .playover { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0;
+              background:rgba(0,0,0,.34); border-radius:12px; transition:opacity .18s; pointer-events:none; }
+  .playover svg { width:40px; height:40px; fill:#fff; filter:drop-shadow(0 2px 8px rgba(0,0,0,.6)); }
+  .li .thumb .playover svg { width:24px; height:24px; }
+  .li .thumb .playover { border-radius:9px; }
+  .tile:hover .playover, .li:hover .playover, .qitem:hover .playover { opacity:1; }
+  @media (hover:none) { .playover { display:none; } }  /* touch: use long-press instead */
+  .tile .t { font-size:13px; font-weight:600; margin-top:9px; line-height:1.3;
+             display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .tile .s { font-size:11.5px; color:var(--dim); margin-top:2px; overflow:hidden;
+             text-overflow:ellipsis; white-space:nowrap; }
+
+  .list { display:flex; flex-direction:column; }
+  .li { display:flex; align-items:center; gap:14px; padding:9px 8px; border-radius:12px; }
+  .li:active { background:var(--card); }
+  .li .art { width:52px; height:52px; border-radius:9px; object-fit:cover; background:var(--card2); flex:none; }
+  .li .meta { flex:1; min-width:0; }
+  .li .t { font-size:14.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .li .s { font-size:12.5px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .li .kind { font-size:10px; color:var(--dim2); text-transform:uppercase; letter-spacing:.05em; margin-left:4px; }
+  .li .more { width:40px; height:40px; border-radius:10px; border:0; background:transparent; color:var(--dim);
+              display:flex; align-items:center; justify-content:center; flex:none; }
+  .li .more:active { background:var(--card2); }
+  .li .more svg { width:20px; height:20px; fill:currentColor; }
+
+  .detailhead { display:flex; gap:20px; align-items:flex-end; margin-bottom:20px; }
+  .detailhead .art { width:180px; height:180px; border-radius:14px; object-fit:cover;
+                     box-shadow:0 10px 30px rgba(0,0,0,.5); flex:none; }
+  .detailhead .t { font-size:28px; font-weight:760; letter-spacing:-.02em; }
+  .detailhead .s { color:var(--dim); margin-top:4px; }
+  .detailhead .acts { display:flex; gap:10px; margin-top:16px; }
+  .pill { height:44px; padding:0 20px; border-radius:22px; border:0; font-weight:650; font-size:14px;
+          display:inline-flex; align-items:center; gap:8px; }
+  .pill svg { width:18px; height:18px; fill:currentColor; }
+  .pill.primary { background:var(--accent); color:#0a0512; }
+  .pill.ghost { background:var(--card2); color:var(--text); }
+  .pill:active { filter:brightness(1.15); }
+
+  .empty { color:var(--dim); text-align:center; padding:60px 20px; font-size:14px; }
+  .spinner { width:26px; height:26px; border:3px solid var(--line); border-top-color:var(--accent);
+             border-radius:50%; animation:spin .8s linear infinite; margin:60px auto; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ---------- right rail ---------- */
+  #rail { grid-area:rail; background:var(--panel); border-left:1px solid var(--line);
+          display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; }
+  #rail::-webkit-scrollbar { width:8px; } #rail::-webkit-scrollbar-thumb { background:#2c2d38; border-radius:8px; }
+  .railclose { display:none; position:absolute; top:12px; right:14px; z-index:9; width:38px; height:38px; border:0;
+               border-radius:50%; background:rgba(0,0,0,.45); color:#fff; align-items:center; justify-content:center; }
+  .railclose svg { width:22px; height:22px; fill:currentColor; }
+  .np { padding:22px 20px 12px; flex:none; position:sticky; top:0; z-index:5; background:var(--panel);
+        transition:padding .42s cubic-bezier(.4,0,.2,1), box-shadow .42s ease, gap .42s ease; }
+  .artwrap { transition:max-height .42s cubic-bezier(.4,0,.2,1), width .42s cubic-bezier(.4,0,.2,1),
+             margin .42s cubic-bezier(.4,0,.2,1); max-height:420px; overflow:hidden; margin:0 auto; }
+  /* collapsed: pin a compact now-playing bar (thumb + title + play/pause) to the top */
+  #rail.collapsed .np { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px;
+                        box-shadow:0 8px 20px rgba(0,0,0,.28); }
+  #rail.collapsed .artwrap { max-height:50px; width:50px; margin:0; }
+  #rail.collapsed .np .t { font-size:14px; margin:0; flex:1; min-width:0; }
+  #rail.collapsed .np .s, #rail.collapsed .seek, #rail.collapsed .ytvol,
+  #rail.collapsed #r-prev, #rail.collapsed #r-next { display:none; }
+  #rail.collapsed .transport { margin:0; width:auto; flex:none; }
+  #rail.collapsed #r-pp { width:46px; height:46px; flex:none; }
+  .np .art { width:100%; aspect-ratio:1; border-radius:16px; object-fit:cover; background:var(--card2);
+             box-shadow:0 12px 34px rgba(0,0,0,.5); position:relative; z-index:1; }
+  .li .thumb, .qitem .thumb { flex:none; }
+  /* album-art glow — a blurred copy of the cover behind the now-playing art */
+  .artstage { position:relative; }
+  #np-glow { position:absolute; inset:5% 5% -4% 5%; z-index:0; background-size:cover; background-position:center;
+             filter:blur(36px) saturate(1.7); opacity:.5; border-radius:30px; pointer-events:none;
+             transition:opacity .55s ease, background-image .5s ease; }
+  #rail.collapsed #np-glow { opacity:0; }
+  .artwrap { z-index:1; }
+  /* subtle art glow on hover for tiles */
+  .tile:hover .art { box-shadow:0 16px 34px rgba(0,0,0,.5), 0 0 26px color-mix(in srgb, var(--accent) 34%, transparent); }
+  /* ambient accent glow on the main interactive elements */
+  #r-pp, #mini-pp, .wcbtns .pp { box-shadow:0 6px 22px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .pill.primary { box-shadow:0 5px 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+  .npfav.on { filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 70%, transparent)); }
+  .themecard.sel { box-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .qitem.cur { box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent); }
+  #miniplayer { box-shadow:0 8px 24px rgba(0,0,0,.4), 0 0 22px color-mix(in srgb, var(--accent) 16%, transparent); }
+  .np .art.idle { display:flex; align-items:center; justify-content:center; color:var(--dim2); font-size:13px; }
+  .nptrow { display:flex; align-items:center; gap:8px; margin-top:16px; }
+  .nptrow .t { flex:1; min-width:0; }
+  .np .t { font-size:18px; font-weight:700; letter-spacing:-.01em;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .npfav { width:36px; height:36px; border:0; background:transparent; color:var(--dim); flex:none; border-radius:50%;
+           display:flex; align-items:center; justify-content:center; transition:transform .12s, color .15s; }
+  .npfav:active { transform:scale(.85); }
+  .npfav svg { width:21px; height:21px; fill:currentColor; }
+  .npfav.on { color:var(--accent); } .npfav.on svg path { fill:var(--accent); stroke:var(--accent); }
+  /* like: outline when not liked, filled accent when liked — so the state is obvious */
+  #np-like svg path { fill:none; stroke:currentColor; stroke-width:1.7; }
+  #np-like.on svg path { fill:var(--accent); stroke:var(--accent); }
+  #rail.collapsed .nptrow { margin:0; flex:1; min-width:0; }
+  /* soft fade at the top & bottom of the scroll areas */
+  /* NOTE: no mask on #main — it creates a containing block that breaks the sticky header. */
+  .railbody { -webkit-mask-image:linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 18px), transparent);
+              mask-image:linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 18px), transparent); }
+  /* mobile: a drag handle atop the now-playing sheet */
+  .raildrag { display:none; }
+  @media (max-width:1100px) {
+    .raildrag { display:block; width:40px; height:5px; border-radius:3px; background:var(--dim2); opacity:.6;
+                margin:8px auto 2px; flex:none; }
+    /* let the drag own the gesture instead of the scroller stealing it mid-swipe */
+    .raildrag, .artstage, .nptrow { touch-action:none; }
+  }
+  .np .s { font-size:13.5px; color:var(--dim); margin-top:3px;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .seek { margin-top:16px; }
+  .seek input { width:100%; accent-color:var(--accent); height:26px; margin:0; }
+  .times { display:flex; justify-content:space-between; color:var(--dim); font-size:11.5px;
+           font-variant-numeric:tabular-nums; margin-top:-3px; }
+  .transport { display:flex; gap:10px; margin-top:8px; align-items:center; }
+  .transport button { flex:1; height:52px; border-radius:13px; border:1px solid var(--line);
+                      background:var(--card2); display:flex; align-items:center; justify-content:center; }
+  .transport button:active:not(:disabled) { background:var(--card); }
+  .transport button:disabled { opacity:.3; }
+  .transport svg { width:24px; height:24px; fill:currentColor; }
+  #r-pp { flex:1.5; background:var(--accent); border-color:var(--accent); color:#0a0512; }
+
+  .railhead { display:flex; align-items:center; gap:8px; padding:12px 18px 8px; background:var(--panel); }
+  .railhead .l { font-weight:680; font-size:14px; letter-spacing:-.01em; }
+  .railhead .c { color:var(--dim2); font-size:12px; font-variant-numeric:tabular-nums; }
+  .railbody { padding:2px 14px 24px; }
+
+  .qitem { display:flex; align-items:center; gap:11px; padding:7px 6px; border-radius:10px;
+           cursor:pointer; transition:background .13s ease, transform .13s ease; }
+  .qitem:hover { background:rgba(255,255,255,.03); }
+  .qitem:active { background:var(--card); transform:scale(.985); }
+  .qitem.cur { background:var(--card2); }
+  .qitem .art { width:40px; height:40px; border-radius:7px; object-fit:cover; background:var(--card2); flex:none; }
+  .qitem .t { font-size:13px; font-weight:560; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .qitem .s { font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .qitem.cur .t { color:var(--accent2); }
+  .qrm { width:32px; height:32px; flex:none; border:0; background:transparent; color:var(--dim2);
+         border-radius:9px; display:flex; align-items:center; justify-content:center;
+         opacity:0; transition:opacity .15s ease, background .15s ease, transform .2s var(--spring); }
+  .qrm svg { width:15px; height:15px; fill:currentColor; }
+  .qitem:hover .qrm { opacity:.85; }
+  .qrm:active { background:var(--card); transform:scale(var(--press)); }
+  @media (hover:none) { .qrm { opacity:.55; } }   /* touch: always visible */
+
+  /* mixer */
+  .mx { padding:2px 2px 10px; }
+  .mxrow { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:2px; }
+  .mxrow .l { font-weight:640; } .mxrow .v { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums; }
+  .meter { height:3px; background:var(--card2); border-radius:2px; overflow:hidden; margin:10px 0 2px; }
+  .meter > i { display:block; height:100%; width:0; background:var(--live); transition:width 90ms linear; }
+  input[type=range].big { width:100%; accent-color:var(--accent); height:30px; margin:4px 0 0; }
+  #mute { width:100%; margin-top:10px; padding:11px; border-radius:10px; font-size:13.5px; font-weight:580;
+          border:1px solid var(--line); background:var(--card2); color:var(--text); }
+  #mute.on { background:var(--danger); border-color:var(--danger); color:#1a0000; }
+  .eqhead { display:flex; align-items:center; justify-content:space-between; margin:18px 0 8px; }
+  .eqhead .l { font-weight:640; }
+  #eqreset { padding:6px 12px; font-size:12px; font-weight:560; border-radius:8px; border:1px solid var(--line);
+             background:var(--card2); color:var(--dim); }
+  .band { display:flex; align-items:center; gap:12px; margin-top:4px; }
+  .band label { width:40px; font-size:12.5px; color:var(--dim); flex:none; }
+  .band .bd { width:54px; text-align:right; font-size:12px; color:var(--dim);
+              font-variant-numeric:tabular-nums; flex:none; }
+  .band input { flex:1; accent-color:var(--accent); margin:0; }
+  .mixnote { color:var(--dim2); font-size:11.5px; margin-top:14px; line-height:1.5; }
+  .mixnote b { color:var(--warn); }
+
+  /* action sheet */
+  #sheet { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-end;
+           justify-content:center; z-index:50; }
+  #sheet.show { display:flex; }
+  #sheetcard { background:var(--card); width:100%; max-width:460px; border-radius:20px 20px 0 0;
+               padding:10px 10px calc(16px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+  #sheethead { display:flex; align-items:center; gap:12px; padding:12px 12px 14px; }
+  #sheethead .art { width:52px; height:52px; border-radius:9px; object-fit:cover; background:var(--card2); }
+  #sheethead .t { font-weight:660; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #sheethead .s { color:var(--dim); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .act { width:100%; text-align:left; border:0; background:transparent; color:var(--text);
+         padding:15px 16px; border-radius:12px; font-size:15px; font-weight:560; display:flex; gap:14px; align-items:center; }
+  .act:active { background:var(--card2); }
+  .act svg { width:21px; height:21px; fill:var(--accent2); flex:none; }
+  @media (min-width:1101px) {
+    #sheet { align-items:center; }
+    #sheetcard { border-radius:18px; max-width:420px; }
+  }
+
+  #toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+           background:var(--accent); color:#0a0512; padding:11px 20px; border-radius:22px; font-weight:640;
+           font-size:14px; opacity:0; transition:.25s; pointer-events:none; z-index:60; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- animations / pop ---------- */
+  body { transition:background-color .45s ease, color .3s ease; }
+  @keyframes viewin { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  #main.viewin { animation:viewin .3s cubic-bezier(.2,.7,.3,1); }
+  @keyframes pop { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
+  .navbtn { transition:background .18s ease, color .18s ease, transform .12s ease; }
+  .navbtn:active { transform:scale(.9); }
+  .tile { transition:transform .2s cubic-bezier(.2,.7,.3,1); }
+  .tile .art { transition:transform .22s cubic-bezier(.2,.7,.3,1), box-shadow .22s ease; }
+  .tile:hover .art { transform:translateY(-5px); box-shadow:0 16px 32px rgba(0,0,0,.5); }
+  .tile:active { transform:scale(.95); }
+  .li { transition:background .13s ease, transform .12s ease; cursor:pointer; }
+  .li:active { transform:scale(.99); }
+  .pill { transition:transform .14s ease, filter .14s ease; }
+  .pill:active { transform:scale(.95); }
+  .transport button { transition:background .15s ease, transform .1s ease, box-shadow .2s ease; }
+  .transport button:active:not(:disabled) { transform:scale(.93); }
+  #r-pp:not(:disabled) { box-shadow:0 6px 18px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .np .art { transition:box-shadow .3s ease; }
+  .themecard, #mute, #eqreset, .act { transition:transform .14s ease, border-color .15s ease, background .15s ease; }
+  .act:active { transform:scale(.98); }
+
+  /* ---------- independent YT Music volume (rail) ---------- */
+  .ytvol { display:flex; align-items:center; gap:11px; margin-top:16px; }
+  .ytvol svg { width:19px; height:19px; fill:var(--dim); flex:none; }
+  .ytvol input { flex:1; accent-color:var(--accent); height:24px; margin:0; }
+  .ytvol .p { width:34px; text-align:right; font-size:11.5px; color:var(--dim); font-variant-numeric:tabular-nums; }
+
+  /* ---------- search autocomplete ---------- */
+  #searchform { flex:1; display:flex; position:relative; }
+  .suggests { position:absolute; top:52px; left:0; right:0; background:var(--panel); border:1px solid var(--line);
+              border-radius:12px; overflow:hidden; z-index:20; box-shadow:0 14px 34px rgba(0,0,0,.45); animation:pop .14s ease; }
+  .suggest { padding:12px 16px; font-size:14px; display:flex; gap:11px; align-items:center; cursor:pointer; }
+  .suggest:hover, .suggest.sel { background:var(--card2); }
+  .suggest svg { width:15px; height:15px; fill:var(--dim2); flex:none; }
+
+  /* ---------- settings ---------- */
+  .setsec { margin-bottom:28px; max-width:600px; }
+  .setsec h3 { font-size:12.5px; font-weight:700; color:var(--dim); text-transform:uppercase;
+               letter-spacing:.06em; margin:0 0 13px; }
+  .themes { display:grid; grid-template-columns:repeat(auto-fill,minmax(116px,1fr)); gap:12px; }
+  .themecard { border:2px solid var(--line); border-radius:14px; padding:11px; cursor:pointer; background:var(--card); }
+  .themecard:active { transform:scale(.96); }
+  .themecard.sel { border-color:var(--accent); }
+  .swatch { height:46px; border-radius:9px; display:flex; overflow:hidden; margin-bottom:9px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); }
+  .swatch i { flex:1; } .swatch i:last-child { flex:.6; }
+  .themecard .n { font-size:13px; font-weight:640; }
+  .themeedit-btn { position:absolute; top:6px; right:6px; width:26px; height:26px; border:0; border-radius:7px;
+                   background:rgba(0,0,0,.4); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .themeedit-btn svg { width:14px; height:14px; fill:currentColor; }
+  .setrow { display:flex; align-items:center; justify-content:space-between; gap:16px;
+            padding:14px 16px; background:var(--card); border-radius:12px; margin-bottom:10px; }
+  .setrow .k { font-weight:600; } .setrow .d { font-size:12.5px; color:var(--dim); margin-top:2px; }
+  .setrow .val { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums; }
+  .toggle { width:46px; height:27px; border-radius:14px; border:0; background:var(--card2); position:relative; flex:none; transition:background .18s; }
+  .toggle::after { content:''; position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:var(--dim); transition:transform .18s, background .18s; }
+  .toggle.on { background:var(--accent); } .toggle.on::after { transform:translateX(19px); background:#fff; }
+  .setrow .mvol-input, .setrow input[type=range] { flex:1; accent-color:var(--accent); max-width:200px; }
+  .customthemes { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+  .themeedit { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; max-width:600px; margin-top:6px; }
+  .ce { display:flex; align-items:center; gap:10px; background:var(--card); padding:9px 11px; border-radius:10px; }
+  .ce label { font-size:12px; color:var(--dim); flex:1; }
+  .ce input[type=color] { width:34px; height:30px; border:0; border-radius:7px; background:none; padding:0; cursor:pointer; }
+  .cebar { display:flex; gap:10px; margin-top:14px; align-items:center; }
+  #cename { height:40px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--text); padding:0 14px; }
+
+  /* ---------- home widget dashboard (modular grid) ---------- */
+  .wgrid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); grid-auto-rows:130px; gap:18px; }
+  @media (max-width:1180px){ .wgrid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  @media (max-width:760px){ .wgrid { grid-template-columns:1fr; } }
+  .widget { grid-column:span var(--cols,1); grid-row:span var(--rows,2); display:flex; flex-direction:column;
+            background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:15px 16px 12px;
+            animation:pop .3s ease; position:relative; overflow:hidden; }
+  .widget .wbody { flex:1; overflow:auto; min-height:0;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
+    mask-image:linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%); }
+  .widget .wbody::-webkit-scrollbar { width:7px; height:7px; } .widget .wbody::-webkit-scrollbar-thumb { background:#2c2d38; border-radius:8px; }
+  .whead { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .whead .wt { font-size:15px; font-weight:700; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
+  .whandle { display:none; cursor:grab; color:var(--dim2); touch-action:none; }
+  .whandle svg { width:16px; height:16px; fill:currentColor; }
+  .whead .wx { width:30px; height:30px; border:0; background:transparent; color:var(--dim); border-radius:8px; display:none; align-items:center; justify-content:center; }
+  .whead .wx svg { width:17px; height:17px; fill:currentColor; }
+  .wresize { display:none; position:absolute; right:5px; bottom:5px; width:22px; height:22px; cursor:nwse-resize;
+             color:var(--dim2); touch-action:none; align-items:center; justify-content:center; }
+  .wresize svg { width:16px; height:16px; fill:currentColor; }
+  /* edit mode affordances */
+  #app.editwidgets .whandle, #app.editwidgets .whead .wx, #app.editwidgets .wresize { display:flex; }
+  #app.editwidgets .widget { outline:2px dashed color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  #app.editwidgets .wbody { pointer-events:none; opacity:.85; }
+  .widget.dragging { opacity:.55; transform:scale(.98); z-index:10; }
+  /* adaptive tile grid — ~3 across, dropping to 2 when the widget is narrow */
+  .wbody .row { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr));
+                gap:12px; margin:0; padding:0 0 6px; overflow-x:hidden; align-content:flex-start; }
+  .wbody .tile { width:auto; }
+  .wbody .tile .art { width:100%; height:auto; aspect-ratio:1; }
+  .wempty { color:var(--dim); font-size:13px; padding:18px 4px; }
+  /* add-widget palette (edit mode) */
+  .waddgrid { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
+  .waddchip { display:flex; align-items:center; gap:8px; padding:10px 14px; border-radius:11px; border:1px dashed var(--line);
+              background:var(--card); color:var(--text); font-weight:600; font-size:13px; }
+  .waddchip svg { width:15px; height:15px; fill:var(--accent2); }
+  /* Controls + EQ widgets */
+  .wctrl { display:flex; align-items:center; gap:13px; }
+  .wctrl .art { width:60px; height:60px; border-radius:10px; object-fit:cover; background:var(--card2); flex:none; }
+  .wctrl .meta { flex:1; min-width:0; }
+  .wctrl .t { font-size:14px; font-weight:640; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wctrl .s { font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wcbtns { display:flex; gap:8px; margin-top:14px; }
+  .wcbtns button { flex:1; height:46px; border-radius:11px; border:1px solid var(--line); background:var(--card2);
+                   display:flex; align-items:center; justify-content:center; }
+  .wcbtns button svg { width:22px; height:22px; fill:currentColor; }
+  .wcbtns .pp { flex:1.5; background:var(--accent); border-color:var(--accent); color:#0a0512; }
+  .eqonly .mxrow, .eqonly .meter, .eqonly #vol, .eqonly #mute, .eqonly .mixnote, .eqonly .eqhead #eqreset { }
+  .eqonly > .mxrow, .eqonly > .meter, .eqonly > #vol, .eqonly > #mute, .eqonly > .mixnote { display:none; }
+  .viz { display:flex; align-items:flex-end; justify-content:center; gap:3px; height:100%; min-height:78px; padding:6px 2px; }
+  .vbar { flex:1; max-width:9px; height:100%; border-radius:4px; transform:scaleY(.03); transform-origin:bottom;
+          background:linear-gradient(var(--accent2), var(--accent)); }
+
+  /* double-tap seek flashes */
+  .seekpop { position:absolute; top:0; bottom:0; width:42%; display:flex; align-items:center; justify-content:center;
+             color:#fff; font-weight:700; font-size:17px; background:rgba(0,0,0,.4); opacity:0; pointer-events:none;
+             border-radius:16px; z-index:3; }
+  .seekpop.l { left:0; } .seekpop.r { right:0; }
+  .seekpop.flash { animation:seekflash .5s ease; }
+  @keyframes seekflash { 0%{opacity:0;} 25%{opacity:1;} 100%{opacity:0;} }
+  .np .art { position:relative; }
+  .np .artwrap { position:relative; }
+
+  /* ---------- custom color picker ---------- */
+  .ce .sw { width:34px; height:30px; border-radius:7px; border:1px solid rgba(255,255,255,.12); flex:none; cursor:pointer; }
+  .cpwrap { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:70; }
+  .cpwrap.show { display:flex; animation:pop .16s ease; }
+  .cp { width:300px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:0 20px 50px rgba(0,0,0,.5); }
+  .cp .cptitle { font-weight:680; font-size:14px; margin:0 2px 12px; }
+  .cp .sv { position:relative; height:168px; border-radius:11px; overflow:hidden; cursor:crosshair; touch-action:none; }
+  .cp .sv .wl { position:absolute; inset:0; background:linear-gradient(to right,#fff,rgba(255,255,255,0)); }
+  .cp .sv .bl { position:absolute; inset:0; background:linear-gradient(to top,#000,rgba(0,0,0,0)); }
+  .cp .knob { position:absolute; width:15px; height:15px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.5); transform:translate(-50%,-50%); pointer-events:none; }
+  .cp .hue { position:relative; height:15px; border-radius:8px; margin:15px 0 13px; cursor:pointer; touch-action:none;
+    background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00); }
+  .cp .hue .knob { top:50%; }
+  .cptabs { display:flex; gap:6px; margin-bottom:9px; }
+  .cptab { flex:1; height:31px; border:0; border-radius:9px; background:var(--card2); color:var(--dim); font-weight:640; font-size:12px; }
+  .cptab.sel { background:var(--accent); color:#0a0512; }
+  .cpin { display:flex; gap:6px; }
+  .cpin input { flex:1; min-width:0; height:37px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--text); text-align:center; font-size:13px; font-variant-numeric:tabular-nums; }
+  .cpbtns { display:flex; gap:8px; margin-top:13px; }
+  .cpbtns .pill { flex:1; height:40px; justify-content:center; }
+
+  /* ---------------- UI pass ---------------- */
+  /* mixer: compact, and never clip the dB values */
+  .mx { padding:0 0 4px; }
+  .mx .eqhead { margin:12px 0 6px; }
+  .band { gap:10px; margin-top:3px; }
+  .band label { width:34px; font-size:12px; }
+  .band input { min-width:0; }
+  .band .bd { width:auto; min-width:54px; font-size:11.5px; }
+  .meter { margin:8px 0 2px; }
+  #mute { margin-top:8px; padding:9px; }
+  .mixnote { margin-top:10px; }
+  .mixviz { height:46px; margin-top:12px; }
+  /* nav labels toggle */
+  #app.nolabels .navbtn { font-size:0; gap:0; }
+  #app.nolabels .navbtn svg { width:25px; height:25px; }
+  /* subtle "edit layout" affordance at the end of Home */
+  .editrow { display:flex; justify-content:center; margin:22px 0 4px; }
+  .editrow button { display:flex; align-items:center; gap:8px; height:40px; padding:0 18px; border-radius:20px;
+                    border:1px dashed var(--line); background:transparent; color:var(--dim); font-size:13px; font-weight:600; }
+  .editrow button svg { width:15px; height:15px; fill:currentColor; }
+  @media (max-width:1100px) {
+    /* breathing room against the camera cutout and the chin */
+    #main { padding-top:var(--sa-top, env(safe-area-inset-top)); padding-bottom:calc(210px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    #nav { padding:8px 10px calc(12px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    /* mini-player prev/next + elapsed (sizing lives in the primary #miniplayer rule above) */
+    #mini-art { width:46px; height:46px; }
+    #miniplayer .mbtn { width:36px; height:36px; flex:none; border:0; background:transparent; color:var(--text);
+                        display:flex; align-items:center; justify-content:center; border-radius:10px; }
+    #miniplayer .mbtn:active { background:var(--card); }
+    #miniplayer .mbtn svg { width:20px; height:20px; fill:currentColor; }
+    #mini-time { font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; flex:none; }
+    #miniplayer { touch-action:none; }   /* gestures own the chip, not the page scroller */
+    #miniplayer.idle { opacity:0; pointer-events:none; transform:translateY(12px); }
+    #miniplayer { transition:opacity .28s ease, transform .28s var(--ease); }
+
+    /* floating nav bar — inset on all sides, rounded and raised */
+    #nav { left:12px; right:12px; bottom:calc(10px + var(--sa-bottom, env(safe-area-inset-bottom)));
+           border:1px solid var(--line); border-radius:24px; padding:7px 8px;
+           background:color-mix(in srgb, var(--panel) 88%, transparent);
+           box-shadow:0 12px 30px rgba(0,0,0,.45),
+                      0 0 24px color-mix(in srgb, var(--accent) 12%, transparent);
+           backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+    .navbtn { height:52px; border-radius:16px; }
+    #miniplayer { bottom:calc(92px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    #main { padding-bottom:calc(220px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    #hud { bottom:calc(170px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+  }
+
+  /* ---------------- motion / polish ---------------- */
+  /* one gentle spring + one press-scale, used everywhere for a consistent feel */
+  :root { --spring:cubic-bezier(.33,1.15,.68,1); --ease:cubic-bezier(.2,.7,.3,1); --press:.96; }
+  @keyframes popin { from { opacity:0; transform:scale(.82); } to { opacity:1; transform:scale(1); } }
+  @keyframes risein { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:none; } }
+
+  /* sliding selection indicator behind the nav buttons (positioning context set on the
+     base #nav rule so it doesn't override the mobile position:fixed) */
+  #navpill { position:absolute; left:0; top:0; border-radius:14px; opacity:0; pointer-events:none; z-index:0;
+             background:linear-gradient(140deg, color-mix(in srgb, var(--accent) 30%, transparent),
+                                        color-mix(in srgb, var(--accent) 8%, transparent));
+             border:1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+             box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 4px 16px color-mix(in srgb, var(--accent) 24%, transparent);
+             transition:transform .44s var(--spring), width .44s var(--spring), height .44s var(--spring), opacity .2s ease; }
+  .navbtn { position:relative; z-index:1; transition:color .22s ease, transform .2s var(--spring); }
+  .navbtn.sel { background:transparent; border-color:transparent; box-shadow:none; }  /* the pill draws it */
+
+  /* consistent springy press across every interactive element */
+  .tile, .pill, .waddchip, .act, .npfav, .mbtn, .backbtn, .themecard, .qitem, .li, .more,
+  .transport button, .navbtn, #mute, #eqreset, .railtab, .setrow .toggle {
+    transition:transform .2s var(--spring), background .16s ease, filter .16s ease, color .2s ease; }
+  .tile:active, .pill:active, .waddchip:active, .act:active, .npfav:active, .mbtn:active, .backbtn:active,
+  .themecard:active, .qitem:active, .li:active, .more:active, .navbtn:active,
+  #mute:active, #eqreset:active, .railtab:active, .transport button:active:not(:disabled) { transform:scale(var(--press)); }
+  .widget { animation:risein .34s var(--ease) both; }
+  #main.viewin > * { animation:risein .3s var(--ease) both; }
+
+  /* edit mode: affordances spring in, palette staggers */
+  #app.editwidgets .whandle, #app.editwidgets .whead .wx, #app.editwidgets .wresize { animation:popin .34s var(--spring) both; }
+  #app.editwidgets .widget { animation:popin .3s var(--spring) both; }
+  .waddchip { animation:popin .34s var(--spring) both; }
+  .waddgrid .waddchip:nth-child(2) { animation-delay:.04s }
+  .waddgrid .waddchip:nth-child(3) { animation-delay:.08s }
+  .waddgrid .waddchip:nth-child(4) { animation-delay:.12s }
+  .waddgrid .waddchip:nth-child(5) { animation-delay:.16s }
+
+  /* edit button: plain grey pencil circle, further down the page */
+  .editrow { margin:40px 0 10px; }
+  .editrow button { width:46px; height:46px; padding:0; border-radius:50%; justify-content:center;
+                    opacity:.4; border:1px solid var(--line); }
+  .editrow button:active { opacity:.75; transform:scale(var(--press)); }
+  .editrow button svg { width:17px; height:17px; }
+
+  /* scrollbars: hidden everywhere (widgets included) so they never reserve space.
+     The ID-based rules further up win on specificity, so they're zeroed explicitly. */
+  * { scrollbar-width:none; }
+  *::-webkit-scrollbar, #main::-webkit-scrollbar, #rail::-webkit-scrollbar,
+  #main::-webkit-scrollbar-thumb, #rail::-webkit-scrollbar-thumb { width:0; height:0; background:transparent; }
+
+  /* status-bar strip painted in the theme colour, above scrolling content */
+  #statusbg { position:fixed; top:0; left:0; right:0; height:var(--sa-top, env(safe-area-inset-top));
+              background:var(--bg); z-index:55; pointer-events:none; }
+  /* header sticks below the status bar and bleeds full-width so nothing peeks past its shading */
+  .topbar { top:var(--sa-top, env(safe-area-inset-top)); margin-left:-26px; margin-right:-26px;
+            padding-left:26px; padding-right:26px; }
+  .topbar::after { left:26px; right:26px; }
+  @media (max-width:1100px) {
+    .topbar { margin-left:-16px; margin-right:-16px; padding-left:16px; padding-right:16px; }
+    .topbar::after { left:16px; right:16px; }
+  }
+
+  /* edit pencil lives in the header now */
+  .editbtn { width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:transparent;
+             color:var(--dim); display:flex; align-items:center; justify-content:center; flex:none;
+             margin-left:auto; opacity:.7; }
+  .editbtn svg { width:17px; height:17px; fill:currentColor; }
+  .editbtn.on { color:var(--accent); border-color:var(--accent); opacity:1; }
+
+  /* library: even 2-up grid with equal spacing */
+  .libgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:16px; }
+  .libgrid .tile { width:auto; }
+  .libgrid .tile .art { width:100%; height:auto; aspect-ratio:1; }
+
+  /* favourites artwork: themed gradient tile instead of the grey note */
+  .thumb.favart { background:linear-gradient(140deg, var(--accent2), var(--accent)); border-radius:12px;
+                  aspect-ratio:1; display:flex; align-items:center; justify-content:center; }
+  .thumb.favart img, .thumb.favart .playover { display:none; }
+  .thumb.favart::after { content:'★'; font-size:38px; line-height:1; color:#fff;
+                         text-shadow:0 2px 8px rgba(0,0,0,.35); }
+
+  .whead .wct { color:var(--dim2); font-size:11.5px; font-weight:600; }
+
+  /* volume / media HUD */
+  #hud { position:fixed; left:50%; bottom:calc(160px + var(--sa-bottom, env(safe-area-inset-bottom)));
+         transform:translateX(-50%) translateY(10px); background:var(--card2); border:1px solid var(--line);
+         border-radius:14px; padding:10px 14px; z-index:58; display:flex; align-items:center; gap:10px;
+         opacity:0; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.4);
+         transition:opacity .2s ease, transform .2s var(--spring); }
+  #hud.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  #hud svg { width:18px; height:18px; fill:var(--text); flex:none; }
+  #hud .bar { width:120px; height:5px; border-radius:3px; background:var(--line); overflow:hidden; }
+  #hud .bar i { display:block; height:100%; background:var(--accent); transition:width .12s linear; }
+  #hud .pct { font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--text); min-width:38px; text-align:right; }
+  #hud .lbl { font-size:13px; font-weight:600; }
+  #topbarhost { display:none; }
+
+  /* ---------------- glass design language ---------------- */
+  .widget, .setrow, #sheetcard, .cp, #hud, .waddchip, .themecard, .editbtn, .pill.ghost,
+  #miniplayer, #npbar, .transport button, #mute, #eqreset {
+    background:color-mix(in srgb, var(--card) 78%, transparent);
+    backdrop-filter:blur(16px) saturate(1.25); -webkit-backdrop-filter:blur(16px) saturate(1.25);
+    border:1px solid color-mix(in srgb, var(--line) 85%, transparent);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 6px 20px rgba(0,0,0,.28);
+  }
+  .widget { border-radius:20px; }
+  .setrow { border-radius:16px; }
+  .transport button, #mute, #eqreset { border-radius:14px; }
+  #r-pp, .wcbtns .pp { background:var(--accent); border-color:transparent; }
+  .pill.primary { border:1px solid transparent; }
+  /* keep the raised chip / bar readable over content */
+  #miniplayer { background:color-mix(in srgb, var(--card2) 86%, transparent); border-radius:20px; }
+  #npbar { background:color-mix(in srgb, var(--panel) 88%, transparent); }
+  .tile .art { box-shadow:0 6px 18px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.04); }
+
+  /* widget scrollbars: slim and themed (rather than hidden) */
+  .wbody { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--accent) 50%, transparent) transparent; }
+  .wbody::-webkit-scrollbar { width:6px; height:6px; }
+  .wbody::-webkit-scrollbar-track { background:transparent; }
+  .wbody::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--accent) 45%, transparent);
+                                    border-radius:6px; }
+
+  /* widgets in the same row always match height */
+  .wgrid { align-items:stretch; }
+  .widget { height:100%; }
+
+  /* the header fade must not tint the content under it */
+  .topbar::after { height:18px; opacity:.85; }
+
+  /* album / playlist header: never clip the action buttons on a narrow screen */
+  .detailhead { flex-wrap:wrap; }
+  .detailhead .acts { flex-wrap:wrap; gap:8px; }
+  @media (max-width:1100px) {
+    .detailhead { flex-direction:column; align-items:flex-start; gap:14px; }
+    .detailhead .art { width:150px; height:150px; }
+    .detailhead .t { font-size:23px; }
+    .detailhead .acts { width:100%; }
+    .detailhead .acts .pill { flex:1 1 auto; justify-content:center; padding:0 14px; }
+    .detailhead .acts .pill.more { flex:0 0 46px; padding:0; }
+  }
+
+  @media (max-width:1100px) {
+    /* Page header is a fixed overlay (sticky-in-a-padded-scroller proved unreliable), so
+       content can never render above it and it always hugs the status bar. */
+    #statusbg { display:none; }
+    /* the header is moved into a body-level fixed host, so no ancestor transform/mask can
+       shift it and content can never scroll above it */
+    #topbarhost { display:block; position:fixed; top:0; left:0; right:0; z-index:56; background:var(--bg); }
+    #topbarhost .topbar { position:static; margin:0; height:auto;
+              padding:calc(var(--sa-top, env(safe-area-inset-top)) + 10px) 16px 12px; background:var(--bg); }
+    #topbarhost .topbar::after { left:0; right:0; }
+    #main { padding-top:calc(var(--sa-top, env(safe-area-inset-top)) + 74px); }
+  }
+
+  @media (max-width:1100px) {
+    /* The player scrolls away normally and a compact bar fades in over it. The bar is
+       FIXED, so toggling it can't change scroll height — that feedback loop was what made
+       the old collapse flicker back and forth while scrolling. */
+    /* handle sits centred in the gap between the status bar and the artwork */
+    #rail .np { position:static; padding-top:var(--sa-top, env(safe-area-inset-top)); }
+    #rail .raildrag { margin:15px auto 15px; }
+    #npbar { display:flex; position:fixed; top:0; left:0; right:0; z-index:9; align-items:center; gap:11px;
+             padding:calc(var(--sa-top, env(safe-area-inset-top)) + 9px) 14px 11px;
+             background:var(--panel); box-shadow:0 6px 18px rgba(0,0,0,.35);
+             opacity:0; pointer-events:none; transform:translateY(-8px);
+             transition:opacity .24s ease, transform .24s var(--ease); }
+    #rail.compact #npbar { opacity:1; pointer-events:auto; transform:none; }
+    #npbar img { width:40px; height:40px; border-radius:8px; object-fit:cover; background:var(--card2); flex:none; }
+    #npbar .t { flex:1; min-width:0; font-size:14px; font-weight:640;
+                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #npbar button { width:40px; height:40px; border:0; background:transparent; color:var(--text); flex:none;
+                    display:flex; align-items:center; justify-content:center; border-radius:10px; }
+    #npbar svg { width:22px; height:22px; fill:currentColor; }
+  }
+  #npbar { display:none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <nav id="nav">
+    <div id="navpill"></div>
+    <div class="brand"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg></div>
+    <button class="navbtn sel" data-view="home"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3z"/></svg>Home</button>
+    <button class="navbtn" data-view="search"><svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg>Search</button>
+    <button class="navbtn" data-view="playlists"><svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12 .5a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0z"/></svg>Library</button>
+    <button class="navbtn mixbtn" data-view="mixer"><svg viewBox="0 0 24 24"><path d="M7 3v6H5v6h2v6h2v-6h2V9H9V3zm8 0v3h-2v6h2v9h2v-9h2V6h-2V3z"/></svg>Mixer</button>
+    <div class="spacer"></div>
+    <button class="navbtn" data-view="settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.6 7.6 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7 7 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.58.24-1.12.56-1.62.94l-2.39-.96a.5.5 0 00-.6.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.6 7.6 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32c.14.24.42.32.6.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.62-.94l2.39.96c.18.08.46 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg>Settings</button>
+    <div id="ndot" class="dot"></div>
+  </nav>
+
+  <main id="main"></main>
+
+  <aside id="rail">
+    <button class="railclose" id="railclose" title="Close"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></button>
+    <div id="npbar">
+      <img id="npbar-art"><div class="t" id="npbar-t"></div>
+      <button id="npbar-pp"><svg id="npbar-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+    </div>
+    <div class="np">
+      <div class="raildrag"></div>
+      <div class="artstage">
+        <div id="np-glow"></div>
+        <div class="artwrap">
+          <div id="np-art" class="art idle">Nothing playing</div>
+          <div class="seekpop l" id="seekpop-l"></div>
+          <div class="seekpop r" id="seekpop-r"></div>
+        </div>
+      </div>
+      <div class="nptrow">
+        <div id="np-t" class="t">Nothing playing</div>
+        <button id="np-like" class="npfav" title="Like on YT Music" style="display:none"><svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
+        <button id="np-fav" class="npfav" title="Favorite" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 4.4l2.1 4.6 5 .4-3.8 3.3 1.2 4.9L12 15.4 7.5 17.6l1.2-4.9L4.9 9.4l5-.4z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></button>
+        <button id="np-share" class="npfav" title="Share" style="display:none"><svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg></button>
+      </div>
+      <div id="np-s" class="s"></div>
+      <div class="seek">
+        <input type="range" id="seek" min="0" max="1000" value="0" disabled>
+        <div class="times"><span id="tpos">0:00</span><span id="tdur">0:00</span></div>
+      </div>
+      <div class="transport">
+        <button id="r-prev" disabled><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+        <button id="r-pp" disabled><svg id="pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="r-next" disabled><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+      </div>
+      <div class="ytvol">
+        <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.06A4.5 4.5 0 0016.5 12zM14 3.23v2.06a7 7 0 010 13.42v2.06a9 9 0 000-17.54z"/></svg>
+        <input type="range" id="mvol" class="mvol-input" min="0" max="100" value="0" disabled>
+        <span class="p" id="mvolpct"></span>
+      </div>
+    </div>
+    <div class="railhead"><span class="l">Up Next</span><span class="c" id="qcount"></span></div>
+    <div class="railbody" id="railbody"></div>
+  </aside>
+</div>
+
+<div id="miniplayer">
+  <img id="mini-art">
+  <div class="mm"><div id="mini-t">Nothing playing</div><div id="mini-s"></div></div>
+  <span id="mini-time"></span>
+  <button id="mini-prev" class="mbtn"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+  <button id="mini-pp"><svg id="mini-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+  <button id="mini-next" class="mbtn"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+</div>
+
+<div id="sheet"><div id="sheetcard">
+  <div id="sheethead"><img class="art" id="sheet-art"><div style="min-width:0">
+    <div class="t" id="sheet-t"></div><div class="s" id="sheet-s"></div></div></div>
+  <div id="sheet-acts"></div>
+</div></div>
+
+<div class="cpwrap" id="cpwrap"><div class="cp">
+  <div class="cptitle" id="cp-title">Color</div>
+  <div class="sv" id="cp-sv"><div class="wl"></div><div class="bl"></div><div class="knob" id="cp-svknob"></div></div>
+  <div class="hue" id="cp-hue"><div class="knob" id="cp-hueknob"></div></div>
+  <div class="cptabs"><button class="cptab sel" data-m="hex">HEX</button><button class="cptab" data-m="rgb">RGB</button><button class="cptab" data-m="hsl">HSL</button></div>
+  <div class="cpin" id="cp-inputs"></div>
+  <div class="cpbtns"><button class="pill ghost" id="cp-cancel">Cancel</button><button class="pill primary" id="cp-ok">Done</button></div>
+</div></div>
+
+<div id="topbarhost"></div>
+<div id="statusbg"></div>
+
+<div id="hud">
+  <svg id="hud-icon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.06A4.5 4.5 0 0016.5 12z"/></svg>
+  <span class="lbl" id="hud-lbl" style="display:none"></span>
+  <div class="bar" id="hud-bar"><i></i></div>
+  <span class="pct" id="hud-pct"></span>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, c) => { const e = document.createElement(t); if (c) e.className = c; return e; };
+const PLAY = 'M8 5v14l11-7z', PAUSE = 'M6 5h4v14H6zm8 0h4v14h-4z';
+const ART_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#20212a"/><path d="M32 26v20a7 7 0 11-3-5.7V22l18-4v18a7 7 0 11-3-5.7V17z" fill="#4a4c5c"/></svg>');
+const fmt = s => { if (!isFinite(s) || s < 0) s = 0; const m = Math.floor(s/60), r = Math.floor(s%60); return m + ':' + String(r).padStart(2,'0'); };
+
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1600); }
+
+// Heads-up display for hardware keys (volume level / media action).
+let hudT;
+const VOL_ICON = 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.06A4.5 4.5 0 0016.5 12z';
+function showHud(o) {
+  const h = $('#hud'), icon = $('#hud-icon'), lbl = $('#hud-lbl'), bar = $('#hud-bar'), pct = $('#hud-pct');
+  icon.style.display = o.icon === false ? 'none' : '';
+  if (o.iconPath) icon.firstElementChild.setAttribute('d', o.iconPath);
+  if (o.percent != null) {
+    bar.style.display = ''; pct.style.display = '';
+    bar.firstElementChild.style.width = Math.max(0, Math.min(100, o.percent)) + '%';
+    pct.textContent = Math.round(o.percent) + '%';
+  } else { bar.style.display = 'none'; pct.style.display = 'none'; }
+  if (o.label) { lbl.style.display = ''; lbl.textContent = o.label; } else lbl.style.display = 'none';
+  h.classList.add('show');
+  clearTimeout(hudT); hudT = setTimeout(() => h.classList.remove('show'), 1500);
+}
+// Called by the Cue Android shell straight after a hardware volume key press.
+window.__cueVolumeBump = async () => {
+  try {
+    const r = await fetch('/api/state'); const st = await r.json();
+    mixerState = st; applyMixer();
+    showHud({ percent: (st.volume && st.volume.percent) || 0, iconPath: VOL_ICON });
+  } catch (e) {}
+};
+// Called by the shell for hardware media keys (play/pause, next, previous).
+window.__cueMediaKey = (what) => showHud({ label: what, icon: false });
+
+async function post(path, body) {
+  try { const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    return await r.json(); } catch (e) { return null; }
+}
+// YTM command via the extension relay
+async function ytm(cmd, quiet) { const r = await post('/api/ytm', cmd);
+  if (r && r.error && !quiet) toast(r.error === 'extension_offline' ? 'YT Music bridge offline' : r.error);
+  return r; }
+
+/* ==================== themes ==================== */
+const THEMES = [['auto','Auto'],['material','Material You'],['dark','Dark'],['light','Light'],['oled','OLED'],['space','Space'],['sunset','Sunset'],['forest','Forest'],['rose','Rose']];
+const THEME_SW = { auto:['#0a0a0c','#f5f6fa','#8b5cf6'], material:['#1b1b1f','#2f3033','#a8c7fa'], dark:['#0a0a0c','#20212a','#8b5cf6'], light:['#f5f6fa','#e0e3ec','#7c3aed'],
+  oled:['#000000','#161619','#8b5cf6'], space:['#080a1e','#1c2150','#6d8bff'],
+  sunset:['#190d12','#3b2027','#ff7a52'], forest:['#091311','#193026','#37b978'], rose:['#160a11','#391b2b','#f06baf'] };
+const THEME_VARS = ['bg','panel','card','card2','line','text','dim','dim2','accent','accent2'];
+function customThemes() { try { return JSON.parse(localStorage.getItem('vmr-custom-themes')) || []; } catch (e) { return []; } }
+function saveCustomThemes(list) { try { localStorage.setItem('vmr-custom-themes', JSON.stringify(list)); } catch (e) {} }
+// The WebView's prefers-color-scheme is unreliable, so ask the Cue shell when it's there.
+function autoTheme() {
+  try { if (window.CueNative && window.CueNative.isSystemDark) return window.CueNative.isSystemDark() ? 'dark' : 'light'; }
+  catch (e) {}
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+// Paint the browser/Android system bars to match the theme.
+function syncSystemBars() {
+  setTimeout(() => {
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const meta = document.querySelector('meta[name=theme-color]');
+    if (meta) meta.setAttribute('content', bg);
+    try {
+      const m = (bg.match(/\d+/g) || ['10','10','12']).slice(0, 3).map(Number);
+      const hex = '#' + m.map(n => n.toString(16).padStart(2, '0')).join('');
+      const lum = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255;
+      if (window.CueNative && window.CueNative.setSystemBars) window.CueNative.setSystemBars(hex, lum > 0.6);
+    } catch (e) {}
+  }, 60);
+}
+function applyTheme(sel) {
+  const t = sel === 'auto' ? autoTheme() : sel;   // 'auto' follows the system light/dark
+  const rs = document.documentElement.style;
+  THEME_VARS.forEach(k => rs.removeProperty('--' + k));
+  // Material You — pull Android's dynamic palette through the Cue bridge
+  if (t === 'material') {
+    // the WebView's prefers-color-scheme is unreliable (app forces a theme) — ask native
+    let light = window.matchMedia('(prefers-color-scheme: light)').matches;
+    try { if (window.CueNative && window.CueNative.isSystemDark) light = !window.CueNative.isSystemDark(); } catch (e) {}
+    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+    const csv = (window.CueNative && window.CueNative.systemColors) ? (window.CueNative.systemColors() || '') : '';
+    const c = csv.split(',').filter(Boolean);
+    if (c.length >= 9) {
+      const a200 = c[0], a400 = c[1], a600 = c[2], n0 = c[3], n100 = c[4], n200 = c[5], n700 = c[6], n800 = c[7], n900 = c[8];
+      if (light) {
+        rs.setProperty('--bg', n0);    rs.setProperty('--panel', n100); rs.setProperty('--card', n100);
+        rs.setProperty('--card2', n200); rs.setProperty('--line', n200);
+        rs.setProperty('--text', n900); rs.setProperty('--dim', n700);  rs.setProperty('--dim2', n700);
+        rs.setProperty('--accent', a600); rs.setProperty('--accent2', a400);
+      } else {
+        rs.setProperty('--bg', n900);  rs.setProperty('--panel', n800); rs.setProperty('--card', n800);
+        rs.setProperty('--card2', n700); rs.setProperty('--line', n700);
+        rs.setProperty('--text', n0);   rs.setProperty('--dim', n200);  rs.setProperty('--dim2', n200);
+        rs.setProperty('--accent', a400); rs.setProperty('--accent2', a200);
+      }
+    }
+    try { localStorage.setItem('vmr-theme', sel); } catch (e) {}
+    syncSystemBars();
+    return;
+  }
+  const custom = customThemes().find(c => c.id === t);
+  if (custom) {
+    document.documentElement.dataset.theme = custom.base || 'dark';
+    for (const k of THEME_VARS) if (custom.vars[k]) rs.setProperty('--' + k, custom.vars[k]);
+  } else {
+    document.documentElement.dataset.theme = THEME_SW[t] ? t : 'dark';
+  }
+  try { localStorage.setItem('vmr-theme', sel); } catch (e) {}   // store the selection ('auto' or a name)
+  syncSystemBars();
+}
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if ((localStorage.getItem('vmr-theme') || 'dark') === 'auto') applyTheme('auto');
+}); } catch (e) {}
+function rgb2hex(rgb) {
+  const m = (rgb || '').match(/\d+/g); if (!m) return '#000000';
+  return '#' + m.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('');
+}
+
+/* ==================== views ==================== */
+let view = 'home', detailStack = null, lastConnected = false;
+const cache = { home:null, playlists:null };
+
+// Slides the selection pill to whichever nav button is active.
+function moveNavPill() {
+  const sel = document.querySelector('.navbtn.sel'), pill = $('#navpill');
+  if (!pill) return;
+  if (!sel) { pill.style.opacity = '0'; return; }
+  pill.style.width = sel.offsetWidth + 'px';
+  pill.style.height = sel.offsetHeight + 'px';
+  pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + sel.offsetTop + 'px)';
+  pill.style.opacity = '1';
+}
+let lastOrient = null;
+window.addEventListener('resize', () => {
+  moveNavPill(); hoistTopbar();
+  // orientation flip → swap to that orientation's saved home layout
+  const o = window.innerWidth > window.innerHeight ? 'land' : 'port';
+  if (lastOrient && o !== lastOrient && view === 'home') render();
+  lastOrient = o;
+});
+
+function setView(v, push = true) {
+  view = v;
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('sel', b.dataset.view === v));
+  moveNavPill();
+  const m = $('#main'); m.classList.remove('viewin'); void m.offsetWidth; m.classList.add('viewin');
+  render();
+  hoistTopbar();
+  // history entry so the browser / Android hardware back button works
+  if (push) history.pushState({ view: v, detail: v === 'detail' ? detailStack : null }, '');
+}
+// Hardware / browser back → restore the previous view without pushing a new entry.
+window.addEventListener('popstate', e => {
+  if ($('#app').classList.contains('railopen')) { closeNowPlaying(); return; }
+  const st = e.state || { view: 'home' };
+  if (st.view === 'detail' && st.detail) detailStack = st.detail;
+  if ($('#cpwrap').classList.contains('show')) $('#cpwrap').classList.remove('show');
+  if ($('#sheet').classList.contains('show')) closeSheet();
+  setView(st.view || 'home', false);
+});
+
+// On phones the page header lives in a body-level fixed host (see CSS) — move it there
+// after each render so no ancestor can offset or clip it.
+function hoistTopbar() {
+  const host = $('#topbarhost');
+  if (window.innerWidth > 1100) { host.replaceChildren(); return; }
+  const tb = $('#main > .topbar');
+  if (tb) host.replaceChildren(tb);
+}
+function render() {
+  const m = $('#main');
+  if (view === 'home') return renderHome(m);
+  if (view === 'search') return renderSearch(m);
+  if (view === 'playlists') return renderPlaylists(m);
+  if (view === 'favorites') return renderFavorites(m);
+  if (view === 'detail') return renderDetail(m, detailStack);
+  if (view === 'mixer') return renderMixerPage(m);
+  if (view === 'settings') return renderSettings(m);
+  if (view === 'theme') return renderThemes(m);
+}
+
+let suggestTimer = null;
+function topbar(title, withSearch) {
+  // No in-app back button — Android's system back already handles navigation.
+  const bar = el('div', 'topbar');
+  const h = el('h2', 'viewtitle'); h.textContent = title; bar.appendChild(h);
+  setTimeout(hoistTopbar, 0);   // any view that builds a header gets it hoisted on phones
+  if (withSearch) {
+    const f = el('form'); f.id = 'searchform';
+    f.innerHTML = '<input id="searchbox" placeholder="Search songs, artists, playlists…" autocomplete="off">' +
+                  '<div class="suggests" id="suggests" style="display:none"></div>';
+    const box = f.querySelector('#searchbox'), drop = f.querySelector('#suggests');
+    const SICON = '<svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4z"/></svg>';
+    f.addEventListener('submit', e => { e.preventDefault(); drop.style.display = 'none'; doSearch(box.value.trim()); });
+    box.addEventListener('input', () => {
+      const q = box.value.trim();
+      clearTimeout(suggestTimer);
+      if (!q) { drop.style.display = 'none'; return; }
+      suggestTimer = setTimeout(async () => {
+        const r = await ytm({ type:'suggest', query:q }, true);
+        const ss = (r && r.suggestions) || [];
+        if (!ss.length || box.value.trim() !== q) { drop.style.display = 'none'; return; }
+        drop.innerHTML = '';
+        for (const s of ss) {
+          const d = el('div', 'suggest'); d.innerHTML = SICON + '<span></span>';
+          d.querySelector('span').textContent = s;
+          // mousedown (not click) so it fires before the input's blur hides the dropdown
+          d.addEventListener('mousedown', ev => { ev.preventDefault(); box.value = s; drop.style.display = 'none'; doSearch(s); });
+          drop.appendChild(d);
+        }
+        drop.style.display = 'block';
+      }, 170);
+    });
+    box.addEventListener('blur', () => setTimeout(() => drop.style.display = 'none', 160));
+    bar.appendChild(f);
+  }
+  return bar;
+}
+
+const PLAYOVER = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+// Right-click (desktop) or long-press (touch) opens the song action menu.
+function attachContext(elm, item) {
+  if (!item.videoId) return;
+  elm.addEventListener('contextmenu', e => { e.preventDefault(); openSheet(item); });
+  let lp = null;
+  elm.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; lp = setTimeout(() => openSheet(item), 480); });
+  const cancel = () => { if (lp) { clearTimeout(lp); lp = null; } };
+  elm.addEventListener('pointerup', cancel); elm.addEventListener('pointermove', cancel); elm.addEventListener('pointercancel', cancel);
+}
+function thumbBox(src, cls) {
+  const box = el('div', 'thumb');
+  const img = el('img', cls || 'art'); img.loading = 'lazy'; img.src = src || ART_FALLBACK; img.onerror = () => img.src = ART_FALLBACK;
+  const ov = el('div', 'playover'); ov.innerHTML = PLAYOVER;
+  box.append(img, ov); return box;
+}
+function tile(item) {
+  const t = el('div', 'tile');
+  const tt = el('div', 't'); tt.textContent = item.title;
+  const ss = el('div', 's'); ss.textContent = item.subtitle || '';
+  const tb = thumbBox(item.thumb);
+  if (item.kind === 'favorites') tb.classList.add('favart');   // themed ★ tile
+  t.append(tb, tt, ss);
+  t.addEventListener('click', () => activate(item));
+  attachContext(t, item);
+  return t;
+}
+
+function listItem(item, opts) {
+  opts = opts || {};
+  const li = el('div', 'li');
+  const meta = el('div', 'meta');
+  const tt = el('div', 't'); tt.textContent = item.title;
+  const ss = el('div', 's'); ss.textContent = item.subtitle || (item.kind !== 'song' ? item.kind : '');
+  meta.append(tt, ss);
+  li.append(thumbBox(item.thumb), meta);
+  li.addEventListener('click', () => activate(item));
+  attachContext(li, item);
+  if (item.kind === 'song') {
+    const more = el('button', 'more'); more.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
+    more.addEventListener('click', e => { e.stopPropagation(); openSheet(item); });
+    li.appendChild(more);
+  }
+  return li;
+}
+
+/* ==================== home widget dashboard ==================== */
+// Portrait and landscape keep their own home layout (a phone held sideways wants a
+// different arrangement than upright), stored per orientation.
+function layoutKey() { return 'vmr-layout-' + (window.innerWidth > window.innerHeight ? 'land' : 'port'); }
+function lsGet(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+const WIDGETS = {
+  quickpicks:  { name:'Quick Picks',  defCols:3, defRows:2, render:(b) => wSection(b, /quick picks/i,  "Quick Picks aren't loaded — reload the extension + refresh the YT Music tab.") },
+  listenagain: { name:'Listen Again', defCols:3, defRows:2, render:(b) => wSection(b, /listen again/i, "No “Listen again” right now.") },
+  speeddial:   { name:'Speed Dial',   defCols:3, defRows:2, render:(b) => wSpeedDial(b) },
+  favorites:   { name:'Favorites',    defCols:1, defRows:2, render:wFavorites },
+  controls:    { name:'Controls',     defCols:1, defRows:2, render:wControls },
+  visualizer:  { name:'Visualizer',   defCols:1, defRows:2, render:wVisualizer },
+  mixer:       { name:'Mixer',        defCols:1, defRows:4, render:(b) => paintMixer(b) },
+  eq:          { name:'Equalizer',    defCols:1, defRows:3, render:wEq },
+};
+// Start clean — the user adds what they want via Edit.
+const DEFAULT_LAYOUT = [];
+function getLayout() {
+  let l = lsGet(layoutKey(), null);
+  if (!l) l = lsGet('vmr-layout', null);        // fall back to the old shared layout once
+  if (!l) { const ids = lsGet('vmr-widgets', null);   // migrate from the old on/off list
+    l = ids ? ids.map(id => ({ id })) : DEFAULT_LAYOUT.map(x => ({ ...x })); }
+  // normalise every entry to {id, cols, rows}, migrating legacy {tall}
+  return l.filter(w => WIDGETS[w.id]).map(w => ({
+    id: w.id, cols: w.cols || WIDGETS[w.id].defCols || 1,
+    rows: w.rows || (w.tall ? 4 : WIDGETS[w.id].defRows) || 2,
+  }));
+}
+function setLayout(l) { lsSet(layoutKey(), l); }
+
+// Meter-driven visualizer. Needs a backend with a level meter (capabilities.meter), e.g. Voicemeeter;
+// hidden otherwise. No per-frequency data exists.
+function wVisualizer(body) {
+  const viz = el('div', 'viz'); const N = 34;
+  for (let i = 0; i < N; i++) viz.appendChild(el('div', 'vbar'));
+  viz._bars = [...viz.children]; viz._vals = new Array(N).fill(0);
+  body.appendChild(viz);
+}
+function vizTick() {
+  const level = (mixerState && mixerState.engine && mixerState.engine.level) || 0;
+  document.querySelectorAll('.viz').forEach(viz => {
+    const bars = viz._bars, vals = viz._vals; if (!bars) return;
+    const n = bars.length;
+    for (let i = 0; i < n; i++) {
+      const center = 1 - Math.abs(i - (n - 1) / 2) / (n / 2);
+      const target = Math.min(1, level * 1.7 * (0.35 + 0.65 * center) * (0.55 + Math.random() * 0.9));
+      vals[i] += (target - vals[i]) * 0.35;
+      bars[i].style.transform = 'scaleY(' + Math.max(0.03, vals[i]) + ')';
+    }
+  });
+  requestAnimationFrame(vizTick);
+}
+requestAnimationFrame(vizTick);
+
+// EQ-only widget (reuses the mixer node, hides the volume half via CSS)
+function wEq(body) { paintMixer(body); const n = body.querySelector('.mx'); if (n) n.classList.add('eqonly'); }
+// Compact transport/now-playing control panel widget
+function wControls(body) {
+  body.innerHTML = `<div class="wctrl"><img class="art" id="_wcart"><div class="meta"><div class="t" id="_wct">Nothing playing</div><div class="s" id="_wcs"></div></div></div>
+    <div class="wcbtns">
+      <button data-a="prev"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+      <button class="pp" data-a="playpause"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <button data-a="next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+    </div>`;
+  body.querySelectorAll('.wcbtns button').forEach(b => b.addEventListener('click', () => ytm({ type:'transport', action:b.dataset.a }, true)));
+  updateControlWidgets();
+}
+function updateControlWidgets() {
+  const now = lastNow || {};
+  document.querySelectorAll('.wctrl').forEach(w => {
+    const art = w.querySelector('#_wcart'), t = w.querySelector('#_wct'), s = w.querySelector('#_wcs');
+    if (art) { art.src = now.art || ART_FALLBACK; art.onerror = () => art.src = ART_FALLBACK; }
+    if (t) t.textContent = now.title || 'Nothing playing';
+    if (s) s.textContent = now.artist || '';
+    const pp = w.parentNode.querySelector('.wcbtns .pp svg path');
+    if (pp) pp.setAttribute('d', now.playing ? PAUSE : PLAY);
+  });
+}
+
+async function homeSectionsCached() {
+  // Don't cache an empty/failed result — retry next time so Quick Picks fills in reliably.
+  if (!cache.home || !cache.home.length) { const r = await ytm({ type:'home' }); if (r && r.sections && r.sections.length) cache.home = r.sections; else return []; }
+  return cache.home;
+}
+async function wSection(body, re, emptyText) {
+  body.appendChild(el('div', 'spinner'));
+  const secs = await homeSectionsCached();
+  const sec = secs.find(s => re.test(s.title));
+  body.innerHTML = '';
+  if (!sec || !sec.items.length) { const e = el('div', 'wempty'); e.textContent = emptyText; body.appendChild(e); return; }
+  const row = el('div', 'row'); for (const it of sec.items.slice(0, 24)) row.appendChild(tile(it)); body.appendChild(row);
+  setWidgetCount(body, sec.items.length);
+}
+// Shows "N items" next to the widget's title.
+function setWidgetCount(body, n) {
+  const card = body.closest && body.closest('.widget'); if (!card) return;
+  const wt = card.querySelector('.whead .wt'); if (!wt) return;
+  let c = wt.querySelector('.wct');
+  if (!c) { c = el('span', 'wct'); wt.appendChild(c); }
+  c.textContent = n ? n + (n === 1 ? ' item' : ' items') : '';
+}
+// Speed Dial = Quick Picks + Listen Again merged (its own feed never reliably shows up)
+async function wSpeedDial(body) {
+  body.appendChild(el('div', 'spinner'));
+  const secs = await homeSectionsCached();
+  const merged = [].concat(...secs.filter(s => /quick picks|listen again/i.test(s.title)).map(s => s.items || []));
+  const seen = new Set();
+  const uniq = merged.filter(it => { const id = it.videoId || it.title; if (seen.has(id)) return false; seen.add(id); return true; });
+  body.innerHTML = '';
+  if (!uniq.length) { const e = el('div', 'wempty'); e.textContent = 'Nothing to show yet.'; body.appendChild(e); return; }
+  const row = el('div', 'row'); for (const it of uniq.slice(0, 30)) row.appendChild(tile(it)); body.appendChild(row);
+  setWidgetCount(body, uniq.length);
+}
+function wFavorites(body) {
+  const pins = lsGet('vmr-pins', []); body.innerHTML = '';
+  if (!pins.length) { const e = el('div', 'wempty'); e.textContent = 'No favorites yet. Tap ☆ on a song or playlist to pin it here.'; body.appendChild(e); return; }
+  const row = el('div', 'row');
+  for (const p of pins) row.appendChild(tile({ title:p.title, subtitle:p.subtitle || (p.kind === 'song' ? 'Song' : 'Playlist'),
+    thumb:p.thumb, kind:p.kind || 'playlist', videoId:p.videoId, playlistId:p.playlistId, browseId:p.browseId }));
+  body.appendChild(row);
+}
+/* Favourites live on the server so every device shares one list; localStorage is just a
+   fast local cache so the UI can paint before the fetch lands. */
+function favList() { return lsGet('vmr-pins', []); }
+function favSave(list) {
+  lsSet('vmr-pins', list);
+  post('/api/prefs', { pins: list });   // fire-and-forget sync
+}
+async function favPull() {
+  try {
+    const r = await fetch('/api/prefs'); const p = await r.json();
+    if (p && Array.isArray(p.pins)) {
+      if (JSON.stringify(p.pins) !== JSON.stringify(favList())) {
+        lsSet('vmr-pins', p.pins);
+        refreshFavoriteWidgets();
+        if (view === 'favorites' || view === 'playlists') render();
+      }
+    } else if (favList().length) { post('/api/prefs', { pins: favList() }); }  // seed the server
+  } catch (e) {}
+}
+function refreshFavoriteWidgets() { document.querySelectorAll('.widget[data-wid="favorites"] .wbody').forEach(b => wFavorites(b)); }
+function pinId(item) { return item.videoId || item.playlistId || item.browseId; }
+function isPinned(item) { const id = pinId(item); return favList().some(p => p.id === id); }
+function togglePin(item) {
+  const id = pinId(item); let pins = favList();
+  if (pins.some(p => p.id === id)) pins = pins.filter(p => p.id !== id);
+  else pins.unshift({ id, kind:item.kind || (item.videoId ? 'song' : 'playlist'), title:item.title,
+    subtitle:item.subtitle, thumb:item.thumb, videoId:item.videoId, playlistId:item.playlistId, browseId:item.browseId });
+  favSave(pins); return pins.some(p => p.id === id);
+}
+
+async function renderHome(m) {
+  m.innerHTML = '';
+  const bar = topbar('Home');
+  const editing = $('#app').classList.contains('editwidgets');
+  const editBtn = el('button', 'editbtn' + (editing ? ' on' : '')); editBtn.title = editing ? 'Done' : 'Edit layout';
+  editBtn.innerHTML = editing
+    ? '<svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20 8l-1.4-1.4z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+  editBtn.addEventListener('click', () => { $('#app').classList.toggle('editwidgets'); renderHome(m); });
+  bar.appendChild(editBtn);          // pencil sits top-right in the header
+  m.appendChild(bar);
+
+  const layout = getLayout();
+  const grid = el('div', 'wgrid'); m.appendChild(grid);
+  // copy has to match the affordance — the edit control is an icon-only pencil now
+  if (!layout.length && !editing) grid.appendChild(emptyMsg('No widgets yet — tap the ✎ pencil, top right, to add some.'));
+  for (const w of layout) {
+    const def = WIDGETS[w.id]; if (!def) continue;
+    const card = el('div', 'widget'); card.style.setProperty('--cols', w.cols || 1); card.style.setProperty('--rows', w.rows || 2); card.dataset.wid = w.id;
+    const head = el('div', 'whead');
+    const t = el('span', 'wt');
+    const handle = el('span', 'whandle'); handle.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 5a2 2 0 11-4 0 2 2 0 014 0zm0 7a2 2 0 11-4 0 2 2 0 014 0zm0 7a2 2 0 11-4 0 2 2 0 014 0zM19 5a2 2 0 11-4 0 2 2 0 014 0zm0 7a2 2 0 11-4 0 2 2 0 014 0zm0 7a2 2 0 11-4 0 2 2 0 014 0z"/></svg>';
+    const label = el('span'); label.textContent = def.name;
+    t.append(handle, label); head.appendChild(t);
+    const x = el('button', 'wx'); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7l1.4-1.4L10.6 10.6l6.3-6.3z"/></svg>';
+    x.addEventListener('click', () => { setLayout(getLayout().filter(z => z.id !== w.id)); renderHome(m); });
+    head.appendChild(x); card.appendChild(head);
+    const bodyEl = el('div', 'wbody'); card.appendChild(bodyEl);
+    const rz = el('div', 'wresize'); rz.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 15v6h-6l2.3-2.3-3.5-3.5 1.4-1.4 3.5 3.5z"/></svg>';
+    card.appendChild(rz);
+    grid.appendChild(card);
+    def.render(bodyEl);
+    enableWidgetDrag(card, grid, m);
+    enableWidgetResize(card, rz, grid);
+  }
+  if (editing) {
+    const inUse = new Set(getLayout().map(z => z.id));
+    const avail = Object.entries(WIDGETS).filter(([id]) => !inUse.has(id));
+    const add = el('div', 'setsec'); add.style.marginTop = '24px';
+    add.appendChild(Object.assign(el('h3'), { textContent: avail.length ? 'Add a widget' : 'All widgets added' }));
+    const pal = el('div', 'waddgrid');
+    for (const [id, def] of avail) {
+      const chip = el('button', 'waddchip');
+      chip.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>' + def.name;
+      chip.addEventListener('click', () => { setLayout([...getLayout(), { id, cols: def.defCols, tall:false }]); renderHome(m); });
+      pal.appendChild(chip);
+    }
+    add.appendChild(pal); m.appendChild(add);
+  }
+}
+
+// Pointer-based drag reorder (works on PC + touch, unlike native HTML5 drag).
+function enableWidgetDrag(card, grid, m) {
+  const handle = card.querySelector('.whandle');
+  handle.addEventListener('pointerdown', e => {
+    if (!$('#app').classList.contains('editwidgets')) return;
+    e.preventDefault(); handle.setPointerCapture?.(e.pointerId); card.classList.add('dragging');
+    const onMove = ev => {
+      const sibs = [...grid.querySelectorAll('.widget:not(.dragging)')];
+      let best = null, bd = Infinity;
+      for (const s of sibs) { const r = s.getBoundingClientRect(); const d = Math.hypot(ev.clientX - (r.left + r.width/2), ev.clientY - (r.top + r.height/2));
+        if (d < bd) { bd = d; best = s; } }
+      if (best) { const r = best.getBoundingClientRect();
+        const after = ev.clientY > r.top + r.height/2 || (Math.abs(ev.clientY - (r.top + r.height/2)) < 10 && ev.clientX > r.left + r.width/2);
+        grid.insertBefore(card, after ? best.nextSibling : best); }
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp);
+      card.classList.remove('dragging');
+      const byId = Object.fromEntries(getLayout().map(z => [z.id, z]));
+      setLayout([...grid.querySelectorAll('.widget')].map(c => byId[c.dataset.wid]).filter(Boolean));
+    };
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
+  });
+}
+// Drag the corner to resize: horizontal = column span (1–3), vertical past a point = tall.
+function enableWidgetResize(card, rz, grid) {
+  rz.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation(); rz.setPointerCapture?.(e.pointerId);
+    const cols3 = window.matchMedia('(max-width:760px)').matches ? 1 : window.matchMedia('(max-width:1180px)').matches ? 2 : 3;
+    const colW = grid.getBoundingClientRect().width / cols3;
+    const rowH = 130 + 18;   // grid-auto-rows height + row gap
+    const startRect = card.getBoundingClientRect();
+    const onMove = ev => {
+      const cols = Math.max(1, Math.min(cols3, Math.round((ev.clientX - startRect.left) / colW)));
+      const rows = Math.max(1, Math.min(8, Math.round((ev.clientY - startRect.top) / rowH)));
+      card.style.setProperty('--cols', cols); card.style.setProperty('--rows', rows);
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp);
+      const cols = parseInt(card.style.getPropertyValue('--cols')) || 1;
+      const rows = parseInt(card.style.getPropertyValue('--rows')) || 2;
+      setLayout(getLayout().map(z => z.id === card.dataset.wid ? { ...z, cols, rows } : z));
+    };
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
+  });
+}
+
+async function renderSearch(m) {
+  m.innerHTML = ''; m.appendChild(topbar('Search', true));
+  const res = el('div', 'list'); res.id = 'searchres'; m.appendChild(res);
+  setTimeout(() => $('#searchbox')?.focus(), 30);
+  // seed with Quick Picks + Listen Again so the page isn't a blank void before you type
+  const secs = await homeSectionsCached();
+  if (view !== 'search' || res.children.length) return;
+  const wanted = secs.filter(s => /quick picks|listen again/i.test(s.title));
+  const list = wanted.length ? wanted : (secs[0] ? [secs[0]] : []);
+  for (const sec of list) {
+    if (!sec.items || !sec.items.length) continue;
+    const sh = el('div', 'shelf');
+    const h = el('h3'); h.textContent = sec.title; sh.appendChild(h);
+    const l = el('div', 'list');
+    for (const it of sec.items.slice(0, 16)) l.appendChild(listItem(it));
+    sh.appendChild(l); res.appendChild(sh);
+  }
+}
+
+function renderFavorites(m) {
+  m.innerHTML = ''; m.appendChild(topbar('Favorites'));
+  const pins = favList();
+  if (!pins.length) { m.appendChild(emptyMsg('Nothing here yet — tap ☆ on a song or playlist to save it.')); return; }
+
+  // Favourites behaves like any other playlist: play it, or shuffle it.
+  const songs = pins.filter(p => p.videoId);
+  const acts = el('div', 'acts'); acts.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px';
+  const playAll = (shuffle) => {
+    if (!songs.length) { toast('No songs saved yet'); return; }
+    const order = shuffle ? songs.slice().sort(() => Math.random() - 0.5) : songs;
+    ytm({ type:'play', videoId: order[0].videoId });
+    optimisticNow(order[0]);
+    // queue the rest behind it
+    order.slice(1, 25).forEach((s, i) => setTimeout(() =>
+      ytm({ type:'queueAdd', videoId:s.videoId, query:(s.title || '') + ' ' + (s.subtitle || ''), mode:'end' }, true), 400 * (i + 1)));
+    toast(shuffle ? 'Shuffling favorites' : 'Playing favorites');
+  };
+  const pb = el('button', 'pill primary'); pb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>Play';
+  pb.addEventListener('click', () => playAll(false));
+  const sb = el('button', 'pill ghost'); sb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-2.5l-2 2-1.4-1.4L13 6.6V5h4V3zM3 6h4l2 2 1.4-1.4L8.8 4.6 7 3H3v3zm14 9v-3l4 4-4 4v-3h-4l-2-2 1.4-1.4L14.2 15H17zM3 15h4l6-6 1.4 1.4L8.8 17H3v-2z"/></svg>Shuffle';
+  sb.addEventListener('click', () => playAll(true));
+  acts.append(pb, sb); m.appendChild(acts);
+
+  const list = el('div', 'list');
+  for (const p of pins) list.appendChild(listItem({ title:p.title, subtitle:p.subtitle || (p.kind === 'song' ? 'Song' : 'Playlist'),
+    thumb:p.thumb, kind:p.kind || 'playlist', videoId:p.videoId, playlistId:p.playlistId, browseId:p.browseId }));
+  m.appendChild(list);
+}
+async function doSearch(q) {
+  if (!q) return; const res = $('#searchres'); if (!res) return;
+  res.innerHTML = '<div class="spinner"></div>';
+  const r = await ytm({ type:'search', query:q });
+  res.innerHTML = '';
+  const items = (r && r.items) || [];
+  if (!items.length) { res.appendChild(emptyMsg('No results.')); return; }
+  for (const it of items) res.appendChild(listItem(it));
+}
+
+async function renderPlaylists(m) {
+  m.innerHTML = ''; m.appendChild(topbar('Library'));
+  if (!cache.playlists) { m.appendChild(el('div','spinner'));
+    const r = await ytm({ type:'playlists' }); cache.playlists = (r && r.playlists) || []; if (view !== 'playlists') return; m.querySelector('.spinner')?.remove(); }
+  const row = el('div', 'libgrid');   // even grid so the columns line up
+  // a "Favorites" album that collects everything you've starred
+  const pins = lsGet('vmr-pins', []);
+  row.appendChild(tile({ title:'Favorites', subtitle: pins.length ? pins.length + ' saved' : 'Nothing saved yet',
+    kind:'favorites' }));
+  if (!cache.playlists.length) { const sh0 = el('div','shelf'); sh0.appendChild(row); m.appendChild(sh0);
+    m.appendChild(emptyMsg('No playlists found.')); return; }
+  for (const it of cache.playlists) row.appendChild(tile(it));
+  const sh = el('div', 'shelf'); sh.appendChild(row); m.appendChild(sh);
+}
+
+async function renderDetail(m, d) {
+  m.innerHTML = '';
+  const head = el('div', 'detailhead');
+  const img = el('img', 'art'); img.src = d.thumb || ART_FALLBACK; img.onerror = () => img.src = ART_FALLBACK;
+  const info = el('div');
+  info.innerHTML = `<div class="t">${escapeHtml(d.title)}</div><div class="s">${escapeHtml(d.subtitle||'Playlist')}</div>`;
+  const acts = el('div', 'acts');
+  const playBtn = el('button', 'pill primary'); playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>Play';
+  const shufBtn = el('button', 'pill ghost'); shufBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-2.5l-2 2-1.4-1.4L13 6.6V5h4V3zM3 6h4l2 2 1.4-1.4L8.8 4.6 7 3H3v3zm14 9v-3l4 4-4 4v-3h-4l-2-2 1.4-1.4L14.2 15H17zM3 15h4l6-6 1.4 1.4L8.8 17H3v-2z"/></svg>Shuffle';
+  const pid = d.playlistId || (d.browseId && d.browseId.startsWith('VL') ? d.browseId.slice(2) : null);
+  playBtn.addEventListener('click', () => { ytm({ type:'startPlaylist', playlistId:pid, shuffle:false }); toast('Starting playlist'); setRailTab('queue'); });
+  shufBtn.addEventListener('click', () => { ytm({ type:'startPlaylist', playlistId:pid, shuffle:true }); toast('Shuffling playlist'); setRailTab('queue'); });
+  const pinBtn = el('button', 'pill ghost');
+  const STAR_ON = '<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>';
+  const STAR_OFF = '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 4.4l2.1 4.6 5 .4-3.8 3.3 1.2 4.9L12 15.4 7.5 17.6l1.2-4.9L4.9 9.4l5-.4z"/></svg>';
+  const setPinLabel = () => pinBtn.innerHTML = (isPinned(d) ? STAR_ON + 'Pinned' : STAR_OFF + 'Favorite');
+  setPinLabel();
+  pinBtn.addEventListener('click', () => { const on = togglePin(d); setPinLabel(); refreshFavoriteWidgets(); toast(on ? 'Pinned to favorites' : 'Unpinned'); });
+  // overflow menu so narrow screens don't have to fit every action inline
+  const moreBtn = el('button', 'pill ghost more'); moreBtn.title = 'More';
+  moreBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
+  moreBtn.addEventListener('click', () => openCollectionSheet(d, pid));
+  acts.append(playBtn, shufBtn, pinBtn, moreBtn);
+  info.appendChild(acts); head.append(img, info); m.appendChild(head);
+
+  const list = el('div', 'list'); list.appendChild(el('div', 'spinner')); m.appendChild(list);
+  const r = await ytm({ type:'playlistItems', playlistId: pid, browseId: d.browseId });
+  list.innerHTML = '';
+  const items = (r && r.items) || [];
+  if (!items.length) { list.appendChild(emptyMsg('Could not load tracks.')); return; }
+  for (const it of items) list.appendChild(listItem(it));
+}
+
+function renderMixerPage(m) { m.innerHTML = ''; m.appendChild(topbar('Mixer'));
+  const c = el('div'); c.style.maxWidth = '520px'; c.id = 'mixerpage'; m.appendChild(c); paintMixer(c); }
+
+function renderSettings(m) {
+  m.innerHTML = ''; m.appendChild(topbar('Settings'));
+  // Theme has its own submenu now, so Settings stays short.
+  const tSel = localStorage.getItem('vmr-theme') || 'dark';
+  const tName = (THEMES.find(t => t[0] === tSel) || [])[1]
+    || (customThemes().find(c => c.id === tSel) || {}).name || 'Dark';
+  const apx = el('div', 'setsec'); apx.appendChild(Object.assign(el('h3'), { textContent:'Appearance' }));
+  const trow = el('div', 'setrow'); trow.style.cursor = 'pointer';
+  trow.innerHTML = `<div><div class="k">Theme</div><div class="d">${escapeHtml(tName)}</div></div>
+    <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:var(--dim);flex:none"><path d="M9 6l6 6-6 6z"/></svg>`;
+  trow.addEventListener('click', () => setView('theme'));
+  apx.appendChild(trow); m.appendChild(apx);
+  return renderSettingsTail(m);
+}
+
+function renderThemes(m) {
+  m.innerHTML = ''; m.appendChild(topbar('Theme'));
+
+  // ---- Theme ----
+  const ts = el('div', 'setsec'); ts.appendChild(Object.assign(el('h3'), { textContent:'Theme' }));
+  const grid = el('div', 'themes'); ts.appendChild(grid);
+  const paintThemeGrid = () => {
+    grid.innerHTML = '';
+    const mk = (id, name, sw, custom) => {
+      const c = el('div', 'themecard' + (id === (localStorage.getItem('vmr-theme') || 'dark') ? ' sel' : ''));
+      c.style.position = 'relative';
+      c.innerHTML = `<div class="swatch"><i style="background:${sw[0]}"></i><i style="background:${sw[1]}"></i><i style="background:${sw[2]}"></i></div><div class="n">${escapeHtml(name)}</div>`;
+      c.addEventListener('click', () => { applyTheme(id); paintThemeGrid(); });
+      if (custom) {
+        const ed = el('button', 'themeedit-btn'); ed.title = 'Edit / delete';
+        ed.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+        ed.addEventListener('click', ev => { ev.stopPropagation(); openThemeEditor(m, custom); });
+        c.appendChild(ed);
+      }
+      grid.appendChild(c);
+    };
+    const inCue = !!(window.CueNative && window.CueNative.systemColors);
+    for (const [id, name] of THEMES) { if (id === 'material' && !inCue) continue; mk(id, name, THEME_SW[id]); }
+    for (const ct of customThemes()) mk(ct.id, ct.name, [ct.vars.bg, ct.vars.card2, ct.vars.accent], ct);
+    const add = el('div', 'themecard'); add.style.display = 'flex'; add.style.flexDirection = 'column';
+    add.style.alignItems = 'center'; add.style.justifyContent = 'center'; add.style.color = 'var(--dim)';
+    add.innerHTML = '<div style="font-size:26px;line-height:1">+</div><div class="n">New</div>';
+    add.addEventListener('click', () => openThemeEditor(m, null));
+    grid.appendChild(add);
+  };
+  paintThemeGrid(); m.appendChild(ts);
+}
+
+function renderSettingsTail(m) {
+  // ---- Interface ----
+  const ap = el('div', 'setsec'); ap.appendChild(Object.assign(el('h3'), { textContent:'Interface' }));
+  const nl = el('div', 'setrow');
+  nl.innerHTML = `<div><div class="k">Show labels in the nav bar</div><div class="d">Turn off for a cleaner, icon-only bar.</div></div>`;
+  const nt = el('button', 'toggle'); let labelsOn = lsGet('vmr-navlabels', true);
+  if (labelsOn) nt.classList.add('on');
+  nt.addEventListener('click', () => { labelsOn = !labelsOn; lsSet('vmr-navlabels', labelsOn);
+    nt.classList.toggle('on', labelsOn); $('#app').classList.toggle('nolabels', !labelsOn); });
+  nl.appendChild(nt); ap.appendChild(nl); m.appendChild(ap);
+
+  // (Home widgets are now managed on the Home page — tap Edit there to add / remove / drag / resize.)
+
+  // ---- Playback ----
+  const pb = el('div', 'setsec'); pb.appendChild(Object.assign(el('h3'), { textContent:'Playback' }));
+  const yv = el('div', 'setrow');
+  yv.innerHTML = `<div><div class="k">YT Music volume</div><div class="d">The player's own level, separate from the master.</div></div>`;
+  const ytvIn = el('input'); ytvIn.type = 'range'; ytvIn.min = 0; ytvIn.max = 100; ytvIn.value = (lastNow && lastNow.volume != null) ? lastNow.volume : 100;
+  let ytvT = null;
+  ytvIn.addEventListener('input', () => { const lvl = parseInt(ytvIn.value, 10);
+    if (!ytvT) ytvT = setTimeout(() => { ytvT = null; ytm({ type:'setVolume', level:lvl }, true); }, 80); });
+  ytvIn.addEventListener('change', () => ytm({ type:'setVolume', level:parseInt(ytvIn.value,10) }, true));
+  yv.appendChild(ytvIn); pb.appendChild(yv);
+
+  const ks2 = el('div', 'setrow');
+  ks2.innerHTML = `<div><div class="k">Keyboard shortcuts</div><div class="d">
+    <b>Space</b> play/pause · <b>←/→</b> seek · <b>Shift+←/→</b> previous/next ·
+    <b>↑/↓</b> volume · <b>/</b> search · <b>Esc</b> close player</div></div>`;
+  pb.appendChild(ks2);
+  const ss = el('div', 'setrow');
+  ss.innerHTML = `<div><div class="k">Double-tap seek</div><div class="d">Seconds to jump when you double-tap the album art.</div></div>`;
+  const ssIn = el('input'); ssIn.type = 'number'; ssIn.min = 1; ssIn.max = 120; ssIn.value = seekSecs;
+  ssIn.style.cssText = 'width:70px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text);text-align:center';
+  ssIn.addEventListener('change', () => { seekSecs = Math.max(1, Math.min(120, parseInt(ssIn.value,10) || 10)); ssIn.value = seekSecs; localStorage.setItem('vmr-seeksecs', seekSecs); });
+  ss.appendChild(ssIn); pb.appendChild(ss);
+  m.appendChild(pb);
+
+  // ---- Engine (only when the audio backend offers actions, e.g. Voicemeeter) ----
+  const caps = (mixerState && mixerState.capabilities) || {};
+  const ACTION_INFO = {
+    restart: ['Restart audio engine', 'Reload the audio engine.'],
+    relaunch_vmwv: ['Relaunch Windows Volume sync', 'Restart the VMWV helper (Windows↔Voicemeeter volume).'],
+  };
+  if ((caps.engine_actions || []).length) {
+    const en = el('div', 'setsec'); en.appendChild(Object.assign(el('h3'), { textContent:(caps.engine_label || 'Audio') + ' engine' }));
+    const mkBtn = (label, desc, fn) => {
+      const row = el('div', 'setrow');
+      row.innerHTML = `<div><div class="k">${label}</div><div class="d">${desc}</div></div>`;
+      const b = el('button', 'pill ghost'); b.textContent = 'Run'; b.style.height = '38px';
+      b.addEventListener('click', async () => { b.textContent = '…'; const r = await fn(); b.textContent = 'Run';
+        toast(r && r.ok ? label + ' ✓' : (r && r.error) || 'Failed'); });
+      row.appendChild(b); en.appendChild(row);
+    };
+    for (const a of caps.engine_actions) { const [l, d] = ACTION_INFO[a] || [a, '']; mkBtn(l, d, () => post('/api/engine', { action:a })); }
+    m.appendChild(en);
+  }
+
+  // ---- Status ----
+  const eng = mixerState && mixerState.engine && mixerState.engine.connected;
+  const st = el('div', 'setsec'); st.appendChild(Object.assign(el('h3'), { textContent:'Status' }));
+  st.innerHTML += `
+    <div class="setrow"><div><div class="k">YT Music bridge</div><div class="d">Full YouTube Music control (search, queue, mixes) via the browser extension on the host computer.</div></div><div class="val">${lastConnected ? 'Connected' : 'Offline'}</div></div>
+    <div class="setrow"><div><div class="k">Audio output</div><div class="d">The host's current default output &mdash; this is what the volume slider controls.</div></div><div class="val">${(mixerState && mixerState.volume && mixerState.volume.available) ? mixerState.volume.device : 'Not available'}</div></div>` +
+    (caps.engine_label ? `<div class="setrow"><div><div class="k">${caps.engine_label} engine</div><div class="d">Master volume &amp; EQ.</div></div><div class="val">${eng ? 'Connected' : 'Not reachable'}</div></div>` : '');
+  // When the bridge is down, say how to fix it instead of just reporting "Offline".
+  if (!lastConnected) {
+    const help = el('div', 'setrow');
+    help.innerHTML = `<div><div class="k">Bridge is offline — how to fix</div><div class="d">
+      1. Open <b>YouTube Music</b> in Brave on the PC.<br>
+      2. If it's already open, refresh that tab.<br>
+      3. Still stuck? Reload the Pocketfader extension in <b>brave://extensions</b> (or chrome://extensions).</div></div>`;
+    st.appendChild(help);
+  }
+  const rc = el('div', 'setrow');
+  rc.innerHTML = `<div><div class="k">Reconnect</div><div class="d">Reload the app if something stops responding.</div></div>`;
+  const rcb = el('button', 'pill ghost'); rcb.textContent = 'Refresh'; rcb.style.height = '38px';
+  rcb.addEventListener('click', () => { toast('Reconnecting…'); setTimeout(() => location.reload(), 200); });
+  rc.appendChild(rcb); st.appendChild(rc);
+  m.appendChild(st);
+
+  // ---- Cue app (only visible inside the native Android wrapper) ----
+  const cue = window.CueNative;
+  if (cue && cue.isCue && cue.isCue()) {
+    const cs = el('div', 'setsec'); cs.appendChild(Object.assign(el('h3'), { textContent:'Cue app' }));
+    const sr = el('div', 'setrow');
+    sr.innerHTML = `<div><div class="k">Server address</div><div class="d">Where Cue loads the app from.</div></div>`;
+    const inp = el('input'); try { inp.value = cue.getServer(); } catch (e) {}
+    inp.style.cssText = 'flex:1;max-width:240px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 12px;font-size:13px';
+    inp.addEventListener('change', () => {
+      const wanted = inp.value.trim();
+      toast('Checking…');
+      try {
+        // the bridge verifies it's reachable first, so a typo can't strand you
+        if (cue.setServer(wanted)) toast('Connected — reloading');
+        else { toast("Couldn't reach that address"); inp.value = cue.getServer(); }
+      } catch (e) { inp.value = cue.getServer(); }
+    });
+    sr.appendChild(inp); cs.appendChild(sr);
+    const ks = el('div', 'setrow');
+    ks.innerHTML = `<div><div class="k">Keep screen on</div><div class="d">Stop your device from sleeping while Cue is running.</div></div>`;
+    const kt = el('button', 'toggle'); let kon = true; try { kon = cue.getKeepScreenOn(); } catch (e) {}
+    if (kon) kt.classList.add('on');
+    kt.addEventListener('click', () => { kon = !kon; kt.classList.toggle('on', kon); try { cue.setKeepScreenOn(kon); } catch (e) {} });
+    ks.appendChild(kt); cs.appendChild(ks);
+    const rs = el('div', 'setrow');
+    rs.innerHTML = `<div><div class="k">Media notification</div><div class="d">Restart the status-bar player service.</div></div>`;
+    const rb = el('button', 'pill ghost'); rb.textContent = 'Restart'; rb.style.height = '38px';
+    rb.addEventListener('click', () => { try { cue.restartService(); toast('Restarted'); } catch (e) {} });
+    rs.appendChild(rb); cs.appendChild(rs);
+    m.appendChild(cs);
+  }
+}
+
+function openThemeEditor(m, existing) {
+  const cs = getComputedStyle(document.documentElement);
+  const start = {};
+  for (const k of THEME_VARS) {
+    if (existing) { start[k] = existing.vars[k]; continue; }
+    const raw = cs.getPropertyValue('--' + k).trim();
+    start[k] = raw.startsWith('#') ? raw : rgb2hex(raw);
+  }
+  m.innerHTML = ''; m.appendChild(topbar('Theme editor'));
+  const wrap = el('div', 'setsec');
+  const LABELS = { bg:'Background', panel:'Panel / sidebar', card:'Card', card2:'Card (raised)', line:'Borders',
+    text:'Text', dim:'Muted text', dim2:'Faint text', accent:'Accent', accent2:'Accent (bright)' };
+  const grid = el('div', 'themeedit');
+  const inputs = {};
+  for (const k of THEME_VARS) {
+    const ce = el('div', 'ce');
+    const cur = /^#/.test(start[k]) ? start[k] : '#000000';
+    const store = { value: cur }; inputs[k] = store;
+    const sw = el('div', 'sw'); sw.style.background = cur;
+    const lab = el('label'); lab.textContent = LABELS[k];
+    sw.addEventListener('click', () => {
+      const prev = store.value;
+      const setVar = (hex) => { document.documentElement.style.setProperty('--' + k, hex); sw.style.background = hex; };
+      openColorPicker(store.value, LABELS[k], setVar, (hex) => { store.value = hex; setVar(hex); });
+      CP.onCancel = () => { store.value = prev; setVar(prev); };
+    });
+    ce.append(sw, lab); grid.appendChild(ce);
+  }
+  wrap.appendChild(grid);
+  const bar = el('div', 'cebar');
+  const nameIn = el('input'); nameIn.id = 'cename'; nameIn.placeholder = 'Theme name'; nameIn.value = existing ? existing.name : '';
+  const save = el('button', 'pill primary'); save.textContent = 'Save theme';
+  save.addEventListener('click', () => {
+    const name = nameIn.value.trim() || 'My theme';
+    const vars = {}; for (const k of THEME_VARS) vars[k] = inputs[k].value;
+    let list = customThemes();
+    const id = existing ? existing.id : 'custom-' + Date.now();
+    const entry = { id, name, base:'dark', vars };
+    if (existing) list = list.map(c => c.id === id ? entry : c); else list.push(entry);
+    saveCustomThemes(list); applyTheme(id); toast('Theme saved'); renderThemes(m);
+  });
+  bar.append(nameIn, save);
+  if (existing) { const del = el('button', 'pill ghost'); del.textContent = 'Delete';
+    del.addEventListener('click', () => { saveCustomThemes(customThemes().filter(c => c.id !== existing.id));
+      applyTheme('dark'); toast('Theme deleted'); renderThemes(m); });
+    bar.appendChild(del); }
+  const cancel = el('button', 'pill ghost'); cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => { applyTheme(localStorage.getItem('vmr-theme') || 'dark'); renderThemes(m); });
+  bar.appendChild(cancel);
+  wrap.appendChild(bar); m.appendChild(wrap);
+}
+
+/* ==================== custom color picker (HEX / RGB / HSL) ==================== */
+function hex2rgb(h) { h = (h || '').replace('#', '').trim(); if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (h.length !== 6) return null; const n = parseInt(h, 16); if (isNaN(n)) return null; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function rgbHex(r, g, b) { return '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join(''); }
+function rgb2hsv(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0;
+  if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; } return [h, mx ? d / mx : 0, mx]; }
+function hsv2rgb(h, s, v) { const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c; let a;
+  if (h < 60) a = [c, x, 0]; else if (h < 120) a = [x, c, 0]; else if (h < 180) a = [0, c, x]; else if (h < 240) a = [0, x, c]; else if (h < 300) a = [x, 0, c]; else a = [c, 0, x];
+  return a.map(z => (z + m) * 255); }
+function rgb2hsl(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; let h = 0, s = 0;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; } return [h, s, l]; }
+function hsl2rgb(h, s, l) { const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2; let a;
+  if (h < 60) a = [c, x, 0]; else if (h < 120) a = [x, c, 0]; else if (h < 180) a = [0, c, x]; else if (h < 240) a = [0, x, c]; else if (h < 300) a = [x, 0, c]; else a = [c, 0, x];
+  return a.map(z => (z + m) * 255); }
+
+const CP = { h:0, s:0, v:0, mode:'hex', onLive:null, onDone:null, onCancel:null };
+const cpHex = () => rgbHex(...hsv2rgb(CP.h, CP.s, CP.v));
+function cpRender() {
+  const [r, g, b] = hsv2rgb(CP.h, CP.s, CP.v).map(Math.round);
+  $('#cp-sv').style.background = rgbHex(...hsv2rgb(CP.h, 1, 1));
+  $('#cp-svknob').style.left = (CP.s * 100) + '%'; $('#cp-svknob').style.top = ((1 - CP.v) * 100) + '%';
+  $('#cp-hueknob').style.left = (CP.h / 360 * 100) + '%';
+  const wrap = $('#cp-inputs'); wrap.innerHTML = '';
+  const mk = (val, on) => { const i = el('input'); i.value = val; i.addEventListener('change', () => on(i.value)); wrap.appendChild(i); };
+  if (CP.mode === 'hex') mk(cpHex(), v => { const rgb = hex2rgb(v); if (rgb) { [CP.h, CP.s, CP.v] = rgb2hsv(...rgb); cpRender(); } });
+  else if (CP.mode === 'rgb') ['R','G','B'].forEach((_, i) => mk([r,g,b][i], v => { const a = [r,g,b]; a[i] = parseInt(v) || 0; [CP.h,CP.s,CP.v] = rgb2hsv(...a); cpRender(); }));
+  else { const hsl = rgb2hsl(r,g,b), disp = [Math.round(hsl[0]), Math.round(hsl[1]*100), Math.round(hsl[2]*100)];
+    ['H','S','L'].forEach((_, i) => mk(disp[i], v => { const a = disp.slice(); a[i] = parseInt(v) || 0; [CP.h,CP.s,CP.v] = rgb2hsv(...hsl2rgb(a[0], a[1]/100, a[2]/100)); cpRender(); })); }
+  if (CP.onLive) CP.onLive(cpHex());
+}
+function cpDrag(elm, handler) {
+  const move = e => { const rc = elm.getBoundingClientRect();
+    handler(Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)), Math.max(0, Math.min(1, (e.clientY - rc.top) / rc.height))); };
+  elm.addEventListener('pointerdown', e => { e.preventDefault(); elm.setPointerCapture?.(e.pointerId); move(e);
+    const mv = ev => move(ev); const up = () => { elm.removeEventListener('pointermove', mv); elm.removeEventListener('pointerup', up); };
+    elm.addEventListener('pointermove', mv); elm.addEventListener('pointerup', up); });
+}
+function openColorPicker(hex, title, onLive, onDone) {
+  const rgb = hex2rgb(hex) || [128, 128, 128]; [CP.h, CP.s, CP.v] = rgb2hsv(...rgb);
+  CP.onLive = onLive; CP.onDone = onDone; CP.onCancel = null;
+  $('#cp-title').textContent = title || 'Color'; cpRender(); $('#cpwrap').classList.add('show');
+}
+cpDrag($('#cp-sv'), (x, y) => { CP.s = x; CP.v = 1 - y; cpRender(); });
+cpDrag($('#cp-hue'), x => { CP.h = x * 360; cpRender(); });
+document.querySelectorAll('.cptab').forEach(t => t.addEventListener('click', () => {
+  CP.mode = t.dataset.m; document.querySelectorAll('.cptab').forEach(x => x.classList.toggle('sel', x === t)); cpRender(); }));
+const cpClose = (cancel) => { if (cancel && CP.onCancel) CP.onCancel(); $('#cpwrap').classList.remove('show'); };
+$('#cp-cancel').addEventListener('click', () => cpClose(true));
+$('#cp-ok').addEventListener('click', () => { if (CP.onDone) CP.onDone(cpHex()); cpClose(false); });
+$('#cpwrap').addEventListener('click', e => { if (e.target.id === 'cpwrap') cpClose(true); });
+
+function emptyMsg(t) { const e = el('div', 'empty'); e.textContent = t; return e; }
+function escapeHtml(s) { return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* activation: songs play, collections open detail */
+function activate(item) {
+  if (item.kind === 'favorites') { setView('favorites'); return; }
+  if (item.kind === 'song' && item.videoId) {
+    optimisticNow(item);   // paint what we already know instantly
+    ytm({ type:'play', videoId:item.videoId, playlistId:item.playlistId }); toast('Playing'); setRailTab('queue');
+  } else if (item.playlistId || (item.browseId && item.browseId.startsWith('VL'))) {
+    detailStack = item; setView('detail');
+  } else if (item.kind === 'song') {
+    ytm({ type:'play', videoId:item.videoId }); toast('Playing');
+  } else { openSheet(item); }
+}
+
+// Overflow sheet for a playlist / album header.
+function openCollectionSheet(d, pid) {
+  $('#sheet-art').src = d.thumb || ART_FALLBACK;
+  $('#sheet-t').textContent = d.title; $('#sheet-s').textContent = d.subtitle || 'Playlist';
+  const acts = $('#sheet-acts'); acts.innerHTML = '';
+  const add = (label, icon, fn) => { const b = el('button', 'act'); b.innerHTML = icon + '<span>' + label + '</span>';
+    b.addEventListener('click', () => { closeSheet(); fn(); }); acts.appendChild(b); };
+  const I = { play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+    q:'<svg viewBox="0 0 24 24"><path d="M4 6h12v2H4zm0 4h12v2H4zm0 4h8v2H4zm11 0h2v3h3v2h-3v3h-2v-3h-3v-2h3z"/></svg>',
+    star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
+    share:'<svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg>' };
+  add('Play', I.play, () => { ytm({ type:'startPlaylist', playlistId:pid, shuffle:false }); toast('Starting playlist'); });
+  add('Shuffle', I.play, () => { ytm({ type:'startPlaylist', playlistId:pid, shuffle:true }); toast('Shuffling'); });
+  add(isPinned(d) ? 'Remove from favorites' : 'Add to favorites', I.star,
+    () => { const on = togglePin(d); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
+  add('Share', I.share, () => shareItem({ playlistId:pid, title:d.title, subtitle:d.subtitle }));
+  $('#sheet').classList.add('show');
+}
+
+/* Queue rows get their own menu — the actions that make sense for something already in the
+   queue (move it up, take it out) rather than the "add it" actions a search result offers. */
+function openQueueSheet(q) {
+  $('#sheet-art').src = q.art || ART_FALLBACK;
+  $('#sheet-t').textContent = q.title || ''; $('#sheet-s').textContent = q.artist || '';
+  const acts = $('#sheet-acts'); acts.innerHTML = '';
+  const add = (label, icon, fn) => { const b = el('button', 'act'); b.innerHTML = icon + '<span>' + label + '</span>';
+    b.addEventListener('click', () => { closeSheet(); fn(); }); acts.appendChild(b); };
+  const I = {
+    play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+    up:'<svg viewBox="0 0 24 24"><path d="M4 6h9v2H4zm0 4h9v2H4zm0 4h6v2H4zm11-8l6 5-6 5z"/></svg>',
+    del:'<svg viewBox="0 0 24 24"><path d="M6 7h12v13a2 2 0 01-2 2H8a2 2 0 01-2-2zm3-4h6l1 2h4v2H4V5h4z"/></svg>',
+    mix:'<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-3l-2 2-1.4-1.4L12 7h2l-2-2h5V3zM3 6h5l3 3-1.4 1.4L7 8H3V6zm14 9v-3l4 4-4 4v-3h-2l-8-8H3v-2h5l8 8h1z"/></svg>',
+    star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
+    share:'<svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg>' };
+  add('Play now', I.play, () => { optimisticNow(q); ytm({ type:'play', videoId:q.videoId }); });
+  add('Move to play next', I.up, () => { ytm({ type:'queueMoveNext', videoId:q.videoId }, true); toast('Moved up next'); });
+  add('Remove from queue', I.del, () => queueRemove(q));
+  add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:q.videoId }); toast('Starting radio'); });
+  add(isPinned(q) ? 'Remove from favorites' : 'Favorite', I.star,
+    () => { const on = togglePin({ ...q, kind:'song', subtitle:q.artist }); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
+  add('Share', I.share, () => shareItem({ videoId:q.videoId, title:q.title, subtitle:q.artist }));
+  $('#sheet').classList.add('show');
+}
+// Remove with an optimistic repaint so the row disappears immediately.
+function queueRemove(q) {
+  lastQueue = lastQueue.filter(x => x.videoId !== q.videoId);
+  queueSig = null; paintRailBody();
+  ytm({ type:'queueRemove', videoId:q.videoId }, true);
+  toast('Removed from queue');
+}
+
+function shareItem(item) {
+  const url = item.videoId ? 'https://music.youtube.com/watch?v=' + item.videoId
+    : item.playlistId ? 'https://music.youtube.com/playlist?list=' + item.playlistId : 'https://music.youtube.com/';
+  const title = (item.title || 'YouTube Music') + (item.subtitle ? ' — ' + item.subtitle : '');
+  if (navigator.share) { navigator.share({ title, url }).catch(() => {}); return; }
+  // Web Share needs a secure context (this app is plain HTTP over Tailscale), so fall
+  // back to copying the link — execCommand still works in non-secure contexts.
+  const ta = document.createElement('textarea'); ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('Link copied'); } catch (e) { toast(url); }
+  document.body.removeChild(ta);
+}
+
+/* action sheet for a song */
+function openSheet(item) {
+  $('#sheet-art').src = item.thumb || ART_FALLBACK;
+  $('#sheet-t').textContent = item.title; $('#sheet-s').textContent = item.subtitle || '';
+  const acts = $('#sheet-acts'); acts.innerHTML = '';
+  const add = (label, icon, fn) => { const b = el('button', 'act'); b.innerHTML = icon + '<span>' + label + '</span>';
+    b.addEventListener('click', () => { closeSheet(); fn(); }); acts.appendChild(b); };
+  const I = { play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+    next:'<svg viewBox="0 0 24 24"><path d="M4 6h9v2H4zm0 4h9v2H4zm0 4h6v2H4zm11-8l6 5-6 5z"/></svg>',
+    q:'<svg viewBox="0 0 24 24"><path d="M4 6h12v2H4zm0 4h12v2H4zm0 4h8v2H4zm11 0h2v3h3v2h-3v3h-2v-3h-3v-2h3z"/></svg>',
+    mix:'<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-3l-2 2-1.4-1.4L12 7h2l-2-2h5V3zM3 6h5l3 3-1.4 1.4L7 8H3V6zm14 9v-3l4 4-4 4v-3h-2l-8-8H3v-2h5l8 8h1z"/></svg>',
+    star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
+    share:'<svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg>',
+    like:'<svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>' };
+  if (item.videoId) {
+    add('Play now', I.play, () => { ytm({ type:'play', videoId:item.videoId }); toast('Playing'); setRailTab('queue'); });
+    add('Play next', I.next, () => { ytm({ type:'queueAdd', videoId:item.videoId, query:item.title + ' ' + (item.subtitle||''), mode:'next' }); toast('Added — playing next'); });
+    add('Add to queue', I.q, () => { ytm({ type:'queueAdd', videoId:item.videoId, query:item.title + ' ' + (item.subtitle||''), mode:'end' }); toast('Added to queue'); });
+    add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:item.videoId }); toast('Starting radio'); setRailTab('queue'); });
+    add(isPinned(item) ? 'Remove from favorites' : 'Favorite', I.star, () => { const on = togglePin(item); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
+    add('Like on YT Music', I.like, () => { ytm({ type:'like', videoId:item.videoId, action:'like' }, true); toast('Liked'); });
+    add('Share', I.share, () => shareItem(item));
+  }
+  $('#sheet').classList.add('show');
+}
+function closeSheet() { $('#sheet').classList.remove('show'); }
+$('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
+
+/* ==================== right rail: now playing + queue + mixer ==================== */
+// The rail is now dedicated to Now Playing + Up Next; the mixer lives in the nav.
+function setRailTab() { paintRailBody(); }
+
+let holdSeek = false, lastNow = null, lastQueue = [];
+const seek = $('#seek');
+seek.addEventListener('pointerdown', () => holdSeek = true);
+seek.addEventListener('input', () => { const d = lastNow && lastNow.duration; if (d) $('#tpos').textContent = fmt(seek.value/1000*d); });
+const endSeek = () => { if (!holdSeek) return; holdSeek = false; const d = lastNow && lastNow.duration;
+  if (d) { const pos = seek.value / 1000 * d; ytm({ type:'transport', action:'seek', position: pos }, true);
+    if (lastNow) lastNow.position = pos; seekSettleUntil = Date.now() + 1600; } };
+seek.addEventListener('pointerup', endSeek); seek.addEventListener('pointercancel', endSeek);
+$('#r-pp').addEventListener('click', () => ytm({ type:'transport', action:'playpause' }, true));
+$('#r-next').addEventListener('click', () => ytm({ type:'transport', action:'next' }, true));
+$('#r-prev').addEventListener('click', () => ytm({ type:'transport', action:'prev' }, true));
+$('#np-fav').addEventListener('click', () => {
+  if (!lastNow || !lastNow.videoId) return;
+  const on = togglePin({ videoId:lastNow.videoId, kind:'song', title:lastNow.title, subtitle:lastNow.artist, thumb:lastNow.art });
+  $('#np-fav').classList.toggle('on', on); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed from favorites');
+});
+$('#np-share').addEventListener('click', () => { if (lastNow && lastNow.videoId) shareItem({ videoId:lastNow.videoId, title:lastNow.title, subtitle:lastNow.artist }); });
+$('#np-like').addEventListener('click', () => {
+  if (!lastNow || !lastNow.videoId) return;
+  const liked = lastNow.liked === 'LIKE';
+  ytm({ type:'like', videoId:lastNow.videoId, action: liked ? 'remove' : 'like' }, true);
+  lastNow.liked = liked ? 'INDIFFERENT' : 'LIKE';
+  likeSettleUntil = Date.now() + 3000; likeSettleVid = lastNow.videoId;   // keep optimistic state
+  $('#np-like').classList.toggle('on', !liked); toast(liked ? 'Removed like' : 'Liked on YT Music');
+});
+
+// Mobile mini-player → opens the full now-playing sheet; back / close button dismisses it.
+/* ---- now-playing morph ----------------------------------------------------------------
+   The sheet rises out of the mini-player. Deliberately a UNIFORM scale plus a translate
+   from the chip's centre: scaling width and height by different amounts (the obvious FLIP)
+   visibly squashes the artwork and text, which is what made this look harsh. Driven by
+   requestAnimationFrame rather than CSS transitions so a drag can hand off mid-flight and
+   the inline styles are always cleaned up (no more half-morphed states getting stuck). */
+let railP = 0, railRaf = null;
+
+/* Rather than moving or scaling the sheet (which either distorts it or just slides up from
+   the bottom), we keep it perfectly still and expand the WINDOW onto it — a clip-path inset
+   that starts exactly on the mini-player's rect and opens out to full screen. Visually the
+   widget itself grows into the full view, and nothing inside ever stretches. */
+function railSetP(p) {
+  const rail = $('#rail'), m = $('#miniplayer').getBoundingClientRect();
+  railP = p;
+  const q = 1 - p, W = window.innerWidth, H = window.innerHeight;
+  const top = Math.max(0, m.top * q), left = Math.max(0, m.left * q);
+  const right = Math.max(0, (W - m.right) * q), bottom = Math.max(0, (H - m.bottom) * q);
+  const radius = 20 + 6 * q;
+  rail.style.willChange = 'clip-path, opacity';
+  rail.style.transform = 'none';
+  rail.style.clipPath = `inset(${top.toFixed(1)}px ${right.toFixed(1)}px ${bottom.toFixed(1)}px ${left.toFixed(1)}px round ${radius.toFixed(1)}px)`;
+  rail.style.opacity = String(Math.min(1, 0.35 + p * 2));
+}
+function railClearInline() {
+  const rail = $('#rail');
+  rail.style.transform = ''; rail.style.opacity = ''; rail.style.transition = '';
+  rail.style.willChange = ''; rail.style.clipPath = '';
+}
+let railFb = null;
+function railStop() {
+  if (railRaf) { cancelAnimationFrame(railRaf); railRaf = null; }
+  if (railFb) { clearTimeout(railFb); railFb = null; }
+}
+
+function railAnimate(to, ms, done) {
+  railStop();
+  const from = railP, t0 = performance.now();
+  const ease = x => 1 - Math.pow(1 - x, 3);        // easeOutCubic
+  // done() first: on close it removes .railopen, and clearing the inline clip-path *before*
+  // that left the sheet full-screen-visible for a frame — that was the flash.
+  const settle = () => { railStop(); railP = to; if (done) done(); railClearInline(); };
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms);
+    railSetP(from + (to - from) * ease(k));
+    if (k < 1) railRaf = requestAnimationFrame(step);
+    else settle();
+  };
+  railRaf = requestAnimationFrame(step);
+  // If frames stop being produced (screen off, tab hidden) the rAF chain stalls and the
+  // sheet would be left mid-morph — this guarantees it always lands.
+  railFb = setTimeout(settle, ms + 350);
+}
+function settleRailOpen() { railAnimate(1, 300); }
+function morphRail(open) {
+  const app = $('#app'), rail = $('#rail');
+  if (open) {
+    railStop(); railSetP(0); app.classList.add('railopen');
+    railAnimate(1, 330);   // driven by JS, so no style-flush frame is needed to start
+  } else {
+    railAnimate(0, 270, () => {
+      app.classList.remove('railopen');
+      rail.scrollTop = 0; rail.classList.remove('compact');
+    });
+  }
+}
+function openNowPlaying() {
+  const app = $('#app'); if (app.classList.contains('railopen')) return;
+  if (window.innerWidth > 1100) { app.classList.add('railopen'); }
+  else morphRail(true);
+  history.pushState({ railopen:true }, '');
+}
+function closeNowPlaying() {
+  const app = $('#app'); if (!app.classList.contains('railopen')) return;
+  if (window.innerWidth > 1100) { app.classList.remove('railopen'); }
+  else morphRail(false);
+}
+let chipGestureEnd = 0;   // suppresses the synthetic click that follows a drag
+$('#miniplayer').addEventListener('click', e => {
+  if (e.target.closest('#mini-pp, .mbtn')) return;
+  if (Date.now() - chipGestureEnd < 450) return;   // that stray click was re-triggering opens
+  openNowPlaying();
+});
+$('#mini-pp').addEventListener('click', () => ytm({ type:'transport', action:'playpause' }, true));
+$('#mini-prev').addEventListener('click', e => { e.stopPropagation(); ytm({ type:'transport', action:'prev' }, true); });
+$('#mini-next').addEventListener('click', e => { e.stopPropagation(); ytm({ type:'transport', action:'next' }, true); });
+$('#npbar-pp').addEventListener('click', () => ytm({ type:'transport', action:'playpause' }, true));
+$('#npbar').addEventListener('click', e => { if (!e.target.closest('button')) railEl.scrollTo({ top:0, behavior:'smooth' }); });
+
+// The track you'd land on if you skipped in this direction (for the swipe peek).
+function neighborTrack(dir) {
+  if (!lastQueue.length || !lastNow || !lastNow.videoId) return null;
+  const i = lastQueue.findIndex(q => q.videoId === lastNow.videoId);
+  return i < 0 ? null : (lastQueue[i + dir] || null);
+}
+/* Paint what we already know about a track immediately (title/artist/art come straight
+   from the list item), so the UI updates instantly instead of waiting for the poll. */
+function optimisticNow(item) {
+  if (!item) return;
+  const t = item.title || '', a = item.artist || item.subtitle || '', src = item.art || item.thumb;
+  $('#mini-t').textContent = t; $('#mini-s').textContent = a;
+  $('#np-t').textContent = t; $('#np-s').textContent = a; $('#npbar-t').textContent = t;
+  if (src) {
+    $('#mini-art').src = src; $('#npbar-art').src = src;
+    if ($('#np-art').tagName === 'IMG') $('#np-art').src = src;
+    $('#np-glow').style.backgroundImage = 'url("' + src + '")';
+  }
+  $('#miniplayer').classList.remove('idle');
+}
+
+// Mini-player gestures — everything tracks your finger and completes on release.
+(() => {
+  const chip = $('#miniplayer'), rail = $('#rail'), app = $('#app');
+  let sx = null, sy = null, dx = 0, dy = 0, mode = null, savedT = null, savedS = null;
+  let revealing = false;          // true once a drag has started opening the sheet
+  const W = () => window.innerWidth, H = () => window.innerHeight;
+  const restoreText = () => { if (savedT != null) { $('#mini-t').textContent = savedT; $('#mini-s').textContent = savedS; savedT = savedS = null; } };
+  const clearChip = () => { chip.style.transition = ''; chip.style.transform = ''; chip.style.opacity = ''; };
+  const clear = () => { sx = sy = null; dx = dy = 0; mode = null; };
+  // Any abandoned drag must put the sheet back — otherwise it stays half-morphed on screen
+  // (and a later downward swipe looked like it was "opening" it).
+  const reset = () => {
+    clear(); restoreText(); clearChip();
+    if (revealing) { revealing = false; morphRail(false); }
+  };
+
+  chip.addEventListener('pointerdown', e => {
+    if (e.target.closest('#mini-pp, .mbtn')) return;
+    sx = e.clientX; sy = e.clientY; dx = dy = 0; mode = null;
+    try { chip.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  chip.addEventListener('pointermove', e => {
+    if (sx == null) return;
+    dx = e.clientX - sx; dy = e.clientY - sy;
+    if (!mode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) mode = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+    if (mode === 'h') {
+      chip.style.transition = 'none';
+      chip.style.transform = `translateX(${dx * .9}px)`;
+      const n = neighborTrack(dx < 0 ? 1 : -1);          // peek the track you'd land on
+      if (Math.abs(dx) > 34 && n) {
+        if (savedT == null) { savedT = $('#mini-t').textContent; savedS = $('#mini-s').textContent; }
+        $('#mini-t').textContent = n.title || ''; $('#mini-s').textContent = n.artist || '';
+      } else restoreText();
+    } else if (mode === 'v' && dy < 0) {
+      // continuous morph: the chip fades out while the sheet grows from the same spot
+      const p = Math.max(0, Math.min(1, -dy / (H() * .35)));
+      if (!revealing) { railStop(); revealing = true; app.classList.add('railopen'); }
+      railSetP(p);
+      chip.style.transition = 'none';
+      chip.style.opacity = String(Math.max(0, 1 - p * 1.9));
+    } else if (mode === 'v') {
+      chip.style.transition = 'none'; chip.style.transform = `translateY(${dy}px)`;
+      chip.style.opacity = String(Math.max(.3, 1 - dy / 220));
+    }
+  }, { passive: true });
+
+  const finish = () => {
+    if (sx == null) return;
+    chipGestureEnd = Date.now();     // don't let the trailing click re-open/close things
+    const _dx = dx, _dy = dy, _mode = mode;
+    if (_mode === 'h' && Math.abs(_dx) > 55) {            // commit the skip, chip flies out & back
+      const next = _dx < 0, n = neighborTrack(next ? 1 : -1);
+      ytm({ type:'transport', action: next ? 'next' : 'prev' }, true);
+      if (n) optimisticNow(n);
+      savedT = savedS = null; clear();
+      chip.style.transition = 'transform .16s ease, opacity .16s ease';
+      chip.style.transform = `translateX(${next ? -W() : W()}px)`; chip.style.opacity = '0';
+      setTimeout(() => {
+        chip.style.transition = 'none';
+        chip.style.transform = `translateX(${next ? W() * .3 : -W() * .3}px)`;
+        requestAnimationFrame(() => {
+          chip.style.transition = 'transform .32s var(--spring), opacity .3s ease';
+          chip.style.transform = ''; chip.style.opacity = '1';
+          setTimeout(clearChip, 340);
+        });
+      }, 170);
+      return;
+    }
+    if (_mode === 'v' && _dy > 90) {                      // swipe the card away = stop everything
+      ytm({ type:'stop' }, true);
+      cardDismissed = true;                               // stays hidden until playback resumes
+      reset();
+      paintNow({}, []);                                   // hide the card straight away
+      toast('Stopped — queue cleared');
+      return;
+    }
+    if (_mode === 'v' && _dy < 0) {
+      const p = Math.max(0, Math.min(1, -_dy / (H() * .35)));
+      clear(); restoreText(); revealing = false;
+      if (p > .26) {                                      // release while moving up = lock it open
+        settleRailOpen(); history.pushState({ railopen:true }, '');
+        clearChip();                                      // CSS keeps the chip hidden while open
+      } else { morphRail(false); clearChip(); }
+      return;
+    }
+    reset();
+  };
+  chip.addEventListener('pointerup', finish);
+  chip.addEventListener('pointercancel', reset);
+})();
+$('#railclose').addEventListener('click', () => history.back());
+/* Drag the sheet down to shrink it back into the floating card — the exact inverse of the
+   open gesture, so it runs through the same clip-path morph (dragging the whole sheet with a
+   transform is what made this choppy: it fought the morph and then snapped). */
+(() => {
+  const rail = $('#rail'), chip = $('#miniplayer');
+  let sy = null, started = false, lastP = 1;
+  const H = () => window.innerHeight;
+  const finishDrag = (commit) => {
+    started = false; sy = null;
+    chip.style.opacity = '';                       // hand the card back to CSS
+    if (commit) history.back();                    // → closeNowPlaying → morph into the card
+    else settleRailOpen();
+  };
+  rail.addEventListener('pointerdown', e => {
+    if (!$('#app').classList.contains('railopen')) return;
+    if (!e.target.closest('.raildrag, .artstage, .nptrow')) return;
+    if (e.target.closest('input, button')) return;              // don't hijack sliders/buttons
+    if (rail.scrollTop > 4) return;                             // only from the very top
+    sy = e.clientY; started = false; lastP = 1;
+    try { rail.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  rail.addEventListener('pointermove', e => {
+    if (sy == null) return;
+    const dy = e.clientY - sy;
+    if (dy <= 0) { if (started) { railSetP(1); lastP = 1; } return; }
+    if (!started) { started = true; railStop(); }
+    lastP = Math.max(0, 1 - dy / (H() * .38));
+    railSetP(lastP);
+    chip.style.opacity = String(Math.min(1, (1 - lastP) * 1.9));  // card fades in as it shrinks
+  }, { passive: true });
+  rail.addEventListener('pointerup', () => { if (sy != null) finishDrag(started && lastP < .72); });
+  rail.addEventListener('pointercancel', () => { if (sy != null) finishDrag(false); });
+})();
+
+// The rail's primary slider is the host's MASTER volume (shares the mixer's
+// holdVol/sendVol). The independent YT Music player-volume now lives in Settings.
+const mvol = $('#mvol');
+mvol.addEventListener('pointerdown', () => holdVol = true);
+const relMvol = () => { holdVol = false; if (volPending !== null) { post('/api/volume', {percent:volPending}); volPending = null; } };
+mvol.addEventListener('pointerup', relMvol); mvol.addEventListener('pointercancel', relMvol);
+mvol.addEventListener('input', () => { $('#mvolpct').textContent = mvol.value + '%'; sendVol(parseInt(mvol.value, 10)); });
+
+// Double-tap the album art to jump: left half = back, right half = forward (custom seconds).
+let seekSecs = parseInt(localStorage.getItem('vmr-seeksecs') || '10', 10) || 10;
+let lastTap = 0, lastSide = 0;
+function flashSeek(dir) { const pop = $(dir < 0 ? '#seekpop-l' : '#seekpop-r');
+  pop.textContent = (dir < 0 ? '−' : '+') + seekSecs + 's';
+  pop.classList.remove('flash'); void pop.offsetWidth; pop.classList.add('flash'); }
+$('.artwrap').addEventListener('click', (ev) => {
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const side = (ev.clientX - rect.left) < rect.width / 2 ? -1 : 1;
+  const now = Date.now();
+  if (now - lastTap < 320 && side === lastSide) {
+    lastTap = 0; lastSide = 0;
+    if (lastNow && lastNow.duration) {
+      const pos = Math.max(0, Math.min(lastNow.duration, (lastNow.position || 0) + side * seekSecs));
+      ytm({ type:'transport', action:'seek', position: pos }, true);
+      lastNow.position = pos; seekSettleUntil = Date.now() + 1600;
+      if (!holdSeek) { seek.value = Math.round(pos / lastNow.duration * 1000); $('#tpos').textContent = fmt(pos); }
+    }
+    flashSeek(side);
+  } else { lastTap = now; lastSide = side; }
+});
+
+// Collapse the now-playing as you scroll the rail. Collapsing changes the rail's height,
+// which can re-cross the threshold and cause flip-flopping — so we use a wide hysteresis
+// gap AND lock out further toggles for the length of the transition.
+const railEl = $('#rail');
+let collapseLock = 0;
+railEl.addEventListener('scroll', () => {
+  if (window.innerWidth <= 1100) {
+    // Fade the compact bar in/out with hysteresis. The bar is fixed, so this never
+    // reflows the scroller (which is what caused the old flicker).
+    const s = railEl.scrollTop, on = railEl.classList.contains('compact');
+    if (!on && s > 190) railEl.classList.add('compact');
+    else if (on && s < 120) railEl.classList.remove('compact');
+    return;
+  }
+  if (Date.now() < collapseLock) return;
+  const s = railEl.scrollTop;
+  const isC = railEl.classList.contains('collapsed');
+  if (!isC && s > 150) { railEl.classList.add('collapsed'); collapseLock = Date.now() + 480; }
+  else if (isC && s < 24) { railEl.classList.remove('collapsed'); collapseLock = Date.now() + 480; }
+}, { passive: true });
+
+function paintNow(now, queue) {
+  lastNow = now; lastQueue = queue || [];
+  const live = now && (now.title || now.videoId);
+  const art = $('#np-art');
+  if (live && now.art) { if (art.tagName !== 'IMG') { const img = el('img','art'); img.id='np-art'; art.replaceWith(img); }
+    $('#np-art').src = now.art; }
+  else { if ($('#np-art').tagName === 'IMG') { const d = el('div','art idle'); d.id='np-art'; d.textContent='Nothing playing'; $('#np-art').replaceWith(d); } }
+  $('#np-glow').style.backgroundImage = (live && now.art) ? 'url("' + now.art + '")' : 'none';
+  $('#np-t').textContent = live ? now.title : 'Nothing playing';
+  $('#np-s').textContent = live ? (now.artist || '') : '';
+  const has = !!live;
+  $('#r-pp').disabled = !has; $('#r-next').disabled = !has; $('#r-prev').disabled = !has;
+  $('#pp-icon').firstElementChild.setAttribute('d', now && now.playing ? PAUSE : PLAY);
+  const fav = $('#np-fav');
+  if (has && now.videoId) { fav.style.display = 'flex'; fav.classList.toggle('on', isPinned({ videoId: now.videoId })); }
+  else fav.style.display = 'none';
+  $('#np-share').style.display = (has && now.videoId) ? 'flex' : 'none';
+  const like = $('#np-like');
+  if (has && now.videoId) {
+    like.style.display = 'flex';
+    if (!(now.videoId === likeSettleVid && Date.now() < likeSettleUntil))
+      like.classList.toggle('on', now.liked === 'LIKE');
+  } else like.style.display = 'none';
+  // mobile mini-player
+  $('#mini-art').src = (has && now.art) ? now.art : ART_FALLBACK;
+  $('#mini-t').textContent = has ? now.title : 'Nothing playing';
+  $('#mini-s').textContent = has ? (now.artist || '') : '';
+  $('#mini-pp-icon').firstElementChild.setAttribute('d', now && now.playing ? PAUSE : PLAY);
+  $('#mini-time').textContent = (has && now.duration) ? fmt(now.position || 0) + ' - ' + fmt(now.duration) : '';
+  // Hidden when nothing's playing, and stays hidden after you swipe it away until
+  // playback actually starts again.
+  if (cardDismissed && now && now.playing) cardDismissed = false;
+  $('#miniplayer').classList.toggle('idle', !has || cardDismissed);
+  // compact bar inside the now-playing sheet
+  $('#npbar-art').src = (has && now.art) ? now.art : ART_FALLBACK;
+  $('#npbar-t').textContent = has ? now.title : '';
+  $('#npbar-pp-icon').firstElementChild.setAttribute('d', now && now.playing ? PAUSE : PLAY);
+  const dur = (now && now.duration) || 0;
+  $('#tdur').textContent = fmt(dur); seek.disabled = !dur;
+  if (!holdSeek && Date.now() > seekSettleUntil) { $('#tpos').textContent = fmt((now && now.position) || 0);
+    seek.value = dur ? Math.round(((now && now.position)||0)/dur*1000) : 0; }
+  updateControlWidgets();
+  // Safety net: if the sheet is closed but still carries morph styles (an interrupted drag,
+  // a cancelled pointer), drop them so it can never sit there half-open.
+  if (!$('#app').classList.contains('railopen') && !railRaf && $('#rail').style.opacity !== '') railClearInline();
+  paintRailBody();
+}
+
+let queueSig = null;
+function paintRailBody() {
+  const body = $('#railbody');
+  const cur = lastNow && lastNow.videoId;
+  // Rebuilding this list every poll would interrupt taps mid-press, so only redraw
+  // when the queue contents or the current track actually change.
+  const sig = JSON.stringify([lastQueue.map(q => q.videoId), cur]);
+  if (sig === queueSig) return;
+  queueSig = sig;
+  $('#qcount').textContent = lastQueue.length ? lastQueue.length + ' tracks' : '';
+  body.innerHTML = '';
+  if (!lastQueue.length) { body.appendChild(emptyMsg('Queue is empty.')); return; }
+  let hitCur = false;
+  for (const q of lastQueue) {
+    const it = el('div', 'qitem' + (q.videoId === cur ? ' cur' : ''));
+    const meta = el('div'); meta.style.minWidth = '0'; meta.style.flex = '1';
+    meta.innerHTML = `<div class="t">${escapeHtml(q.title||'')}</div><div class="s">${escapeHtml(q.artist||'')}</div>`;
+    const rm = el('button', 'qrm'); rm.title = 'Remove from queue';
+    rm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7l1.4-1.4L10.6 10.6l6.3-6.3z"/></svg>';
+    rm.addEventListener('click', e => { e.stopPropagation(); queueRemove(q); });
+    it.append(thumbBox(q.art), meta, rm);
+    it.addEventListener('click', () => { if (q.videoId) { optimisticNow(q); ytm({ type:'play', videoId:q.videoId }); } });
+    // queue rows get the queue-specific menu, not the "add this" one
+    if (q.videoId) {
+      it.addEventListener('contextmenu', e => { e.preventDefault(); openQueueSheet(q); });
+      let lp = null;
+      it.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; lp = setTimeout(() => openQueueSheet(q), 480); });
+      const cancelLp = () => { if (lp) { clearTimeout(lp); lp = null; } };
+      it.addEventListener('pointerup', cancelLp); it.addEventListener('pointermove', cancelLp); it.addEventListener('pointercancel', cancelLp);
+    }
+    body.appendChild(it);
+  }
+}
+
+/* ==================== mixer (volume + optional EQ/meter, depending on the backend's capabilities) ==================== */
+let holdVol = false; const holdEq = {}; let volPending = null, volTimer = null;
+const eqPending = {}, eqTimer = {}; let mixerState = null;
+// After a user change, ignore polled values for a beat so the slider doesn't snap back
+// to the pre-change value before the server round-trip lands (the "rubber banding").
+let volSettleUntil = 0, seekSettleUntil = 0, likeSettleUntil = 0, likeSettleVid = null;
+
+function sendVol(v) { volPending = v; volSettleUntil = Date.now() + 650; if (volTimer) return;
+  volTimer = setTimeout(() => { volTimer = null; if (volPending !== null) { post('/api/volume', {percent:volPending}); volPending = null; } }, 60); }
+function sendEq(band, db) { eqPending[band] = db; if (eqTimer[band]) return;
+  eqTimer[band] = setTimeout(() => { eqTimer[band] = null; if (eqPending[band] !== undefined) { post('/api/eq', {band, db:eqPending[band]}); delete eqPending[band]; } }, 60); }
+const fmtEq = v => (v > 0 ? '+' : '') + Number(v).toFixed(1) + ' dB';
+
+// Mixer can appear in two places at once (main view + rail tab), so we mount an
+// independent node per container and keep them all in sync from one state.
+let mixerNodes = [];
+function buildMixer() {
+  const c = el('div', 'mx');
+  c.innerHTML = `
+    <div class="mxrow"><span class="l">Volume</span><span class="v" id="vpct">—</span></div>
+    <div class="meter"><i id="meter"></i></div>
+    <input type="range" id="vol" class="big" min="0" max="100" step="1" value="0">
+    <button id="mute">Mute</button>
+    <div class="eqhead"><span class="l">EQ</span><button id="eqreset">Reset</button></div>
+    <div class="band"><label>Bass</label><input type="range" data-band="bass" min="-12" max="12" step="0.5" value="0"><span class="bd" id="bd-bass">0.0 dB</span></div>
+    <div class="band"><label>Med</label><input type="range" data-band="mid" min="-12" max="12" step="0.5" value="0"><span class="bd" id="bd-mid">0.0 dB</span></div>
+    <div class="band"><label>High</label><input type="range" data-band="high" min="-12" max="12" step="0.5" value="0"><span class="bd" id="bd-high">0.0 dB</span></div>
+    <div class="viz mixviz"></div>
+    <div class="mixnote" id="mixnote"></div>`;
+  const vz = c.querySelector('.mixviz');
+  if (vz) { for (let i = 0; i < 24; i++) vz.appendChild(el('div', 'vbar'));
+    vz._bars = [...vz.children]; vz._vals = new Array(24).fill(0); }
+  const vol = c.querySelector('#vol');
+  vol.addEventListener('pointerdown', () => holdVol = true);
+  const relV = () => { holdVol = false; if (volPending !== null) { post('/api/volume', {percent:volPending}); volPending = null; } };
+  vol.addEventListener('pointerup', relV); vol.addEventListener('pointercancel', relV);
+  vol.addEventListener('input', () => { c.querySelector('#vpct').textContent = vol.value + '%'; sendVol(parseInt(vol.value,10)); });
+  c.querySelector('#mute').addEventListener('click', () => post('/api/volume', {muted: !c.querySelector('#mute').classList.contains('on')}));
+  c.querySelectorAll('[data-band]').forEach(inp => { const band = inp.dataset.band;
+    inp.addEventListener('pointerdown', () => holdEq[band] = true);
+    const rel = () => { holdEq[band] = false; if (eqPending[band] !== undefined) { post('/api/eq', {band, db:eqPending[band]}); delete eqPending[band]; } };
+    inp.addEventListener('pointerup', rel); inp.addEventListener('pointercancel', rel);
+    inp.addEventListener('input', () => { const v = parseFloat(inp.value); c.querySelector('#bd-'+band).textContent = fmtEq(v); sendEq(band, v); }); });
+  c.querySelector('#eqreset').addEventListener('click', async () => { for (const b of ['bass','mid','high']) await post('/api/eq', {band:b, db:0}); });
+  return c;
+}
+function paintMixer(container) {
+  let node = container.querySelector('.mx');
+  if (!node) { node = buildMixer(); container.appendChild(node); mixerNodes.push(node); }
+  mixerNodes = mixerNodes.filter(n => n.isConnected);
+  applyMixer();
+}
+function applyMixer() {
+  if (!mixerState) return; const st = mixerState;
+  const v = st.volume || {}, e = st.engine || {}, eq = e.eq || {};
+  const volSettled = Date.now() > volSettleUntil;
+  // rail master slider
+  const mv = $('#mvol');
+  if (mv) { if (!holdVol && volSettled && v.available) { mv.value = v.percent; $('#mvolpct').textContent = v.percent + '%'; } mv.disabled = !v.available; }
+  const caps = st.capabilities || {};
+  const notes = []; const r = e.routing || {};
+  if (!v.available) notes.push('<b>No audio output found on the host.</b>');
+  if (caps.engine_label && e.connected && r.A1 === false && r.A2 === false) notes.push('<b>Not routed to any output.</b>');
+  if (caps.engine_label && !e.connected) notes.push('<b>' + caps.engine_label + ' engine not reachable.</b>');
+  if (v.muted) notes.push('<b>Muted.</b>');
+  if (v.available) notes.push('Controls the host\'s main volume' + (v.device ? ' (' + v.device + ')' : '') + ', in sync with its volume keys.');
+  document.querySelectorAll('.viz').forEach(z => { z.style.display = caps.meter ? '' : 'none'; });
+  for (const node of mixerNodes) {
+    if (!node.isConnected) continue;
+    const vol = node.querySelector('#vol');
+    if (!holdVol && volSettled && v.available) { vol.value = v.percent; node.querySelector('#vpct').textContent = v.percent + '%'; }
+    vol.disabled = !v.available;
+    const mute = node.querySelector('#mute'); mute.classList.toggle('on', !!v.muted); mute.textContent = v.muted ? 'Muted' : 'Mute';
+    node.querySelector('#meter').style.width = Math.min(100, (e.level||0)*140) + '%';
+    node.querySelector('.meter').style.display = caps.meter ? '' : 'none';
+    for (const q of node.querySelectorAll('.eqhead, .band')) q.style.display = caps.eq ? '' : 'none';
+    const mn = node.querySelector('#mixnote');
+    if (node.classList.contains('eqonly') && !caps.eq) { mn.style.display = 'block'; mn.innerHTML = 'EQ isn\'t available with this audio backend.'; continue; }
+    for (const band of ['bass','mid','high']) { const val = eq[band]; if (val == null || holdEq[band]) continue;
+      node.querySelector('[data-band="'+band+'"]').value = val; node.querySelector('#bd-'+band).textContent = fmtEq(val); }
+    node.querySelector('#mixnote').innerHTML = notes.join(' ');
+  }
+}
+
+/* ==================== polling ==================== */
+let wasConnected = null;   // null = first poll, so we don't toast on startup
+let cardDismissed = false; // set when you swipe the mini-player away
+// When the app is hidden/backgrounded we barely poll (saves a lot of battery); when
+// visible we poll at a normal rate. The mixer only needs a fast rate while it's on screen.
+async function pollMusic() {
+  if (!document.hidden) {
+    let ok = false;
+    try { const r = await fetch('/api/ytm/state'); const st = await r.json();
+      ok = !!st.connected; lastConnected = ok;
+      $('#ndot').className = 'dot ' + (ok ? 'ok' : 'bad');
+      paintNow(ok ? (st.now || {}) : {}, ok ? (st.queue || []) : []);
+    } catch (e) { $('#ndot').className = 'dot bad'; }
+    // tell the user when the link drops / comes back
+    if (wasConnected === true && !ok) toast('Disconnected — reconnecting…');
+    else if (wasConnected === false && ok) toast('Reconnected');
+    // Settings shows connection state, so refresh it live rather than making the user
+    // navigate away and back to see the change.
+    if (wasConnected !== null && wasConnected !== ok && view === 'settings') render();
+    wasConnected = ok;
+  }
+  setTimeout(pollMusic, document.hidden ? 5000 : 1000);
+}
+function mixerActive() {
+  return !document.hidden && (view === 'mixer' ||
+    $('#app').classList.contains('railopen') ||                       // sheet shows the master slider
+    document.querySelector('.widget[data-wid="mixer"], .widget[data-wid="eq"], .viz') ||
+    (window.matchMedia('(min-width:1101px)').matches));  // desktop shows the mixer meter in the rail
+}
+async function pollMixer() {
+  const fast = mixerActive();
+  try { const r = await fetch('/api/state'); mixerState = await r.json(); applyMixer(); } catch (e) {}
+  setTimeout(pollMixer, fast ? 450 : 1200);   // always poll, just slower when nothing shows it
+}
+
+document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => {
+  $('#app').classList.remove('editwidgets');   // tapping a nav item saves & exits edit mode
+  setView(b.dataset.view);
+}));
+applyTheme(localStorage.getItem('vmr-theme') || 'dark');
+$('#app').classList.toggle('nolabels', !lsGet('vmr-navlabels', true));
+// Called by the Cue shell when the device wakes — the WebView's timers get frozen while
+// the screen is off, so kick everything back to life instead of sitting there stale.
+window.__cueResume = async () => {
+  try {
+    const r = await fetch('/api/ytm/state', { cache:'no-store' }); const st = await r.json();
+    lastConnected = !!st.connected;
+    paintNow(st.connected ? (st.now || {}) : {}, st.connected ? (st.queue || []) : []);
+    favPull();
+  } catch (e) { toast('Disconnected — reconnecting…'); }
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) window.__cueResume(); });
+
+/* Keyboard control (desktop). Space = play/pause, arrows = seek/volume,
+   shift+arrows = skip, / = search, Esc = close the now-playing sheet. */
+document.addEventListener('keydown', e => {
+  // e.target can be document (or a non-Element), so guard before using Element methods
+  const t = e.target;
+  if (t instanceof Element && t.closest('input, textarea, [contenteditable]')) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const seekTo = d => {
+    if (!lastNow || !lastNow.duration) return;
+    const pos = Math.max(0, Math.min(lastNow.duration, (lastNow.position || 0) + d));
+    lastNow.position = pos; seekSettleUntil = Date.now() + 1600;
+    ytm({ type:'transport', action:'seek', position: pos }, true);
+    showHud({ label:(d > 0 ? '+' : '−') + Math.abs(d) + 's', icon:false });
+  };
+  const bumpVol = d => { post('/api/volume', { delta:d });
+    setTimeout(() => window.__cueVolumeBump && window.__cueVolumeBump(), 160); };
+  switch (e.key) {
+    case ' ': case 'k': e.preventDefault(); ytm({ type:'transport', action:'playpause' }, true); break;
+    case 'ArrowRight': e.preventDefault();
+      if (e.shiftKey) { ytm({ type:'transport', action:'next' }, true); showHud({ label:'Next track', icon:false }); }
+      else seekTo(seekSecs); break;
+    case 'ArrowLeft': e.preventDefault();
+      if (e.shiftKey) { ytm({ type:'transport', action:'prev' }, true); showHud({ label:'Previous track', icon:false }); }
+      else seekTo(-seekSecs); break;
+    case 'ArrowUp': e.preventDefault(); bumpVol(3); break;
+    case 'ArrowDown': e.preventDefault(); bumpVol(-3); break;
+    case '/': e.preventDefault(); setView('search'); break;
+    case 'Escape': if ($('#app').classList.contains('railopen')) history.back(); break;
+  }
+});
+
+setView('home'); setRailTab('queue'); pollMusic(); pollMixer(); favPull();
+setInterval(favPull, 20000);   // keep favourites in step across devices
+setTimeout(moveNavPill, 80);   // once layout settles, park the pill on the active tab
+</script>
+</body>
+</html>

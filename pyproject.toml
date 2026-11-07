@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pocketfader"
+version = "0.1.0"
+description = "Control your computer's volume and music from your phone. Includes a remote for YouTube Music."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = []   # the Linux build is standard-library only
+
+[project.optional-dependencies]
+# Windows hosts only (volume + media session + optional Voicemeeter extras).
+windows = [
+  "pycaw; sys_platform == 'win32'",
+  "winrt-runtime; sys_platform == 'win32'",
+  "winrt-Windows.Media.Control; sys_platform == 'win32'",
+  "winrt-Windows.Foundation; sys_platform == 'win32'",
+  "winrt-Windows.Foundation.Collections; sys_platform == 'win32'",
+  "winrt-Windows.Storage.Streams; sys_platform == 'win32'",
+]
+
+[project.scripts]
+pocketfader = "pocketfader.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["pocketfader*"]
+
+[tool.setuptools.package-data]
+pocketfader = ["static/*"]

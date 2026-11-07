@@ -1,0 +1,12 @@
+# Windows master volume (drives Strip[2].Gain indirectly, via VMWV)
+pycaw
+
+# Media transport (GSMTC / Windows.Media.Control).
+# NOT winsdk -- that's the old monolithic projection and has no Python 3.14 wheels.
+# These modular winrt-* packages do. Foundation.Collections is a transitive import that
+# pip won't pull in on its own.
+winrt-runtime
+winrt-Windows.Media.Control
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+winrt-Windows.Storage.Streams
