@@ -33,5 +33,5 @@ jobs:
       - name: Show the APK's minimum Android version
         run: |
           AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
-          "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep -E "^package|sdkVersion|targetSdkVersion|application-label:"
+          "$AAPT" dump badging android/app/build/outputs/apk/release/app-release.apk | grep -E "^package|[sS]dkVersion|application-label:"
           ls -la android/app/build/outputs/apk/release/app-release.apk
