@@ -472,11 +472,14 @@
     });
     const btn = await waitFor(() => findMenuButton(row), 1500);
     if (!btn) return { ok: false, error: "no_menu" };
+    const vid = row.data && row.data.videoId;
     btn.click();
-    // only look at items that are actually visible (the popup is a shared, reused element)
+    await sleep(120);
+    // The popup is one shared, reused element, so a leftover item from the previous menu can
+    // still be in the DOM. Only accept an item whose own endpoint mentions THIS row's video.
     const item = await waitFor(() => [...document.querySelectorAll("ytmusic-menu-service-item-renderer")]
-      .filter((x) => x.offsetParent !== null)
-      .find((x) => (x.textContent || "").trim().startsWith(label)), 1800);
+      .filter((x) => (x.textContent || "").trim().startsWith(label) &&
+        (!vid || JSON.stringify(x.data || {}).includes(vid)))[0], 1800);
     if (!item) { escapeMenu(); return { ok: false, error: "menu_item_missing" }; }
     item.click();
     await sleep(260);
@@ -518,10 +521,23 @@
     if (from === dest) return { ok: true, noop: true };
     const target = U.slice();
     target.splice(dest, 0, target.splice(from, 1)[0]);
-    let k = 0; while (k < len && target[k] === U[k]) k++;
-    let l = len - 1; while (l >= 0 && target[l] === U[l]) l--;
-    const useFront = l + 1 <= len - k;
-    const seq = useFront ? target.slice(0, l + 1).reverse() : target.slice(k);
+    // Two ways to build the target, each as few menu actions as possible:
+    //   front: "Play next" the first m+1 target rows, in reverse  -> [target[0..m]] ++ (U minus those)
+    //   end:   "Add to queue" the target rows from m on, in order -> (U minus those) ++ [target[m..]]
+    // so pick the smallest set whose leftover rows already sit in the right relative order.
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    let mP = len - 1;
+    for (let m = 0; m < len; m++) {
+      const S = new Set(target.slice(0, m + 1));
+      if (same(U.filter((u) => !S.has(u)), target.slice(m + 1))) { mP = m; break; }
+    }
+    let mE = 0;
+    for (let m = len - 1; m >= 0; m--) {
+      const S = new Set(target.slice(m));
+      if (same(U.filter((u) => !S.has(u)), target.slice(0, m))) { mE = m; break; }
+    }
+    const useFront = mP + 1 <= len - mE;
+    const seq = useFront ? target.slice(0, mP + 1).reverse() : target.slice(mE);
     if (seq.length > 40) return { ok: false, error: "move_too_large" };
     const want = target.map((t) => t.videoId);
 
