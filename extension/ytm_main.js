@@ -568,6 +568,21 @@
   // Legacy name used by older clients.
   async function queueItemMenu(videoId, label) { return rowMenu(findRow({ videoId }), label); }
 
+  /* --- lyrics: the text YouTube Music itself shows in its Lyrics tab (plain, not time-synced) --- */
+  async function lyrics(videoId) {
+    if (!videoId) return { error: "no_video" };
+    const nx = await innertube("next", { videoId, isAudioOnly: true });
+    const tabs = deepFind(nx, "tabRenderer", []);
+    const tab = tabs.find((t) => /^MPLY/.test(t?.endpoint?.browseEndpoint?.browseId || ""));
+    const browseId = tab?.endpoint?.browseEndpoint?.browseId;
+    if (!browseId) return { error: "no_lyrics" };
+    const j = await innertube("browse", { browseId });
+    const shelf = deepFind(j, "musicDescriptionShelfRenderer", [])[0];
+    const text = runText(shelf?.description);
+    if (!text) return { error: "no_lyrics" };
+    return { text, credit: runText(shelf?.footer) || undefined };
+  }
+
   /* --- saved playlists (authenticated InnerTube; same endpoints the YTM site itself uses) --- */
   const plId = (id) => String(id || "").replace(/^VL/, "");
   async function playlistEdit(playlistId, actions) {
@@ -779,6 +794,7 @@
         case "home": return { sections: await home() };
         case "playlists": return { playlists: await playlists() };
         case "playlistItems": return { items: await playlistItems(cmd.playlistId || cmd.browseId) };
+        case "lyrics": return await lyrics(cmd.videoId);
         case "nowplaying": return { now: nowPlaying(), queue: readQueue() };
         case "probe": return probe();
         default: return { ok: false, error: "unknown_type", type: cmd.type };

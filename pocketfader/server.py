@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import __version__
 from .bridge import Bridge
+from .lyrics import LyricsService
 from .config import DEFAULT_PORT, JsonFile, config_dir
 
 STATIC = Path(__file__).parent / "static"
@@ -38,9 +39,10 @@ COOKIE = "pf_token"
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=()):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
+        self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
         self.token = token
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
@@ -65,6 +67,7 @@ class App:
             "engine_label": self.engine.label,
             "media": bool(self.media.snapshot().get("available")),
             "ytm_bridge": self.bridge.connected,
+            "lyrics": True,
         }
 
     def state(self):
@@ -95,6 +98,12 @@ class App:
                     "playing": bool(m.get("playing")), "position": m.get("position", 0),
                     "duration": m.get("duration", 0), "app": m.get("name") or m.get("app")},
         }
+
+    def _ytm_lyrics(self, video_id):
+        """The YouTube Music page's own lyrics, via the extension (None when it isn't connected)."""
+        if not self.bridge.connected:
+            return None
+        return self.bridge.request({"type": "lyrics", "videoId": video_id}, timeout=8.0)
 
     def ytm_command(self, body):
         """Extension first (full YT Music control). Transport-only fallback to the host player."""
@@ -251,6 +260,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(401, {"error": "token required"})
         return handler(u.path)
 
+    def _lyrics(self, q):
+        one = lambda k, d="": (q.get(k) or [d])[0]  # noqa: E731
+        title, artist, album = one("title").strip(), one("artist").strip(), one("album").strip()
+        if not title or max(len(title), len(artist), len(album)) > 300:
+            return self._json(400, {"error": "title is required (and everything under 300 characters)"})
+        try:
+            dur = float(one("duration", "0") or 0)
+        except ValueError:
+            return self._json(400, {"error": "duration must be a number of seconds"})
+        if not 0 <= dur <= 36000:
+            return self._json(400, {"error": "duration out of range"})
+        out = self.app.lyrics.lookup(title, artist, album, dur, video_id=one("videoId")[:32],
+                                     source=one("source") or None, refresh=one("refresh") == "1")
+        return self._json(200, out)
+
     # ---- GET ----
     def _get(self, path):
         app = self.app
@@ -258,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.bridge.poll() or {})
         if path == "/api/ytm/state":
             return self._json(200, app.ytm_state())
+        if path == "/api/lyrics":
+            return self._lyrics(parse_qs(urlsplit(self.path).query))
         if path == "/api/prefs":
             return self._json(200, app.prefs.load())
         if path == "/api/state":
