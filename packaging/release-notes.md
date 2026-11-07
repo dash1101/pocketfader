@@ -16,31 +16,23 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.4
+### What's new in alpha.5
 
-- **Word-by-word lyrics** (Apple Music style): the line being sung fills in word by word, and letter by letter inside
-  the current word, in the Android app and the web app. It uses KuGou's word timings when it has the song; other
-  songs keep line-by-line sync. Instrumental breaks now show a large ♪ that lights up while the break lasts.
-- **Faster lyrics**: all sources are asked at once, the answer comes back as soon as something synced is in (about
-  2 s cold, instant when cached), and the computer looks lyrics up in the background when a track changes (and for the
-  next two), so they are usually ready before you open them.
-- **Closer sync**: the playback position the computer reports is now brought up to date, the extension reports it
-  every quarter second, and the app measures it from the middle of the request. A **Sync** setting nudges the lyrics
-  earlier or later (−2 s to +2 s) if your device still runs a little off.
-- **Smoother Up next on slow tablets**: rows are lighter (small pictures with rounded corners baked in, one shared
-  actions dialog instead of a menu per row).
-- **Updates**: the computer checks GitHub for new releases (works for a private repository through `gh auth login` or
-  `GITHUB_TOKEN`). The Android app shows a banner and has Settings → Updates to download and install through the
-  computer; the desktop window has **Update now**; `pocketfader --update` does the same from a terminal.
-- **Extension 1.3** (quarter-second position updates). Reload it after updating.
+- **Shuffle and loop errors fixed (needs the extension reloaded)**: some YouTube Music layouts hide the player bar in a
+  shadow tree, so the extension couldn't find the shuffle and loop buttons. It now finds them there, or by their label,
+  and a failure says what it saw. **Reload extension 1.4 and refresh the YouTube Music tab.**
+- **Buttons no longer flicker**: shuffle, loop, autoplay, like and play/pause keep what you just tapped for a few seconds,
+  so a poll that arrives before the computer has applied the change can't flip them back and forth. Lyrics no longer reload
+  when the track length arrives a moment after the title, and the source chips respond at once.
+- **Jump to the current line**: a button appears when the line being sung is off screen.
+- **Lyrics layout** (Settings → Lyrics, or **Aa Layout** on the lyrics screen): alignment (left, centered, right), text size,
+  line spacing and how faint the other lines are, with a live sample.
+- **A new look** for the Android app: the Now playing screen takes its colour from the cover and the current lyric uses
+  it too, a bigger cover that eases back when paused, bolder titles, playlists as a cover grid, icons on the Settings sections.
+- Earlier in alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and updates.
 
-**Updating the Android app in place needs a signing key.** This is the first release prepared for it: Android only
-installs an update over an installed app when both use the same key, and earlier builds used a throwaway key, so
-alpha.3 has to be uninstalled once. See `docs/RELEASING.md`. If the repository has no signing secrets set up, this
-release is still signed with a throwaway key and cannot be installed over an existing copy.
-
-Earlier: alpha.3 (Settings screen, native Library, queue and lyrics on the Playing page, desktop window) and
-alpha.2 (native Android app, queue control, playlist editing, outputs, equalizer, Cloudflare guide).
+**In-place Android updates still need the signing key uploaded to the repository** (see `docs/RELEASING.md`). Until then this
+release is signed with a throwaway key and must be installed after uninstalling the previous one.
 
 ### Quick start
 
