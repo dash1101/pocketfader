@@ -823,6 +823,17 @@
     window.postMessage({ __vmr: "state", state }, "*");
   }, 1000);
 
+  // A faster, now-playing-only beat so the playback position the server hands out (and the lyrics that
+  // follow it) is at most a quarter of a second old. The full state above still carries the queue.
+  let lastFast = "";
+  setInterval(() => {
+    const now = nowPlaying();
+    const sig = JSON.stringify([now.videoId, now.playing, Math.round(now.position * 4)]);
+    if (sig === lastFast) return;
+    lastFast = sig;
+    window.postMessage({ __vmr: "state", state: { now, ts: Date.now(), partial: true } }, "*");
+  }, 250);
+
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");
   console.log("[Pocketfader] YTM main-world bridge ready");

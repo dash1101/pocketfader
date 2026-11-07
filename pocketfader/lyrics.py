@@ -7,20 +7,20 @@ Romanization and translations are included when a provider supplies them.
 Providers are third-party services and are best-effort: any of them can be slow, change, or have
 nothing for a song. Only the track's title, artist, album and length are ever sent to them.
 """
+import base64
 import json
 import re
 import threading
+import zlib
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeout
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from . import __version__
 from .romanize import romanize
 
-PROVIDERS = (("lrclib", "LRCLIB"), ("netease", "NetEase"), ("ytm", "YouTube Music"))
+PROVIDERS = (("kugou", "KuGou"), ("lrclib", "LRCLIB"), ("netease", "NetEase"), ("ytm", "YouTube Music"))
 _BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 
@@ -86,12 +86,12 @@ def _plain_lines(text):
     return [{"t": None, "text": ln.rstrip()} for ln in (text or "").splitlines()]
 
 
-def _result(source, label, synced_text=None, plain_text=None, translation=None, roman=None, credit=None):
-    lines = []
+def _result(source, label, synced_text=None, plain_text=None, translation=None, roman=None, credit=None, lines=None):
+    lines = list(lines) if lines else []
     if synced_text:
         lines = [{"t": round(t, 2), "text": s} for t, s in parse_lrc(synced_text)]
-    synced = bool(lines)
-    if not synced and plain_text:
+    synced = bool(lines) and any(ln.get("t") is not None for ln in lines)
+    if not lines and plain_text:
         lines = _plain_lines(plain_text)
     if not any(ln["text"].strip() for ln in lines):
         return None
@@ -203,68 +203,177 @@ def ytm(fetch, title, artist, album, duration, video_id="", ytm_lyrics=None, **_
     return _result("ytm", "YouTube Music", plain_text=r.get("text"), credit=r.get("credit"))
 
 
-_FUNCS = {"lrclib": lrclib, "netease": netease, "ytm": ytm}
+
+# ------------------------------------------------------------------ KuGou (word-by-word)
+_KRC_KEY = bytes([0x40, 0x47, 0x61, 0x77, 0x5E, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2D, 0xCE, 0xD2, 0x6E, 0x69])
+_KRC_LINE = re.compile(r"^\[(\d+),(\d+)\](.*)$")
+_KRC_WORD = re.compile(r"<(\d+),(\d+),\d+>([^<]*)")
+_KG_HEADERS = {"User-Agent": _BROWSER_UA}
+
+
+def parse_krc(text):
+    """KRC text -> lines with per-word timings, plus gap lines for long instrumental breaks."""
+    out = []
+    for raw in (text or "").splitlines():
+        m = _KRC_LINE.match(raw.strip())
+        if not m:
+            continue
+        start, dur, body = int(m.group(1)), int(m.group(2)), m.group(3)
+        words = [[round((start + int(o)) / 1000.0, 2), round((start + int(o) + int(d)) / 1000.0, 2), w]
+                 for o, d, w in _KRC_WORD.findall(body)]
+        line = "".join(w[2] for w in words).strip() if words else _KRC_WORD.sub("", body).strip()
+        if not line:
+            continue
+        out.append({"t": round(start / 1000.0, 2), "end": round((start + dur) / 1000.0, 2), "text": line, "w": words})
+    lines = []
+    prev_end = 0.0
+    for ln in out:                                  # a ♪ line wherever the music plays on its own for a while
+        if ln["t"] - prev_end > 5.0:
+            lines.append({"t": round(prev_end + 0.5, 2), "text": ""})
+        lines.append({k: v for k, v in ln.items() if k != "end"})
+        prev_end = ln["end"]
+    return lines
+
+
+def kugou(fetch, title, artist, album, duration, **_):
+    kw = f"{title} {artist}".strip()
+    s = _json(fetch("https://mobileservice.kugou.com/api/v3/search/song?" +
+                    urlencode({"format": "json", "keyword": kw, "page": 1, "pagesize": 6}), _KG_HEADERS))
+    songs = ((s or {}).get("data") or {}).get("info") or []
+    best, best_score = None, 0.5
+    for c in songs:
+        sc = _score(c.get("songname", ""), re.split(r"[、,&/]", c.get("singername", "")), c.get("duration"), title, artist, duration)
+        if sc > best_score:
+            best, best_score = c, sc
+    if not best:
+        return None
+    c = _json(fetch("https://lyrics.kugou.com/search?" + urlencode(
+        {"ver": 1, "man": "yes", "client": "pc", "keyword": kw, "duration": int(best.get("duration", 0)) * 1000,
+         "hash": best.get("hash", "")}), _KG_HEADERS))
+    cands = (c or {}).get("candidates") or []
+    if not cands:
+        return None
+    d = _json(fetch("https://lyrics.kugou.com/download?" + urlencode(
+        {"ver": 1, "client": "pc", "id": cands[0]["id"], "accesskey": cands[0]["accesskey"], "fmt": "krc", "charset": "utf8"}),
+        _KG_HEADERS))
+    try:
+        raw = base64.b64decode((d or {})["content"])[4:]
+        text = zlib.decompress(bytes(b ^ _KRC_KEY[i % 16] for i, b in enumerate(raw))).decode("utf-8", "replace")
+    except (KeyError, ValueError, zlib.error):
+        return None
+    lines = parse_krc(text)
+    if not any(ln["text"] for ln in lines):
+        return None
+    return _result("kugou", "KuGou", lines=lines)
+
+
+_FUNCS = {"kugou": kugou, "lrclib": lrclib, "netease": netease, "ytm": ytm}
 
 
 # ------------------------------------------------------------------ service
+def _best(results):
+    """word-by-word beats line-synced beats plain, in provider order."""
+    found = [results[p] for p, _ in PROVIDERS if results.get(p)]
+    for pred in (lambda r: r["synced"] and any("w" in ln for ln in r["lines"]), lambda r: r["synced"], lambda r: True):
+        for r in found:
+            if pred(r):
+                return r
+    return None
+
+
+class _Entry:
+    def __init__(self):
+        self.results = {}
+        self.pending = {pid for pid, _ in PROVIDERS}
+        self.born = time.time()
+        self.cond = threading.Condition()
+
+
 class LyricsService:
-    def __init__(self, fetch=None, ytm_lyrics=None, ttl=6 * 3600, max_entries=300):
+    """Asks every source at once. A lookup answers as soon as something good is in (and gives the
+    word-by-word source a moment longer); slower sources keep filling the cache in the background, and
+    `prefetch` warms it before the song starts."""
+
+    def __init__(self, fetch=None, ytm_lyrics=None, ttl=6 * 3600, max_entries=300, grace=2.5):
         self.fetch = fetch or http_get
         self.ytm_lyrics = ytm_lyrics
-        self.ttl, self.max = ttl, max_entries
+        self.ttl, self.max, self.grace = ttl, max_entries, grace
         self._cache = {}
         self._lock = threading.Lock()
+        self._gate = threading.Semaphore(2)       # prefetching must never hog the server
 
-    def _gather(self, title, artist, album, duration, video_id):
-        results = {}
+    @staticmethod
+    def _key(title, artist, duration):
+        return (_norm(title), _norm(artist), int(round(duration or 0)) // 10)
+
+    def _start(self, key, title, artist, album, duration, video_id, refresh=False):
+        with self._lock:
+            e = self._cache.get(key)
+            if e and not refresh and (e.pending or time.time() - e.born < self.ttl):
+                return e
+            if len(self._cache) >= self.max:
+                self._cache.pop(min(self._cache, key=lambda k: self._cache[k].born), None)
+            e = self._cache[key] = _Entry()
 
         def run(pid):
             try:
-                return pid, _FUNCS[pid](self.fetch, title, artist, album, duration,
-                                        video_id=video_id, ytm_lyrics=self.ytm_lyrics)
+                res = _FUNCS[pid](self.fetch, title, artist, album, duration or 0, video_id=video_id, ytm_lyrics=self.ytm_lyrics)
             except Exception:
-                return pid, None
+                res = None
+            with e.cond:
+                e.results[pid] = res
+                e.pending.discard(pid)
+                e.cond.notify_all()
 
-        pool = ThreadPoolExecutor(max_workers=len(PROVIDERS))
-        futures = [pool.submit(run, pid) for pid, _ in PROVIDERS]
-        deadline = time.time() + 9.0
-        for f in futures:
-            try:
-                pid, res = f.result(timeout=max(0.1, deadline - time.time()))
-                results[pid] = res
-            except (FutureTimeout, Exception):
-                pass
-        pool.shutdown(wait=False)
-        return results
+        for pid, _ in PROVIDERS:
+            threading.Thread(target=run, args=(pid,), daemon=True, name=f"lyrics-{pid}").start()
+        return e
 
-    def lookup(self, title, artist="", album="", duration=0.0, video_id="", source=None, refresh=False):
-        key = (_norm(title), _norm(artist), int(round(duration or 0)) // 3)
-        now = time.time()
+    def prefetch(self, title, artist="", album="", duration=0.0, video_id=""):
+        """Warm the cache for a track (fire and forget)."""
+        if not title:
+            return
+        key = self._key(title, artist, duration)
         with self._lock:
-            hit = self._cache.get(key)
-            if hit and not refresh and now - hit[0] < self.ttl:
-                results = hit[1]
-            else:
-                results = None
-        if results is None:
-            results = self._gather(title, artist, album, duration or 0, video_id)
-            with self._lock:
-                if len(self._cache) >= self.max:
-                    self._cache.pop(min(self._cache, key=lambda k: self._cache[k][0]), None)
-                self._cache[key] = (now, results)
-        sources = [{"id": pid, "label": label, "found": bool(results.get(pid)),
-                    "synced": bool(results.get(pid) and results[pid]["synced"])} for pid, label in PROVIDERS]
+            if key in self._cache:
+                return
+
+        def go():
+            with self._gate:
+                e = self._start(key, title, artist, album, duration, video_id)
+                with e.cond:
+                    e.cond.wait_for(lambda: not e.pending, timeout=15)
+        threading.Thread(target=go, daemon=True, name="lyrics-prefetch").start()
+
+    def lookup(self, title, artist="", album="", duration=0.0, video_id="", source=None, refresh=False, timeout=9.0):
+        e = self._start(self._key(title, artist, duration), title, artist, album, duration, video_id, refresh)
+        deadline = time.time() + timeout
+        with e.cond:
+            while e.pending:
+                now = time.time()
+                done = {p: r for p, r in e.results.items() if r}
+                if now >= deadline or (source and source in done):
+                    break
+                # something time-synced is in: only wait a little longer (counted from when the
+                # search began) for the word-by-word source, then answer and let the rest finish
+                if done and p_ready(done) and now >= e.born + self.grace:
+                    break
+                e.cond.wait(timeout=0.1)
+            results = dict(e.results)
+            pending = sorted(e.pending)
+        sources = [{"id": pid, "label": label, "found": bool(results.get(pid)), "pending": pid in pending,
+                    "synced": bool(results.get(pid) and results[pid]["synced"]),
+                    "words": bool(results.get(pid) and any("w" in ln for ln in results[pid]["lines"]))}
+                   for pid, label in PROVIDERS]
         chosen = results.get(source) if source else None
-        if not chosen:
-            found = [results[p] for p, _ in PROVIDERS if results.get(p)]
-            chosen = next((r for r in found if r["synced"]), found[0] if found else None)
-        return {"found": bool(chosen), "source": chosen["source"] if chosen else None,
-                "sources": sources, "lyrics": self._finish(chosen, results)}
+        chosen = chosen or _best(results)
+        return {"found": bool(chosen), "source": chosen["source"] if chosen else None, "sources": sources,
+                "pending": bool(pending), "lyrics": self._finish(chosen, results)}
 
     @staticmethod
     def _finish(chosen, results):
-        """A copy of the chosen lyrics, borrowing real romanization / translations from the other
-        providers when this one has none (matched by line timing)."""
+        """A copy of the chosen lyrics, borrowing real romanization / translations / word timings from
+        the other providers when this one has none (matched by line timing)."""
         if not chosen:
             return None
         lines = [dict(ln) for ln in chosen["lines"]]
@@ -272,12 +381,12 @@ class LyricsService:
             for other in results.values():
                 if not other or other is chosen or not other["synced"]:
                     continue
-                pool = [ln for ln in other["lines"] if ln["t"] is not None]
+                pool = [ln for ln in other["lines"] if ln.get("t") is not None]
                 for ln in lines:
                     if ln["t"] is None or not ln["text"].strip():
                         continue
                     need_rom = "rom" not in ln or ln.get("_d")
-                    if not (need_rom or "tr" not in ln):
+                    if not (need_rom or "tr" not in ln or "w" not in ln):
                         continue
                     near = min(pool, key=lambda p: abs(p["t"] - ln["t"]), default=None)
                     if near is None or abs(near["t"] - ln["t"]) > 0.8:
@@ -287,6 +396,13 @@ class LyricsService:
                         ln.pop("_d", None)
                     if "tr" not in ln and near.get("tr"):
                         ln["tr"] = near["tr"]
+                    if "w" not in ln and near.get("w") and _norm(near["text"]) == _norm(ln["text"]):
+                        ln["w"] = near["w"]
         for ln in lines:
             ln.pop("_d", None)
         return {**chosen, "lines": lines}
+
+
+def p_ready(done):
+    """True once a time-synced result is in (so the wait for slower sources can be cut short)."""
+    return any(r["synced"] for r in done.values())

@@ -52,7 +52,10 @@ class Bridge:
         with self._lock:
             self._last_seen = time.time()
             if isinstance(state, dict):
+                if state.get("partial") and self._state:      # a quick "now playing" update: keep the queue we have
+                    state = {**self._state, "now": state.get("now", self._state.get("now")), "ts": state.get("ts")}
                 self._state = state
+                self._state_at = time.time()
 
     # ---- client side ----------------------------------------------------
     def request(self, command, timeout=10.0):
@@ -75,6 +78,12 @@ class Bridge:
     def get_state(self):
         with self._lock:
             snap = dict(self._state)
+            at = getattr(self, "_state_at", 0.0)
+        now = snap.get("now")
+        if isinstance(now, dict) and now.get("playing") and isinstance(now.get("position"), (int, float)) and at:
+            # the position was sampled when the extension last pushed; bring it up to date so
+            # clients (and the lyrics) aren't up to a second behind
+            snap["now"] = {**now, "position": now["position"] + max(0.0, min(5.0, time.time() - at))}
         snap["connected"] = self.connected
         return snap
 

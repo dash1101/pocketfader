@@ -34,12 +34,30 @@ def build_parser():
     p.add_argument("--dry-run", action="store_true",
                    help="read real state but never change volume, mute, or playback")
     p.add_argument("--gui", action="store_true", help="open the desktop window instead of running the server here")
+    p.add_argument("--check-update", action="store_true", help="look for a newer release and exit")
+    p.add_argument("--update", action="store_true", help="install the newest release (pip installs only) and exit")
     p.add_argument("--version", action="version", version=__version__)
     return p
 
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
+    if a.check_update or a.update:
+        from .updater import Updater
+        up = Updater()
+        info = up.latest(refresh=True)
+        if info.get("error"):
+            sys.exit(f"Couldn't check for updates: {info['error']}")
+        if not info.get("available"):
+            print(f"You're up to date ({__version__}).")
+            return
+        print(f"New release: {info['latest']} (you have {__version__}).  {info.get('url', '')}")
+        if a.update:
+            ok, msg = up.update_self()
+            print(msg)
+            sys.exit(0 if ok else 1)
+        print("Run `pocketfader --update` to install it.")
+        return
     if a.gui:
         from .gui import main as gui_main
         return gui_main()

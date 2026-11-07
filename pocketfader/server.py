@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import __version__
 from .bridge import Bridge
 from .lyrics import LyricsService
+from .updater import Updater
 from .config import DEFAULT_PORT, JsonFile, config_dir
 
 STATIC = Path(__file__).parent / "static"
@@ -39,10 +40,11 @@ COOKIE = "pf_token"
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
+        self.updater = updater or Updater()
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
         self.token = token
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
@@ -98,6 +100,26 @@ class App:
                     "playing": bool(m.get("playing")), "position": m.get("position", 0),
                     "duration": m.get("duration", 0), "app": m.get("name") or m.get("app")},
         }
+
+    def warm_lyrics(self, state):
+        """When the track changes, look its lyrics (and the next couple of tracks') up in the background,
+        so they are already there when someone opens the lyrics."""
+        try:
+            now = state.get("now") or {}
+            vid = now.get("videoId")
+            if not vid or vid == getattr(self, "_warm_vid", None):
+                return
+            self._warm_vid = vid
+            self.lyrics.prefetch(now.get("title", ""), now.get("artist", ""), "", now.get("duration") or 0, vid)
+            rows = [q for q in (state.get("queue") or []) if q.get("section", "queue") == "queue"]
+            cur = next((i for i, q in enumerate(rows) if q.get("selected")), -1)
+            for q in rows[cur + 1:cur + 3] if cur >= 0 else []:
+                secs = 0
+                for part in str(q.get("duration") or "0").split(":"):
+                    secs = secs * 60 + (int(part) if part.isdigit() else 0)
+                self.lyrics.prefetch(q.get("title", ""), q.get("artist", ""), "", secs, q.get("videoId", ""))
+        except Exception:
+            pass
 
     def _ytm_lyrics(self, video_id):
         """The YouTube Music page's own lyrics, via the extension (None when it isn't connected)."""
@@ -284,6 +306,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.ytm_state())
         if path == "/api/lyrics":
             return self._lyrics(parse_qs(urlsplit(self.path).query))
+        if path == "/api/update":
+            q = parse_qs(urlsplit(self.path).query)
+            info = dict(app.updater.latest(refresh=(q.get("refresh") or [""])[0] == "1"))
+            info["self_update"] = app.updater.can_update_self()
+            return self._json(200, info)
+        if path == "/api/update/apk":
+            try:
+                f = app.updater.apk()
+            except Exception as e:
+                return self._json(502, {"error": str(e)})
+            return self._send(200, f.read_bytes(), "application/vnd.android.package-archive",
+                              [("Content-Disposition", f'attachment; filename="{f.name}"')])
         if path == "/api/prefs":
             return self._json(200, app.prefs.load())
         if path == "/api/state":
@@ -322,6 +356,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---- extension -> server ----
         if path == "/ext/state":
             app.bridge.push_state(body)
+            app.warm_lyrics(body)
             return self._json(200, {"ok": True})
         if path == "/ext/result":
             app.bridge.deliver_result(body.get("id"), body.get("data"))

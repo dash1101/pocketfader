@@ -292,6 +292,24 @@ class Controller:
         except (ImportError, OSError):
             return False
 
+    # ------------------------------------------------------------------ updates
+    def update_info(self, refresh=False):
+        if not hasattr(self, "_updater"):
+            from ..updater import Updater
+            self._updater = Updater()
+        info = dict(self._updater.latest(refresh=refresh))
+        info["self_update"] = self._updater.can_update_self()
+        return info
+
+    def update_now(self):
+        """Install the newest release into this installation and restart the server -> (ok, message)."""
+        self.update_info()
+        ok, msg = self._updater.update_self()
+        if ok and self.is_running():
+            self.restart()
+            msg = "Updated and restarted."
+        return ok, msg
+
     # ------------------------------------------------------------------ log
     def log_text(self, lines=150):
         if self.has_systemd():

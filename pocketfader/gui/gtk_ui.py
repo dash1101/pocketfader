@@ -86,6 +86,13 @@ class Window(Gtk.Window):
         b.pack_end(self.host_entry, False, False, 0)
         self.box1.add(r)
 
+        r, b, _, self.upd_sub = _row("Updates", "Checking…")
+        self.upd_btn = Gtk.Button(label="Check", valign=Gtk.Align.CENTER)
+        self.upd_btn.connect("clicked", self.on_update)
+        b.pack_end(self.upd_btn, False, False, 0)
+        self.box1.add(r)
+        self.update_available = False
+
         # --- addresses
         self.box2 = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         self.box2.get_style_context().add_class("frame")
@@ -120,6 +127,7 @@ class Window(Gtk.Window):
         if live:                       # tests build the window without showing it or polling
             self.show_all()
             self.refresh()
+            self.check_updates()
             GLib.timeout_add_seconds(3, self._tick)
 
     def _section(self, title, widget):
@@ -220,6 +228,39 @@ class Window(Gtk.Window):
         if self.ctl.autostart_enabled():
             return self.ctl.set_autostart(True)      # refresh the saved command with the new options
         return True
+
+    def check_updates(self):
+        def work():
+            info = self.ctl.update_info(refresh=True)
+            GLib.idle_add(self.apply_update_info, info)
+        threading.Thread(target=work, daemon=True).start()
+
+    def apply_update_info(self, info):
+        self.update_available = bool(info.get("available"))
+        if info.get("error"):
+            text, label = info["error"].capitalize() + ".", "Check"
+        elif self.update_available:
+            can = info.get("self_update")
+            text = f"{info['latest']} is available (you have {info['current']})." + ("" if can else " Download it from the release page.")
+            label = "Update now" if can else "Open page"
+        else:
+            text, label = f"You're up to date ({info['current']}).", "Check"
+        self.upd_sub.set_text(text)
+        self.upd_btn.set_label(label)
+        self._upd_url = info.get("url")
+
+    def on_update(self, _btn):
+        label = self.upd_btn.get_label()
+        if label == "Open page" and getattr(self, "_upd_url", None):
+            webbrowser.open(self._upd_url)
+        elif label == "Update now":
+            def run():
+                return self.ctl.update_now()[0]
+            self._do(run, "Updating…")
+            GLib.timeout_add_seconds(2, lambda: (self.check_updates(), False)[1])
+        else:
+            self.upd_sub.set_text("Checking…")
+            self.check_updates()
 
     def on_copy(self, _btn, url):
         Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(url, -1)

@@ -43,6 +43,14 @@ class Window:
         entry.bind("<Return>", lambda _e: self.on_host())
         entry.bind("<FocusOut>", lambda _e: self.on_host())
 
+        upd = ttk.Frame(outer)
+        upd.pack(fill="x", pady=(14, 0))
+        self.upd_text = ttk.Label(upd, text="Checking for updates…", foreground="#666")
+        self.upd_text.pack(side="left", fill="x", expand=True)
+        self.upd_btn = ttk.Button(upd, text="Check", command=self.on_update)
+        self.upd_btn.pack(side="right")
+        self.upd_url = None
+
         ttk.Label(outer, text="Open on your phone", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(16, 4))
         self.addr_box = ttk.Frame(outer)
         self.addr_box.pack(fill="x")
@@ -68,6 +76,7 @@ class Window:
 
         self.loading = False
         self.refresh()
+        self.check_updates()
         root.after(3000, self.tick)
 
     def tick(self):
@@ -155,6 +164,36 @@ class Window:
         if self.ctl.autostart_enabled():
             return self.ctl.set_autostart(True)
         return True
+
+    def check_updates(self):
+        def work():
+            info = self.ctl.update_info(refresh=True)
+            self.root.after(0, lambda: self.apply_update_info(info))
+        threading.Thread(target=work, daemon=True).start()
+
+    def apply_update_info(self, info):
+        self.upd_url = info.get("url")
+        if info.get("error"):
+            self.upd_text.config(text=info["error"].capitalize() + ".")
+            self.upd_btn.config(text="Check")
+        elif info.get("available"):
+            can = info.get("self_update")
+            self.upd_text.config(text=f"{info['latest']} is available (you have {info['current']}).")
+            self.upd_btn.config(text="Update now" if can else "Open page")
+        else:
+            self.upd_text.config(text=f"You're up to date ({info['current']}).")
+            self.upd_btn.config(text="Check")
+
+    def on_update(self):
+        label = self.upd_btn.cget("text")
+        if label == "Open page" and self.upd_url:
+            webbrowser.open(self.upd_url)
+        elif label == "Update now":
+            self._do(lambda: self.ctl.update_now()[0], "Updating…")
+            self.root.after(2500, self.check_updates)
+        else:
+            self.upd_text.config(text="Checking…")
+            self.check_updates()
 
     def copy(self, url):
         self.root.clipboard_clear()

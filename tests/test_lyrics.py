@@ -2,7 +2,11 @@ import json
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
-from pocketfader.lyrics import LyricsService, _norm, _score, parse_lrc
+import base64
+import time
+import zlib
+
+from pocketfader.lyrics import _KRC_KEY, LyricsService, _norm, _score, parse_krc, parse_lrc
 from pocketfader.romanize import romanize
 
 from .test_server import Base
@@ -13,14 +17,25 @@ LRC = "[ar:Someone]\n[00:01.50]Hello\n[00:05.00]World\n[01:02.5][02:00.00]Again\
 class FakeNet:
     """Stands in for the internet: serves canned JSON by URL and records every call."""
 
-    def __init__(self, lrclib=None, netease=None):
+    def __init__(self, lrclib=None, netease=None, krc=None):
         self.calls = []
+        self.krc = krc
         self.lrclib = lrclib
         self.netease = netease
 
     def __call__(self, url, headers=None, timeout=6.0):
         self.calls.append(url)
         u = urlsplit(url)
+        if u.netloc == "mobileservice.kugou.com":
+            if not self.krc:
+                return json.dumps({"data": {"info": []}})
+            return json.dumps({"data": {"info": [{"songname": "Song", "singername": "Artist", "duration": 200, "hash": "h"}]}})
+        if u.netloc == "lyrics.kugou.com" and u.path == "/search":
+            return json.dumps({"candidates": [{"id": "1", "accesskey": "k"}]})
+        if u.netloc == "lyrics.kugou.com" and u.path == "/download":
+            raw = zlib.compress(self.krc.encode())
+            blob = b"krc1" + bytes(b ^ _KRC_KEY[i % 16] for i, b in enumerate(raw))
+            return json.dumps({"content": base64.b64encode(blob).decode()})
         if u.netloc == "lrclib.net" and u.path == "/api/get":
             return json.dumps(self.lrclib) if self.lrclib else None
         if u.netloc == "lrclib.net":
@@ -82,7 +97,7 @@ class ServiceTests(unittest.TestCase):
         r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
         self.assertTrue(r["found"])
         self.assertEqual(r["source"], "lrclib")
-        self.assertEqual({s["id"]: s["found"] for s in r["sources"]}, {"lrclib": True, "netease": True, "ytm": False})
+        self.assertEqual({s["id"]: s["found"] for s in r["sources"]}, {"kugou": False, "lrclib": True, "netease": True, "ytm": False})
         self.assertEqual(r["lyrics"]["lines"][0], {"t": 1.0, "text": "Hi"})
 
     def test_switching_source_uses_the_cache_and_refresh_refetches(self):
@@ -133,6 +148,55 @@ class ServiceTests(unittest.TestCase):
                 raise RuntimeError("boom")
             return None
         self.assertFalse(LyricsService(fetch=flaky).lookup("Song", "A", "", 100)["found"])
+
+
+KRC = "[id:x]\n[ti:Song]\n[1000,2000]<0,500,0>Hel<500,700,0>lo <1200,800,0>there\n[20000,1000]<0,1000,0>Again\n"
+
+
+class WordSyncTests(unittest.TestCase):
+    def test_parse_krc_words_and_gaps(self):
+        lines = parse_krc(KRC)
+        self.assertEqual(lines[0], {"t": 1.0, "text": "Hello there", "w": [[1.0, 1.5, "Hel"], [1.5, 2.2, "lo "], [2.2, 3.0, "there"]]})
+        self.assertEqual(lines[1], {"t": 3.5, "text": ""})                  # a ♪ line for the long instrumental break
+        self.assertEqual(lines[2]["t"], 20.0)
+
+    def test_kugou_is_preferred_when_it_has_words(self):
+        net = FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hello there"}, krc=KRC)
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["source"], "kugou")
+        self.assertTrue(r["sources"][0]["words"])
+        self.assertIn("w", r["lyrics"]["lines"][0])
+
+    def test_words_are_lent_to_a_line_synced_source_when_the_text_matches(self):
+        net = FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hello there"}, krc=KRC)
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="lrclib")
+        self.assertEqual(r["source"], "lrclib")
+        self.assertEqual(len(r["lyrics"]["lines"][0]["w"]), 3)
+
+    def test_answers_before_slow_sources_finish_and_flags_them_pending(self):
+        def slow(url, headers=None, timeout=6.0):
+            if "netease" in url or "163.com" in url:
+                time.sleep(1.5)
+                return None
+            return FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hi"})(url, headers, timeout)
+        svc = LyricsService(fetch=slow, grace=0.2)
+        t0 = time.time()
+        r = svc.lookup("Song", "Artist", "", 200)
+        self.assertLess(time.time() - t0, 1.2)
+        self.assertEqual(r["source"], "lrclib")
+        self.assertTrue(r["pending"])
+
+    def test_prefetch_warms_the_cache(self):
+        net = FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hi"})
+        svc = LyricsService(fetch=net, grace=0.2)
+        svc.prefetch("Song", "Artist", "", 200)
+        time.sleep(0.8)
+        n = len(net.calls)
+        t0 = time.time()
+        r = svc.lookup("Song", "Artist", "", 200)
+        self.assertEqual(len(net.calls), n)
+        self.assertLess(time.time() - t0, 0.3)
+        self.assertTrue(r["found"])
 
 
 class LyricsApiTests(Base):
