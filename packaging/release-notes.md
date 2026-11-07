@@ -16,28 +16,31 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.3
+### What's new in alpha.4
 
-- **Live lyrics** in the Android app and the web app: lines follow the song (tap one to jump), with sources you
-  can switch between (LRCLIB, NetEase, YouTube Music), a "look again" button, **romanization** (Korean,
-  Japanese kana, Cyrillic, Greek, and real romaji where NetEase has it) and **translations** where available.
-- **Android: a real Settings screen** behind the gear: theme (including true Black), Material You, keep the screen
-  on (while playing / always) with dimming, full screen, **pixel shift** for OLED screens, volume-button step,
-  notification on/off, lyrics options, update speed and reduced animations.
-- **Android: the Library is native** now (Home shelves, playlists, playlist editing), not an embedded web page.
-- **Android: queue and lyrics live on the Playing page**; the separate Queue tab is gone. Shuffle and loop sit next
-  to the transport buttons, a caption says exactly what is being shuffled or looped, the tracks already played are
-  listed, and autoplay suggestions can be added to your queue with one tap even when they won't play.
-- **Faster on older phones**: the screen redraws only what changed, the app polls less, and the release build is
-  shrunk (about 1.5 MB). An unshrunk `…-unshrunk-….apk` is attached too, in case the shrunk one misbehaves.
-- **A desktop window for the server**: GTK on Linux (also in the application menu after `install.sh`), Tk on
-  Windows (`pocketfader-gui.exe`). Start or stop the server, start at login, allow your home Wi-Fi, set a Cloudflare
-  hostname, and copy the phone addresses.
-- **Web app**: a Lyrics tab next to Up Next, and *Keep screen on* and *Pixel shift* in Settings.
-- **Extension 1.2** adds the YouTube Music lyrics command. **Reload the extension** after updating.
+- **Word-by-word lyrics** (Apple Music style): the line being sung fills in word by word, and letter by letter inside
+  the current word, in the Android app and the web app. It uses KuGou's word timings when it has the song; other
+  songs keep line-by-line sync. Instrumental breaks now show a large ♪ that lights up while the break lasts.
+- **Faster lyrics**: all sources are asked at once, the answer comes back as soon as something synced is in (about
+  2 s cold, instant when cached), and the computer looks lyrics up in the background when a track changes (and for the
+  next two), so they are usually ready before you open them.
+- **Closer sync**: the playback position the computer reports is now brought up to date, the extension reports it
+  every quarter second, and the app measures it from the middle of the request. A **Sync** setting nudges the lyrics
+  earlier or later (−2 s to +2 s) if your device still runs a little off.
+- **Smoother Up next on slow tablets**: rows are lighter (small pictures with rounded corners baked in, one shared
+  actions dialog instead of a menu per row).
+- **Updates**: the computer checks GitHub for new releases (works for a private repository through `gh auth login` or
+  `GITHUB_TOKEN`). The Android app shows a banner and has Settings → Updates to download and install through the
+  computer; the desktop window has **Update now**; `pocketfader --update` does the same from a terminal.
+- **Extension 1.3** (quarter-second position updates). Reload it after updating.
 
-Earlier in alpha.2: the native Android app, queue control with loop-aware autoplay separation, playlist editing,
-output devices with per-device levels, the built-in equalizer, a two-pane tablet layout and the Cloudflare guide.
+**Updating the Android app in place needs a signing key.** This is the first release prepared for it: Android only
+installs an update over an installed app when both use the same key, and earlier builds used a throwaway key, so
+alpha.3 has to be uninstalled once. See `docs/RELEASING.md`. If the repository has no signing secrets set up, this
+release is still signed with a throwaway key and cannot be installed over an existing copy.
+
+Earlier: alpha.3 (Settings screen, native Library, queue and lyrics on the Playing page, desktop window) and
+alpha.2 (native Android app, queue control, playlist editing, outputs, equalizer, Cloudflare guide).
 
 ### Quick start
 
@@ -61,6 +64,7 @@ output devices with per-device levels, the built-in equalizer, a two-pane tablet
   Korean); they are third-party services and may change or have nothing for a song.
 - **Desktop window**: the Linux (GTK) window was rendered and its controller tested, but not driven through every
   button on many desktops; the Windows (Tk) window and its start-at-login entry have not been run on Windows.
+- **Word-by-word lyrics and the update installer** compile and were checked against the live services and with tests, but have not been run on a real Android device.
 - **Android settings and pixel shift** compile and are described above but haven't been run on a real device.
 - **Equalizer and output switching**: verified against an isolated PipeWire instance (measured gain per band),
   not yet across many hardware setups.
