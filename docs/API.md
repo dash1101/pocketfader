@@ -16,6 +16,7 @@ same-origin `Origin` on POSTs (non-browser clients send none — that's fine).
 | `GET /api/state` | `{version, volume, media, engine, capabilities, limits}` (below). |
 | `GET /api/ytm/state` | Now-playing in YT-Music shape: `{connected, source: "ytm"\|"media"\|null, now: {title, artist, album, art, playing, position, duration, videoId?, liked?, volume?}, queue: []}`. `source` says whether it came from the extension or the host's media player. |
 | `GET /api/prefs` | Shared client prefs (favourites…), same on every device. |
+| `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
 
 ```jsonc
 // /api/state
@@ -32,6 +33,26 @@ same-origin `Origin` on POSTs (non-browser clients send none — that's fine).
   "limits": {"eq_min": -12.0, "eq_max": 12.0}
 }
 ```
+
+```jsonc
+// /api/lyrics
+{
+  "found": true,
+  "source": "lrclib",                       // the one returned in `lyrics`
+  "sources": [{"id": "lrclib", "label": "LRCLIB", "found": true, "synced": true},
+              {"id": "netease", "label": "NetEase", "found": true, "synced": true},
+              {"id": "ytm", "label": "YouTube Music", "found": false, "synced": false}],
+  "lyrics": {
+    "source": "lrclib", "label": "LRCLIB", "synced": true, "credit": "Source: LyricFind",   // credit is optional
+    "lines": [{"t": 12.4, "text": "…", "rom": "…romanized…", "tr": "…translation…"}]       // t is null when not synced
+  }
+}
+```
+
+The server asks the sources at the same time and keeps the answers for a few hours, so switching `source`
+is instant. When the chosen source has no romanization or translation, the lines borrow them from another
+source by timestamp. Only the title, artist, album and length are sent to those services. Sources are
+third-party and best-effort. `capabilities.lyrics` is `true` on servers that have this endpoint.
 
 ## Write
 

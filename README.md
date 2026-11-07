@@ -8,6 +8,8 @@ feature — a **full YouTube Music remote** (search, queue, play next, mixes, pl
 drives YouTube Music running in the browser on your computer.
 
 - **Queue control for YouTube Music**: reorder by dragging, jump to any track, shuffle, loop modes and an autoplay switch, with autoplay suggestions shown separately (and labelled when they won't play, e.g. while looping).
+- **Live lyrics** for what's playing: time-synced lines that follow the song, from several sources (LRCLIB, NetEase, YouTube Music) you can switch between, with romanization for Korean, Japanese kana, Cyrillic and Greek and translations where a source has them.
+- **A desktop window** for the server (GTK on Linux, Tk on Windows): start or stop it, start at login, and copy the addresses to open on your phone.
 - **Switch the audio output** from your phone and set each device's level *before* switching to it.
 - **Built-in equalizer** (Linux/PipeWire): bass / mid / treble with presets; no extra software, off until you turn it on.
 - Works with the **normal system volume** (PipeWire / PulseAudio on Linux, the Windows volume on Windows). No special audio software.
@@ -80,12 +82,25 @@ The extension only talks to Pocketfader on the same computer (`127.0.0.1`); it o
 When the extension isn't connected, the app falls back to simple play/pause/next/seek for whatever
 media player *is* running.
 
+## The desktop window
+
+Run **Pocketfader** from your application menu (or `pocketfader-gui`, or `pocketfader --gui`). It shows whether the
+server is running and lets you:
+
+- turn it on or off,
+- start it when you log in,
+- allow your home Wi-Fi (turns on the access token) or set a Cloudflare hostname,
+- copy the addresses to open on your phone, and see what's playing and which sound output is in use.
+
+On Linux it uses GTK (the `python3-gi` package, installed on most desktops); elsewhere it uses Python's built-in
+Tk. If neither is available you can still run `pocketfader` from a terminal and open the address it prints.
+
 ## Options
 
 ```text
 pocketfader [--port 8777] [--lan] [--bind ADDR] [--token]
             [--audio auto|pulse|windows|voicemeeter|none]
-            [--media auto|mpris|gsmtc|none] [--allow-host NAME] [--dry-run]
+            [--media auto|mpris|gsmtc|none] [--allow-host NAME] [--dry-run] [--gui]
 ```
 
 `--dry-run` reads real state but never changes volume, mute or playback — handy for trying things

@@ -10,21 +10,39 @@ Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows y
 
 | Tab | What it does |
 |---|---|
-| **Playing** | Cover art, seek bar, previous / play-pause / next, like, shuffle, loop and autoplay, master volume. |
-| **Queue** | Your queue and the autoplay suggestions, shown separately. Suggestions that won't play (because the queue is on loop, or autoplay is off) are dimmed and labelled. Tap a track to jump to it; the menu has play next, move up/down, and remove. |
-| **Search** | Search YouTube Music; tap to play, **+** to add a song to the queue, shuffle-play for playlists. |
-| **Mixer** | Master volume, every output device with its **own level** (set it before you switch to it), and the built-in equalizer with presets and bass / mid / high. |
-| **Library** | The server's web app inside the app: Home shelves, your playlists, playlist editing. |
+| **Playing** | The player (cover, seek bar, shuffle / previous / play-pause / next / loop, like, volume) with **Up next** and **Lyrics** underneath. |
+| **Search** | Search YouTube Music. The ⋮ menu on any song can play it, put it next, add it to your queue, add it to a playlist or start a radio. |
+| **Library** | Your YouTube Music **Home** shelves and **Playlists**. Open a playlist to play or shuffle it, and edit your own (reorder, remove, rename, delete), or create new ones. |
+| **Mixer** | Master volume, every output device with its **own level** (set it before you switch to it), and the built-in equalizer. |
 
-On tablets and in landscape the **Playing** view stays on the left and the other tabs sit on the right.
+**Up next** shows what's already played (collapsed), the current track, what's coming, and YouTube Music's
+autoplay suggestions. Suggestions that won't play (because the queue is looping or autoplay is off) are dimmed
+and say why, and you can still add any of them to your queue with the **+** button. A line under the
+shuffle / loop / autoplay chips spells out what is being shuffled or looped.
 
-Outside the app, a **media notification** shows what's playing with previous / play-pause / next and
-works on the lock screen and with Bluetooth headsets. While something is playing, the phone's
-**hardware volume keys change the computer's volume**, even with the screen off.
+**Lyrics** follow the song line by line (tap a line to jump to it). Pick a source (LRCLIB, NetEase, YouTube
+Music), look again with ↻, and switch **Romanize** or **Translation** on when a source has them.
 
-The YouTube Music features (queue, search, like, shuffle, loop, autoplay) need the Pocketfader browser
-extension on the computer. Without it the app still shows and controls whatever the computer's media
-player is doing, plus volume, outputs and the equalizer.
+On tablets and in landscape the player stays on the left; Queue, Lyrics, Search, Library and Mixer are tabs on the right.
+
+Outside the app, a **media notification** shows what's playing with previous / play-pause / next and works on
+the lock screen and with Bluetooth headsets. While something is playing, the phone's **hardware volume keys
+change the computer's volume**, even with the screen off.
+
+### Settings (the gear at the top right)
+
+| Section | Options |
+|---|---|
+| **Connection** | The computer's address, whether it's reachable, whether the YouTube Music extension is connected; edit the connection. |
+| **Appearance** | Theme (System, Light, Dark, true Black), Material You colours (Android 12+), which screen opens first. |
+| **Screen & always-on** | Keep the screen on (off, while playing, always), dim when untouched, full screen, and **pixel shift**: every few minutes the whole screen glides a few pixels so static parts don't burn into OLED displays (interval and distance are adjustable; best with Always on and the Black theme). |
+| **Controls** | Media notification on/off, volume buttons on/off and the step per press, haptic feedback. |
+| **Lyrics** | Romanize and translations on by default, text size, preferred source. |
+| **Performance** | Update speed (Fast / Normal / Battery saver) and reduce animations. |
+
+The YouTube Music features (queue, search, library, lyrics from YouTube Music, like, shuffle, loop, autoplay) need the
+Pocketfader browser extension on the computer. Without it the app still shows and controls whatever the
+computer's media player is doing, plus volume, outputs, the equalizer and lyrics from LRCLIB and NetEase.
 
 ## Install
 
@@ -43,8 +61,7 @@ the address field and the token is filled in for you.
 ### Behind Cloudflare Access
 
 Open **Cloudflare Access** in the connection dialog and enter a service token's Client ID and Secret.
-The app sends them with every request. The **Library** tab loads the web app with the same token on its
-first request and relies on the session cookie Access returns afterwards.
+The app sends them with every request, including the Library and Lyrics.
 
 ## Notes and limits
 
@@ -69,6 +86,6 @@ gradle :app:assembleRelease      # or open this folder in Android Studio and pre
 ## How it works
 
 The app polls the server's [HTTP API](../docs/API.md) (about once a second while open, every few
-seconds in the background) and posts commands to it. A foreground service publishes a media session so
+seconds in the background; slower with Battery saver) and posts commands to it. A foreground service publishes a media session so
 the system shows controls and routes the volume keys. There is no networking library: it uses
 `HttpURLConnection`, which also lets it send the Cloudflare Access headers.
