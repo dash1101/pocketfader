@@ -1,5 +1,6 @@
 """Command line entry point:  pocketfader [--lan] [--port N] [--audio ...] [--dry-run]"""
 import argparse
+import signal
 import sys
 import time
 
@@ -93,6 +94,14 @@ def main(argv=None):
     print(f"audio: {getattr(audio, 'label', 'none')}  media: {getattr(media, 'label', 'none')}"
           + (f"  engine: {engine.label}" if engine.label else ""))
 
+    # systemd (and most process managers) stop a service with SIGTERM; treat it like Ctrl-C so the
+    # built-in EQ is taken out of the audio path and the original output is restored.
+    def _terminate(*_):
+        raise KeyboardInterrupt
+    try:
+        signal.signal(signal.SIGTERM, _terminate)
+    except (ValueError, OSError):
+        pass
     try:
         while True:
             time.sleep(1)
