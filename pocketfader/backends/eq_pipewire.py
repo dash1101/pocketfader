@@ -163,6 +163,8 @@ class BuiltinEQ:
             pass
 
     def _kill_chain(self):
+        if hasattr(self.audio, "aliases"):
+            self.audio.aliases.pop(SINK_NAME, None)
         p, self._proc, self._node_id = self._proc, None, None
         if p is not None and p.poll() is None:
             p.terminate()
@@ -219,6 +221,8 @@ class BuiltinEQ:
             self.audio.set_output_volume(SINK_NAME, 100)
             self.audio.set_output_mute(SINK_NAME, False)
             self.audio.set_output(SINK_NAME)
+            if hasattr(self.audio, "aliases"):
+                self.audio.aliases[SINK_NAME] = tgt   # the UI should name the real device, not the EQ
             self.enabled, self.target = True, tgt
             self._save()
             self._status = ""

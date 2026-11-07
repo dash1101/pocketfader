@@ -28,6 +28,7 @@ class PulseAudio:
         self._stop = threading.Event()
         self._sub = None
         self.hidden_sinks = set()   # internal sinks (e.g. the EQ) that shouldn't appear in the output list
+        self.aliases = {}           # hidden sink -> the real device it fronts, so the UI names that device
 
     # ---- lifecycle ----
     def start(self):
@@ -58,7 +59,11 @@ class PulseAudio:
         sink = next((s for s in sinks if s.get("name") == name), None)
         if not sink:
             return {"available": False, "percent": 0, "muted": False, "device": ""}
-        return parse_sink(sink)
+        st = parse_sink(sink)
+        front = next((s for s in sinks if s.get("name") == self.aliases.get(name)), None)
+        if front:   # an internal sink (the EQ) is the default: show the device it feeds
+            st["device"] = front.get("description") or front.get("name") or st["device"]
+        return st
 
     def _poll_loop(self):
         while not self._stop.is_set():
@@ -97,6 +102,7 @@ class PulseAudio:
             sinks = json.loads(res.out) if res.ok else []
         except ValueError:
             sinks = []
+        default = self.aliases.get(default, default)   # EQ in front of a device: that device is "current"
         return [describe_sink(s, default) for s in sinks
                 if include_hidden or s.get("name") not in self.hidden_sinks]
 

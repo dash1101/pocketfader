@@ -63,6 +63,17 @@ class PulseTests(unittest.TestCase):
     def test_unavailable_when_no_sink(self):
         self.assertFalse(PulseAudio(FakeRunner())._read()["available"])
 
+    def test_eq_sink_is_named_after_the_device_it_feeds(self):
+        eq = {**SINK_JSON, "name": "pocketfader_eq", "description": "Pocketfader EQ"}
+        r = FakeRunner({"get-default-sink": "pocketfader_eq\n", "list sinks": json.dumps([SINK_JSON, eq])})
+        a = PulseAudio(r)
+        a.hidden_sinks.add("pocketfader_eq")
+        self.assertEqual(a._read()["device"], "Pocketfader EQ")      # no alias yet: honest fallback
+        a.aliases["pocketfader_eq"] = "alsa_output.x"
+        self.assertEqual(a._read()["device"], "Desk Speakers")
+        outs = a.outputs()
+        self.assertEqual([(o["name"], o["default"]) for o in outs], [("alsa_output.x", True)])
+
     def test_set_volume_targets_default_sink_only_and_clamps(self):
         r = FakeRunner()
         a = PulseAudio(r)
