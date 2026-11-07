@@ -58,6 +58,11 @@ jobs:
             --add-data "pocketfader/static;pocketfader/static" `
             --paths . --collect-submodules pocketfader --collect-all winrt `
             packaging/entry.py
+          # The desktop window (no console). tkinter ships with this Python.
+          python -c "import tkinter; print('tkinter ok')"
+          pyinstaller --onefile --windowed --name pocketfader-gui `
+            --paths . --collect-submodules pocketfader.gui `
+            packaging/gui_entry.py
       - name: Smoke test
         shell: pwsh
         run: |
@@ -77,7 +82,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory pocketfader-windows-x64 | Out-Null
-          Copy-Item dist\pocketfader.exe, packaging\install-exe.ps1, README.md, LICENSE pocketfader-windows-x64
+          Copy-Item dist\pocketfader.exe, dist\pocketfader-gui.exe, packaging\install-exe.ps1, README.md, LICENSE pocketfader-windows-x64
           Compress-Archive pocketfader-windows-x64 pocketfader-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: pocketfader-windows-x64.zip }

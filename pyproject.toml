@@ -25,6 +25,9 @@ windows = [
 [project.scripts]
 pocketfader = "pocketfader.cli:main"
 
+[project.gui-scripts]
+pocketfader-gui = "pocketfader.gui:main"
+
 [tool.setuptools]
 include-package-data = true
 

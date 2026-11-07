@@ -33,12 +33,16 @@ def build_parser():
                    help="accept this extra Host header (e.g. a custom DNS name)")
     p.add_argument("--dry-run", action="store_true",
                    help="read real state but never change volume, mute, or playback")
+    p.add_argument("--gui", action="store_true", help="open the desktop window instead of running the server here")
     p.add_argument("--version", action="version", version=__version__)
     return p
 
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
+    if a.gui:
+        from .gui import main as gui_main
+        return gui_main()
     if sys.stdout is not None:  # None under pythonw; line-buffer so journald/log files see output live
         try:
             sys.stdout.reconfigure(line_buffering=True)

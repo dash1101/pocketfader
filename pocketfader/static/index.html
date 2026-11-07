@@ -465,6 +465,27 @@
 
   /* ---------- custom color picker ---------- */
   .ce .sw { width:34px; height:30px; border-radius:7px; border:1px solid rgba(255,255,255,.12); flex:none; cursor:pointer; }
+  /* ---------- lyrics ---------- */
+  .railhead .rtab { border:0; background:transparent; color:var(--dim); font:inherit; font-weight:680; font-size:14px; padding:4px 10px;
+                    border-radius:999px; cursor:pointer; transition:background .15s, color .15s; }
+  .railhead .rtab.on { color:var(--text); background:var(--card2); }
+  #lyricsbody { display:none; position:relative; flex:1; min-height:0; overflow-y:auto; padding:0 14px 90px; scroll-behavior:smooth; }
+  #lyricsbody .lyctl { display:flex; flex-wrap:wrap; gap:6px; padding:4px 0 10px; align-items:center; }
+  #lyricsbody .lychip { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:999px; padding:5px 11px;
+                        font-size:12.5px; cursor:pointer; transition:background .15s, border-color .15s; }
+  #lyricsbody .lychip.on { background:color-mix(in srgb, var(--accent) 24%, transparent); border-color:var(--accent); }
+  #lyricsbody .lychip:disabled { opacity:.35; pointer-events:none; }
+  #lyricsbody .lynote { color:var(--dim2); font-size:11.5px; padding:0 2px 10px; }
+  #lyricsbody .lyl { padding:7px 4px; cursor:default; opacity:.45; transition:opacity .25s, transform .25s; transform-origin:left center; }
+  #lyricsbody.synced .lyl { cursor:pointer; }
+  #lyricsbody .lyl .t { font-size:19px; font-weight:650; line-height:1.3; }
+  #lyricsbody .lyl .r, #lyricsbody .lyl .x { font-size:13px; color:var(--dim); margin-top:2px; }
+  #lyricsbody .lyl .r { font-style:italic; }
+  #lyricsbody .lyl.on { opacity:1; transform:scale(1.04); }
+  #lyricsbody .lyl.on .t { color:var(--accent); }
+  #lyricsbody.plain .lyl { opacity:.9; }
+  #lyricsbody .lygap { text-align:center; color:var(--dim2); opacity:.4; padding:4px; }
+  #lyricsbody .lymsg { color:var(--dim); text-align:center; padding:40px 16px; font-size:14px; }
   /* ---------- in-page dialog (the native prompt/confirm don't exist inside the Android WebView) ---------- */
   #askwrap { position:fixed; inset:0; z-index:95; display:none; align-items:center; justify-content:center;
              background:rgba(0,0,0,.55); padding:20px; }
@@ -851,7 +872,7 @@
         <span class="p" id="mvolpct"></span>
       </div>
     </div>
-    <div class="railhead"><span class="l">Up Next</span><span class="c" id="qcount"></span></div>
+    <div class="railhead"><button class="rtab on" data-rt="queue">Up Next</button><button class="rtab" data-rt="lyrics" id="rt-lyrics" style="display:none">Lyrics</button><span class="c" id="qcount"></span></div>
     <div class="qmodes" id="qmodes" style="display:none">
       <button class="qm" id="qm-shuffle" title="Shuffle (double-tap to reshuffle)"><svg viewBox="0 0 24 24"><path d="M10.6 9.2L5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2.0 2-12.5 12.5 1.4 1.4L17.9 7.4l2.1 2.1V4h-5.5zm.4 9.8l-1.4 1.4 3.3 3.3-2.1 2.1H20v-5.5l-2.0 2-3.1-3.3z"/></svg><span>Shuffle</span></button>
       <button class="qm" id="qm-repeat" title="Loop"><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg><span id="qm-repeat-l">Loop off</span></button>
@@ -859,6 +880,7 @@
       <button class="qm" id="qm-save" title="Save the queue as a playlist"><svg viewBox="0 0 24 24"><path d="M3 6h12v2H3zm0 4h12v2H3zm0 4h8v2H3zm13 0h2v3h3v2h-3v3h-2v-3h-3v-2h3z"/></svg><span>Save</span></button>
     </div>
     <div class="railbody" id="railbody"></div>
+    <div id="lyricsbody"></div>
   </aside>
 </div>
 
@@ -1685,6 +1707,23 @@ function renderSettingsTail(m) {
     nt.classList.toggle('on', labelsOn); $('#app').classList.toggle('nolabels', !labelsOn); });
   nl.appendChild(nt); ap.appendChild(nl); m.appendChild(ap);
 
+  // ---- Display ----
+  const dp = el('div', 'setsec'); dp.appendChild(Object.assign(el('h3'), { textContent:'Display' }));
+  const mkToggle = (title, desc, key, def, after) => { const row = el('div', 'setrow');
+    row.innerHTML = `<div><div class="k">${title}</div><div class="d">${desc}</div></div>`;
+    const t = el('button', 'toggle'); let on = lsGet(key, def); t.classList.toggle('on', on);
+    t.addEventListener('click', () => { on = !on; lsSet(key, on); t.classList.toggle('on', on); applyDisplayPrefs(); if (after) after(on); });
+    row.appendChild(t); dp.appendChild(row); };
+  mkToggle('Keep screen on', "Stops the screen from sleeping while this page is open. Handy for a tablet that stays on a desk. Not every browser supports it.", 'vmr-wake', false);
+  mkToggle('Pixel shift', 'Moves the whole page a few pixels every few minutes so static parts don\'t burn into OLED screens.', 'vmr-pshift', false);
+  const pr = el('div', 'setrow');
+  pr.innerHTML = '<div><div class="k">Shift every</div><div class="d">Minutes between moves.</div></div>';
+  const ps = el('select'); [1, 2, 5, 10].forEach(m => { const o = el('option'); o.value = m; o.textContent = m + ' min'; ps.appendChild(o); });
+  ps.value = String(lsGet('vmr-pshift-min', 2));
+  ps.style.cssText = 'height:38px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 8px';
+  ps.addEventListener('change', () => { lsSet('vmr-pshift-min', parseInt(ps.value, 10)); applyDisplayPrefs(); });
+  pr.appendChild(ps); dp.appendChild(pr); m.appendChild(dp);
+
   // (Home widgets are now managed on the Home page — tap Edit there to add / remove / drag / resize.)
 
   // ---- Playback ----
@@ -2363,8 +2402,114 @@ railEl.addEventListener('scroll', () => {
   else if (isC && s < 24) { railEl.classList.remove('collapsed'); collapseLock = Date.now() + 480; }
 }, { passive: true });
 
+
+/* ==================== display: keep awake + pixel shift ==================== */
+let wakeLock = null, shiftTimer = null, shiftStep = 0;
+const SHIFT_WALK = [[0,0],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+async function holdWake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { wakeLock = null; }
+}
+function applyDisplayPrefs() {
+  holdWake(!!lsGet('vmr-wake', false));
+  const app = $('#app'); clearInterval(shiftTimer); shiftTimer = null;
+  if (lsGet('vmr-pshift', false)) {
+    const mins = Math.max(1, lsGet('vmr-pshift-min', 2)), px = 4;
+    app.style.transition = 'transform 6s ease-in-out';
+    const move = () => { const [gx, gy] = SHIFT_WALK[shiftStep++ % SHIFT_WALK.length]; app.style.transform = `translate(${gx * px}px, ${gy * px}px)`; };
+    move(); shiftTimer = setInterval(move, mins * 60000);
+  } else { app.style.transform = ''; shiftStep = 0; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && lsGet('vmr-wake', false)) holdWake(true); });
+applyDisplayPrefs();
+
+/* ==================== lyrics ==================== */
+let railMode = 'queue', lastNowAt = 0;
+const lyr = { key:null, data:null, loading:false, error:null, source:lsGet('vmr-ly-src', 'auto'),
+              rom:lsGet('vmr-ly-rom', false), tr:lsGet('vmr-ly-tr', false), active:-2 };
+function setRailMode(mode) {
+  railMode = mode;
+  document.querySelectorAll('.railhead .rtab').forEach(b => b.classList.toggle('on', b.dataset.rt === mode));
+  const ly = mode === 'lyrics';
+  $('#railbody').style.display = ly ? 'none' : '';
+  $('#qmodes').style.display = ly ? 'none' : ($('#qmodes').dataset.show === '1' ? '' : 'none');
+  $('#lyricsbody').style.display = ly ? 'block' : 'none';
+  if (ly) loadLyrics(false);
+}
+document.querySelectorAll('.railhead .rtab').forEach(b => b.addEventListener('click', () => setRailMode(b.dataset.rt)));
+function lyricsKey() { const n = lastNow; return n && n.title ? [n.title, n.artist, Math.round(n.duration || 0)].join('|') : null; }
+async function loadLyrics(refresh) {
+  const key = lyricsKey(), body = $('#lyricsbody');
+  if (!key) { lyr.key = null; lyr.data = null; body.innerHTML = '<div class="lymsg">Nothing is playing.</div>'; return; }
+  if (key === lyr.key && !refresh && lyr.data) return;
+  lyr.key = key; lyr.loading = true; lyr.error = null; lyr.data = null; lyr.active = -2; paintLyrics();
+  const n = lastNow;
+  const q = new URLSearchParams({ title:n.title, artist:n.artist || '', duration:Math.round(n.duration || 0) });
+  if (n.videoId) q.set('videoId', n.videoId);
+  if (lyr.source !== 'auto') q.set('source', lyr.source);
+  if (refresh) q.set('refresh', '1');
+  try { const r = await fetch('/api/lyrics?' + q); const j = await r.json(); if (lyr.key !== key) return;
+    if (!r.ok) throw new Error(j.error || r.status); lyr.data = j; }
+  catch (e) { if (lyr.key !== key) return; lyr.error = String(e.message || e); }
+  lyr.loading = false; paintLyrics();
+}
+function paintLyrics() {
+  const body = $('#lyricsbody'); body.innerHTML = '';
+  if (lyr.loading) { body.appendChild(el('div', 'spinner')); return; }
+  const d = lyr.data;
+  if (lyr.error) { body.innerHTML = '<div class="lymsg"></div>'; body.firstChild.textContent = lyr.error; return; }
+  if (!d || !d.found) { body.innerHTML = '<div class="lymsg">No lyrics found for this song. Try another source or look again.</div>';
+    if (d) body.prepend(lyricsControls(d)); return; }
+  const L = d.lyrics; body.classList.toggle('synced', !!L.synced); body.classList.toggle('plain', !L.synced);
+  body.appendChild(lyricsControls(d));
+  const note = el('div', 'lynote'); note.textContent = (L.synced ? 'Live lyrics follow the song. Tap a line to jump to it.' : "These lyrics aren't time-synced.") + (L.credit ? '  ' + L.credit : '');
+  body.appendChild(note);
+  L.lines.forEach((ln, i) => {
+    if (!ln.text.trim()) { const g = el('div', 'lygap'); g.textContent = '♪'; body.appendChild(g); return; }
+    const row = el('div', 'lyl'); row.dataset.i = i;
+    const t = el('div', 't'); t.textContent = ln.text; row.appendChild(t);
+    if (lyr.rom && ln.rom) { const r = el('div', 'r'); r.textContent = ln.rom; row.appendChild(r); }
+    if (lyr.tr && ln.tr) { const x = el('div', 'x'); x.textContent = ln.tr; row.appendChild(x); }
+    if (L.synced && ln.t != null) row.addEventListener('click', () => { ytm({ type:'transport', action:'seek', position:ln.t }, true); });
+    body.appendChild(row);
+  });
+  lyr.active = -2; lyricsFollow(true);
+}
+function lyricsControls(d) {
+  const box = el('div', 'lyctl');
+  const chip = (label, on, fn, off) => { const b = el('button', 'lychip' + (on ? ' on' : '')); b.textContent = label; b.disabled = !!off; b.addEventListener('click', fn); box.appendChild(b); return b; };
+  (d.sources || []).forEach(s => chip(s.label + (s.found && s.synced ? ' · synced' : ''), d.source === s.id, () => { lyr.source = s.id; lsSet('vmr-ly-src', s.id); lyr.key = null; loadLyrics(false); }, !s.found));
+  chip('↻', false, () => { lyr.key = null; loadLyrics(true); }).title = 'Look again';
+  if (d.lyrics && d.lyrics.lines.some(l => l.rom)) chip('Romanize', lyr.rom, () => { lyr.rom = !lyr.rom; lsSet('vmr-ly-rom', lyr.rom); paintLyrics(); });
+  if (d.lyrics && d.lyrics.lines.some(l => l.tr)) chip('Translation', lyr.tr, () => { lyr.tr = !lyr.tr; lsSet('vmr-ly-tr', lyr.tr); paintLyrics(); });
+  return box;
+}
+let lyPause = 0;
+$('#lyricsbody').addEventListener('wheel', () => { lyPause = Date.now() + 6000; }, { passive:true });
+$('#lyricsbody').addEventListener('touchmove', () => { lyPause = Date.now() + 6000; }, { passive:true });
+function lyricsFollow(force) {
+  const d = lyr.data; if (railMode !== 'lyrics' || !d || !d.found || !d.lyrics.synced) return;
+  const n = lastNow || {}; const pos = (n.position || 0) + (n.playing ? (performance.now() - lastNowAt) / 1000 : 0) + 0.25;
+  const L = d.lyrics.lines; let lo = 0, hi = L.length - 1, idx = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; const t = L[mid].t == null ? Infinity : L[mid].t; if (t <= pos) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+  if (idx === lyr.active && !force) return;
+  lyr.active = idx;
+  const body = $('#lyricsbody'); body.querySelectorAll('.lyl.on').forEach(e => e.classList.remove('on'));
+  const row = body.querySelector('.lyl[data-i="' + idx + '"]');
+  if (row) { row.classList.add('on'); if (Date.now() > lyPause) body.scrollTo({ top: Math.max(0, row.offsetTop - body.clientHeight / 3), behavior:'smooth' }); }
+}
+setInterval(lyricsFollow, 300);
+function lyricsTrackChanged() {
+  const caps = mixerState && mixerState.capabilities;
+  $('#rt-lyrics').style.display = (caps && caps.lyrics) ? '' : 'none';
+  if (railMode === 'lyrics' && lyricsKey() !== lyr.key) loadLyrics(false);
+}
+
 function paintNow(now, queue) {
-  lastNow = now; if (Date.now() >= queueSettleUntil) lastQueue = queue || [];
+  lastNow = now; lastNowAt = performance.now(); lyricsTrackChanged(); if (Date.now() >= queueSettleUntil) lastQueue = queue || [];
   const live = now && (now.title || now.videoId);
   const art = $('#np-art');
   if (live && now.art) { if (art.tagName !== 'IMG') { const img = el('img','art'); img.id='np-art'; art.replaceWith(img); }
@@ -2422,7 +2567,8 @@ function queueJump(q) { if (!q.videoId) return; optimisticNow(q); ytm(Object.ass
 
 function paintModes() {
   const n = lastNow || {}, box = $('#qmodes'); if (!box) return;
-  box.style.display = n.repeat === undefined ? 'none' : '';   // only the YT Music bridge reports modes
+  box.dataset.show = n.repeat === undefined ? '0' : '1';
+  box.style.display = (n.repeat === undefined || railMode === 'lyrics') ? 'none' : '';   // only the YT Music bridge reports modes
   $('#qm-shuffle').classList.toggle('on', !!n.shuffle);
   const rp = n.repeat || 'NONE';
   $('#qm-repeat').classList.toggle('on', rp !== 'NONE');

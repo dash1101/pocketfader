@@ -37,7 +37,9 @@ if [ "$UNINSTALL" = 1 ]; then
   if [ "$NO_SYSTEMD" != 1 ] && command -v systemctl >/dev/null; then
     systemctl --user disable --now pocketfader.service 2>/dev/null || true
   fi
-  rm -f "$UNIT_DIR/pocketfader.service" "$BIN_DIR/pocketfader"
+  rm -f "$UNIT_DIR/pocketfader.service" "$BIN_DIR/pocketfader" "$BIN_DIR/pocketfader-gui" \
+        "${PF_APPS_DIR:-$HOME/.local/share/applications}/pocketfader.desktop" \
+        "${PF_ICON_DIR:-$HOME/.local/share/icons/hicolor/scalable/apps}/pocketfader.svg"
   rm -rf "$APP_DIR"
   [ "$NO_SYSTEMD" != 1 ] && systemctl --user daemon-reload 2>/dev/null || true
   say "Removed. Settings kept in ~/.config/pocketfader (delete it if you want a clean slate)."
@@ -56,10 +58,27 @@ command -v tailscale >/dev/null || echo "      otherwise re-run with --lan to us
 # ---- install into a private virtualenv ----
 say "Installing to $APP_DIR"
 mkdir -p "$APP_DIR" "$BIN_DIR"
-python3 -m venv "$APP_DIR/venv"
+python3 -m venv --system-site-packages "$APP_DIR/venv"   # lets the window use the system GTK
 "$APP_DIR/venv/bin/pip" install --quiet --upgrade pip
 "$APP_DIR/venv/bin/pip" install --quiet "$SRC"
 ln -sf "$APP_DIR/venv/bin/pocketfader" "$BIN_DIR/pocketfader"
+[ -e "$APP_DIR/venv/bin/pocketfader-gui" ] && ln -sf "$APP_DIR/venv/bin/pocketfader-gui" "$BIN_DIR/pocketfader-gui"
+
+# Launcher entry so "Pocketfader" shows up in the application menu (the desktop window).
+APPS_DIR="${PF_APPS_DIR:-$HOME/.local/share/applications}"
+ICON_DIR="${PF_ICON_DIR:-$HOME/.local/share/icons/hicolor/scalable/apps}"
+mkdir -p "$APPS_DIR" "$ICON_DIR"
+cp "$SRC/pocketfader/static/icon.svg" "$ICON_DIR/pocketfader.svg" 2>/dev/null || true
+cat > "$APPS_DIR/pocketfader.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Pocketfader
+Comment=Phone remote for your computer's volume and music
+Exec=$BIN_DIR/pocketfader-gui
+Icon=pocketfader
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+DESKTOP
 
 # ---- service ----
 if [ "$NO_SYSTEMD" = 1 ] || ! command -v systemctl >/dev/null; then
