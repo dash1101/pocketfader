@@ -19,7 +19,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 shrinks the code and resources: a smaller APK that starts faster on older phones.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Pre-releases are signed with the auto-generated debug key. A persistent release
             // keystore comes later, so for now builds from different machines can't update each other.
             signingConfig = signingConfigs.getByName("debug")

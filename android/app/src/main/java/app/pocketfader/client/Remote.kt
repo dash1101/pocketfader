@@ -1,18 +1,23 @@
 package app.pocketfader.client
 
 import android.os.SystemClock
+import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.net.URLEncoder
 
+@Immutable
 data class RemoteState(
     val configured: Boolean = false,
     val online: Boolean = false,
@@ -25,16 +30,23 @@ data class RemoteState(
     val eq: EqState = EqState(),
     val outputs: List<Output> = emptyList(),
     val canOutputs: Boolean = false,
-    val stamp: Long = 0L,                 // SystemClock.elapsedRealtime() of the last good poll
+    val canLyrics: Boolean = false,
 )
 
 /**
  * The one place that talks to the server. The Activity and the media service both observe
  * [state]; polling runs while either is alive (see [acquire]/[release]).
+ *
+ * [state] only changes when something visible changed. The playback position, which moves on every
+ * poll, lives in [progress] so the whole screen isn't redrawn each second.
  */
 object Remote {
     private val _state = MutableStateFlow(RemoteState())
     val state: StateFlow<RemoteState> = _state
+    private val _progress = MutableStateFlow(Progress())
+    val progress: StateFlow<Progress> = _progress
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val messages: SharedFlow<String> = _messages
 
     @Volatile private var api: PfApi? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,10 +56,14 @@ object Remote {
     @Volatile private var wantOutputs = false
     @Volatile private var fastUntil = 0L
     @Volatile private var settleUntil = 0L   // keep optimistic values for a moment so sliders don't jump back
+    private var tick = 0
+
+    fun notify(text: String) { _messages.tryEmit(text) }
 
     fun configure(cfg: ServerConfig) {
         api = if (cfg.isSet) PfApi(cfg) else null
         _state.value = RemoteState(configured = cfg.isSet)
+        _progress.value = Progress()
         fastUntil = SystemClock.elapsedRealtime() + 3000
     }
 
@@ -75,6 +91,18 @@ object Remote {
     /** The mixer screen is open: also keep the output list fresh. */
     fun setWantOutputs(v: Boolean) { wantOutputs = v }
 
+    private fun delayFor(): Long {
+        val speed = Settings.prefs.value.pollSpeed
+        val fast = SystemClock.elapsedRealtime() < fastUntil
+        val playing = _state.value.now?.playing == true
+        return when {
+            fast -> 500L
+            visible -> when (speed) { "fast" -> 800L; "battery" -> 2500L; else -> 1200L }
+            // in the background the notification only needs to notice track changes
+            else -> when (speed) { "fast" -> 2500L; "battery" -> 8000L; else -> if (playing) 4000L else 8000L }
+        }
+    }
+
     private suspend fun loop() {
         var failures = 0
         while (scope.isActive) {
@@ -88,30 +116,39 @@ object Remote {
                     if (failures >= 2) _state.update { it.copy(online = false, error = e.friendly()) }
                 }
             }
-            val fast = SystemClock.elapsedRealtime() < fastUntil
-            delay(if (fast) 500L else if (visible) 1200L else 3000L)
+            delay(delayFor())
         }
     }
 
     private fun pollOnce(a: PfApi) {
+        val t0 = SystemClock.elapsedRealtime()
         val ytm = a.get("/api/ytm/state")
-        val st = a.get("/api/state")
-        val outs = if (wantOutputs) runCatching { parseOutputs(a.get("/api/outputs")) }.getOrNull() else null
+        // Volume, outputs and the equalizer change rarely, so ask for them every other poll
+        // (and always right after something was sent).
+        val full = tick++ % 2 == 0 || t0 < fastUntil
+        val st = if (full) a.get("/api/state") else null
+        val outs = if (wantOutputs && full) runCatching { parseOutputs(a.get("/api/outputs")) }.getOrNull() else null
         val settling = SystemClock.elapsedRealtime() < settleUntil
+        val nowJson = ytm.optJSONObject("now")
+        val now = parseNow(nowJson)
+        _progress.value = Progress(parsePosition(nowJson), t0)
+        val queue = parseQueue(ytm)
+        val source = ytm.str("source")
+        val bridge = ytm.optBoolean("connected", false) && source == "ytm"
         _state.update { cur ->
             cur.copy(
                 configured = true,
                 online = true,
                 error = null,
-                now = parseNow(ytm.optJSONObject("now")),
-                queue = parseQueue(ytm),
-                source = ytm.str("source"),
-                bridge = ytm.optBoolean("connected", false) && ytm.str("source") == "ytm",
-                volume = if (settling) cur.volume else parseVolume(st),
-                eq = parseEq(st),
-                canOutputs = st.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: false,
+                now = now,
+                queue = queue,
+                source = source,
+                bridge = bridge,
+                volume = if (st == null || settling) cur.volume else parseVolume(st),
+                eq = if (st == null) cur.eq else parseEq(st),
+                canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
+                canLyrics = st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 outputs = if (settling) cur.outputs else (outs ?: cur.outputs),
-                stamp = SystemClock.elapsedRealtime(),
             )
         }
     }
@@ -140,10 +177,10 @@ object Remote {
             try {
                 val r = a.post("/api/ytm", body)
                 if (r.has("error")) {
-                    val msg = if (r.optString("error") == "extension_offline") {
-                        "YouTube Music extension isn't connected"
-                    } else r.optString("error")
-                    _state.update { it.copy(error = msg) }
+                    notify(
+                        if (r.optString("error") == "extension_offline") "The YouTube Music extension isn't connected"
+                        else r.optString("error")
+                    )
                 }
                 onResult?.invoke(r)
             } catch (e: Exception) {
@@ -157,9 +194,8 @@ object Remote {
     fun transport(action: String, position: Double? = null) {
         val b = JSONObject().put("type", "transport").put("action", action)
         if (position != null) b.put("position", position)
-        // Update the clock locally so the seek bar doesn't wait for the next poll.
         if (action == "playpause") _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(playing = !n.playing) }) }
-        if (action == "seek" && position != null) _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(position = position) }) }
+        if (action == "seek" && position != null) _progress.value = Progress(position, SystemClock.elapsedRealtime())
         command(b)
     }
 
@@ -190,7 +226,17 @@ object Remote {
     fun queuePlayAt(t: Track) = command(ref(t).put("type", "queuePlayAt"))
     fun queueRemove(t: Track) = command(ref(t).put("type", "queueRemove"))
     fun queueMove(t: Track, to: Int) = command(ref(t).put("type", "queueMove").put("to", to))
-    fun queueMoveNext(t: Track) = command(ref(t).put("type", "queueMoveNext"))
+
+    fun queueMoveNext(t: Track) {
+        command(ref(t).put("type", "queueMoveNext"))
+        notify("Playing next: ${t.title}")
+    }
+
+    /** Copies a track (typically an autoplay suggestion) onto the end of the real queue. */
+    fun queueAddEnd(t: Track) {
+        command(ref(t).put("type", "queueAddEnd"))
+        notify("Added to your queue: ${t.title}")
+    }
 
     fun play(videoId: String, playlistId: String? = null) {
         val b = JSONObject().put("type", "play").put("videoId", videoId)
@@ -198,39 +244,86 @@ object Remote {
         command(b)
     }
 
-    fun startPlaylist(playlistId: String, shuffle: Boolean) =
+    fun startPlaylist(playlistId: String, shuffle: Boolean) {
         command(JSONObject().put("type", "startPlaylist").put("playlistId", playlistId).put("shuffle", shuffle))
-
-    fun queueAdd(item: SearchItem) {
-        val vid = item.videoId ?: return
-        command(JSONObject().put("type", "queueAdd").put("videoId", vid).put("query", item.title + " " + item.subtitle))
+        notify(if (shuffle) "Shuffling playlist" else "Starting playlist")
     }
 
-    /** Search needs the reply, so it's a plain blocking call for a coroutine on [Dispatchers.IO]. */
-    fun search(query: String): List<SearchItem> {
-        val a = api ?: return emptyList()
-        val r = a.post("/api/ytm", JSONObject().put("type", "search").put("query", query), 20000)
+    fun startMix(videoId: String) {
+        command(JSONObject().put("type", "startMix").put("videoId", videoId))
+        notify("Starting radio")
+    }
+
+    /** Add a song from search / a playlist / a shelf to the current queue, next or at the end. */
+    fun queueAdd(item: SearchItem, next: Boolean) {
+        val vid = item.videoId ?: return
+        command(
+            JSONObject().put("type", "queueAdd").put("videoId", vid)
+                .put("query", item.title + " " + item.subtitle).put("mode", if (next) "next" else "end")
+        )
+        notify(if (next) "Playing next: ${item.title}" else "Added to your queue: ${item.title}")
+    }
+
+    // ---- calls that need an answer (run these on Dispatchers.IO)
+
+    private fun need(): PfApi = api ?: throw ApiException(0, "Not connected to a computer.")
+
+    private fun ytmCall(body: JSONObject, timeoutMs: Int = 25000): JSONObject {
+        val r = need().post("/api/ytm", body, timeoutMs)
         if (r.has("error")) {
             throw ApiException(
                 200,
                 if (r.optString("error") == "extension_offline") "The YouTube Music extension isn't connected." else r.optString("error"),
             )
         }
-        return parseSearch(r)
+        return r
+    }
+
+    fun search(query: String): List<SearchItem> =
+        parseItems(ytmCall(JSONObject().put("type", "search").put("query", query), 20000))
+
+    fun home(): List<Shelf> = parseShelves(ytmCall(JSONObject().put("type", "home"), 40000))
+
+    fun playlists(): List<SearchItem> = parseItems(ytmCall(JSONObject().put("type", "playlists")), "playlists")
+
+    fun playlistItems(p: SearchItem): List<SearchItem> =
+        parseItems(
+            ytmCall(
+                JSONObject().put("type", "playlistItems")
+                    .put("playlistId", p.playlistId ?: JSONObject.NULL).put("browseId", p.browseId ?: JSONObject.NULL)
+            )
+        )
+
+    /** A playlist change (move, remove, rename, add, create, delete, queueSave); the reply has `ok`. */
+    fun playlistOp(body: JSONObject): JSONObject = ytmCall(body)
+
+    fun lyrics(now: Now, source: String?, refresh: Boolean): LyricsResult {
+        fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+        val q = StringBuilder("/api/lyrics?title=").append(enc(now.title)).append("&artist=").append(enc(now.artist))
+        if (now.duration > 0) q.append("&duration=").append(now.duration.toInt())
+        now.videoId?.let { q.append("&videoId=").append(enc(it)) }
+        if (source != null && source != "auto") q.append("&source=").append(enc(source))
+        if (refresh) q.append("&refresh=1")
+        return parseLyrics(need().get(q.toString(), 25000))
     }
 
     // ---- volume / outputs / EQ
 
-    private var lastVolSend = 0L
+    private var lastSend = 0L
+
+    private fun throttled(ms: Long): Boolean {
+        val n = SystemClock.elapsedRealtime()
+        if (n - lastSend < ms) return true
+        lastSend = n
+        return false
+    }
 
     /** [final] sends immediately; otherwise drags are throttled to about 10 updates per second. */
     fun setVolume(percent: Int, final: Boolean = true) {
         val p = percent.coerceIn(0, 100)
         settleUntil = SystemClock.elapsedRealtime() + 1500
         _state.update { it.copy(volume = it.volume.copy(percent = p)) }
-        val now = SystemClock.elapsedRealtime()
-        if (!final && now - lastVolSend < 100) return
-        lastVolSend = now
+        if (!final && throttled(100)) return
         runApi { it.post("/api/volume", JSONObject().put("percent", p)) }
     }
 
@@ -257,9 +350,7 @@ object Remote {
         val p = percent.coerceIn(0, 100)
         settleUntil = SystemClock.elapsedRealtime() + 1500
         _state.update { s -> s.copy(outputs = s.outputs.map { if (it.name == name) it.copy(percent = p) else it }) }
-        val now = SystemClock.elapsedRealtime()
-        if (!final && now - lastVolSend < 100) return
-        lastVolSend = now
+        if (!final && throttled(100)) return
         runApi { it.post("/api/output/volume", JSONObject().put("name", name).put("percent", p)) }
     }
 
@@ -279,9 +370,7 @@ object Remote {
     fun eqBand(band: String, db: Double, final: Boolean = true) {
         _state.update { s -> s.copy(eq = s.eq.copy(bands = s.eq.bands + (band to db))) }
         settleUntil = SystemClock.elapsedRealtime() + 800
-        val now = SystemClock.elapsedRealtime()
-        if (!final && now - lastVolSend < 120) return
-        lastVolSend = now
+        if (!final && throttled(120)) return
         runApi { it.post("/api/eq", JSONObject().put("band", band).put("db", db)) }
     }
 

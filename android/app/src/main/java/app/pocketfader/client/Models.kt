@@ -1,14 +1,18 @@
 package app.pocketfader.client
 
+import androidx.compose.runtime.Immutable
 import org.json.JSONArray
 import org.json.JSONObject
 
+// The @Immutable promises let Compose skip redrawing parts of the screen whose data didn't change,
+// which matters on older phones.
+
+@Immutable
 data class Now(
     val title: String = "",
     val artist: String = "",
     val art: String? = null,
     val playing: Boolean = false,
-    val position: Double = 0.0,
     val duration: Double = 0.0,
     val videoId: String? = null,
     val liked: Boolean = false,
@@ -17,6 +21,11 @@ data class Now(
     val autoplay: Boolean? = null,     // null: this extension version doesn't report it
 )
 
+/** Playback position as last reported by the computer, and when (SystemClock.elapsedRealtime). */
+@Immutable
+data class Progress(val position: Double = 0.0, val at: Long = 0L)
+
+@Immutable
 data class Track(
     val videoId: String?,
     val title: String,
@@ -29,6 +38,7 @@ data class Track(
     val setVideoId: String?,
 )
 
+@Immutable
 data class VolumeState(
     val available: Boolean = false,
     val percent: Int = 0,
@@ -36,6 +46,7 @@ data class VolumeState(
     val device: String = "",
 )
 
+@Immutable
 data class Output(
     val name: String,
     val description: String,
@@ -45,6 +56,7 @@ data class Output(
     val kind: String,
 )
 
+@Immutable
 data class EqState(
     val available: Boolean = false,
     val toggle: Boolean = false,       // has an on/off switch (the built-in EQ)
@@ -57,6 +69,8 @@ data class EqState(
     val max: Double = 12.0,
 )
 
+/** Anything YouTube Music lists: a song, playlist, album or shelf card. */
+@Immutable
 data class SearchItem(
     val title: String,
     val subtitle: String,
@@ -64,6 +78,27 @@ data class SearchItem(
     val videoId: String?,
     val playlistId: String?,
     val kind: String,
+    val browseId: String? = null,
+    val setVideoId: String? = null,     // present on tracks of a playlist you own (needed to edit it)
+)
+
+@Immutable
+data class Shelf(val title: String, val items: List<SearchItem>)
+
+@Immutable
+data class LyricLine(val t: Double?, val text: String, val rom: String?, val tr: String?)
+
+@Immutable
+data class LyricSource(val id: String, val label: String, val found: Boolean, val synced: Boolean)
+
+@Immutable
+data class LyricsResult(
+    val found: Boolean = false,
+    val source: String? = null,
+    val sources: List<LyricSource> = emptyList(),
+    val synced: Boolean = false,
+    val lines: List<LyricLine> = emptyList(),
+    val credit: String? = null,
 )
 
 fun JSONObject.str(key: String): String? =
@@ -83,7 +118,6 @@ fun parseNow(o: JSONObject?): Now? {
         artist = o.str("artist").orEmpty(),
         art = o.str("art"),
         playing = o.optBoolean("playing", false),
-        position = o.optDouble("position", 0.0).let { if (it.isNaN()) 0.0 else it },
         duration = o.optDouble("duration", 0.0).let { if (it.isNaN()) 0.0 else it },
         videoId = o.str("videoId"),
         liked = o.optString("liked") == "LIKE",
@@ -92,6 +126,9 @@ fun parseNow(o: JSONObject?): Now? {
         autoplay = if (o.has("autoplay") && !o.isNull("autoplay")) o.optBoolean("autoplay") else null,
     )
 }
+
+fun parsePosition(o: JSONObject?): Double =
+    o?.optDouble("position", 0.0)?.let { if (it.isNaN()) 0.0 else it } ?: 0.0
 
 fun parseQueue(o: JSONObject): List<Track> =
     o.optJSONArray("queue").mapObjects { q ->
@@ -155,17 +192,45 @@ fun parseOutputs(o: JSONObject): List<Output> =
         )
     }
 
-fun parseSearch(o: JSONObject): List<SearchItem> =
-    o.optJSONArray("items").mapObjects {
-        SearchItem(
-            title = it.optString("title"),
-            subtitle = it.str("subtitle").orEmpty(),
-            thumb = it.str("thumb"),
-            videoId = it.str("videoId"),
-            playlistId = it.str("playlistId"),
-            kind = it.str("kind") ?: "unknown",
+private fun item(it: JSONObject) = SearchItem(
+    title = it.optString("title"),
+    subtitle = it.str("subtitle").orEmpty(),
+    thumb = it.str("thumb"),
+    videoId = it.str("videoId"),
+    playlistId = it.str("playlistId"),
+    kind = it.str("kind") ?: "unknown",
+    browseId = it.str("browseId"),
+    setVideoId = it.str("setVideoId"),
+)
+
+fun parseItems(o: JSONObject, key: String = "items"): List<SearchItem> = o.optJSONArray(key).mapObjects { item(it) }
+
+fun parseShelves(o: JSONObject): List<Shelf> =
+    o.optJSONArray("sections").mapObjects { s -> Shelf(s.optString("title"), parseItems(s)) }
+        .filter { it.items.isNotEmpty() }
+
+fun parseLyrics(o: JSONObject): LyricsResult {
+    val sources = o.optJSONArray("sources").mapObjects {
+        LyricSource(it.optString("id"), it.optString("label"), it.optBoolean("found"), it.optBoolean("synced"))
+    }
+    val l = o.optJSONObject("lyrics")
+    val lines = l?.optJSONArray("lines").mapObjects {
+        LyricLine(
+            t = if (it.isNull("t")) null else it.optDouble("t"),
+            text = it.optString("text"),
+            rom = it.str("rom"),
+            tr = it.str("tr"),
         )
     }
+    return LyricsResult(
+        found = o.optBoolean("found") && lines.isNotEmpty(),
+        source = o.str("source"),
+        sources = sources,
+        synced = l?.optBoolean("synced") ?: false,
+        lines = lines,
+        credit = l?.str("credit"),
+    )
+}
 
 fun formatTime(seconds: Double): String {
     val s = if (seconds.isNaN() || seconds < 0) 0 else seconds.toInt()

@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
@@ -139,7 +138,7 @@ private fun ResultRow(item: SearchItem) {
             )
         }
         if (item.videoId != null && item.kind == "song") {
-            IconButton(onClick = { Remote.queueAdd(item) }) { Icon(Icons.Filled.Add, "Add to queue") }
+            SongMenuButton(item)
         } else if (item.playlistId != null) {
             IconButton(onClick = { Remote.startPlaylist(item.playlistId, true) }) { Icon(Icons.Filled.Shuffle, "Shuffle play") }
         }

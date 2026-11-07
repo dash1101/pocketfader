@@ -1,5 +1,6 @@
 package app.pocketfader.client
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -8,8 +9,13 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 private val Violet = Color(0xFF8B5CF6)
 
@@ -41,15 +47,45 @@ private val Light = lightColorScheme(
     surfaceVariant = Color(0xFFE7E0EC),
 )
 
-/** Material You colours on Android 12+, the Pocketfader violet palette everywhere else. */
+/** True when the user asked for fewer animations (or the device is slow): screens skip decorative motion. */
+val LocalReduceMotion = compositionLocalOf { false }
+
+/**
+ * Colours follow the settings: system / light / dark / true black (the black theme leaves OLED pixels
+ * switched off), with Material You colours on Android 12+ when enabled.
+ */
 @Composable
-fun PocketfaderTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
+    val systemDark = isSystemInDarkTheme()
+    val dark = when (prefs.theme) {
+        "dark", "black" -> true
+        "light" -> false
+        else -> systemDark
+    }
     val ctx = LocalContext.current
-    val scheme = when {
-        Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+    var scheme = when {
+        prefs.dynamicColor && Build.VERSION.SDK_INT >= 31 ->
+            if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         dark -> Dark
         else -> Light
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    if (prefs.theme == "black") {
+        scheme = scheme.copy(
+            background = Color.Black, surface = Color.Black,
+            surfaceContainer = Color(0xFF0B0B0D), surfaceContainerHigh = Color(0xFF141417),
+            surfaceVariant = Color(0xFF1B1B20),
+        )
+    }
+    val view = LocalView.current
+    SideEffect {
+        val window = (view.context as? Activity)?.window
+        if (window != null) {
+            val c = WindowCompat.getInsetsController(window, view)
+            c.isAppearanceLightStatusBars = !dark
+            c.isAppearanceLightNavigationBars = !dark
+        }
+    }
+    CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
 }

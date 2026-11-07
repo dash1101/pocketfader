@@ -62,13 +62,24 @@ class PlaybackService : Service() {
         volume = object : VolumeProviderCompat(VolumeProviderCompat.VOLUME_CONTROL_ABSOLUTE, 100, 50) {
             override fun onSetVolumeTo(volume: Int) = Remote.setVolume(volume)
             override fun onAdjustVolume(direction: Int) {
-                if (direction != 0) Remote.adjustVolume(direction * 5)
+                if (direction != 0) Remote.adjustVolume(direction * Settings.prefs.value.volumeStep)
             }
         }
-        session.setPlaybackToRemote(volume)
+        applyVolumeMode(Settings.prefs.value.volumeKeys)
         Remote.ensureConfigured(ConfigStore(this))
         Remote.acquire()
         scope.launch { Remote.state.collect { publish(it) } }
+        scope.launch { Settings.prefs.collect { applyVolumeMode(it.volumeKeys) } }
+        // the position drifts on its own while playing, so refresh it now and then (and after seeks)
+        scope.launch {
+            Remote.progress.collect {
+                val t = android.os.SystemClock.elapsedRealtime()
+                val playing = Remote.state.value.now?.playing == true
+                val expected = lastPos + if (playing) (t - lastPosUpdate) / 1000.0 else 0.0
+                // only when the position jumped (a seek on the computer) or it's been a while
+                if (Math.abs(it.position - expected) > 2.5 || t - lastPosUpdate > 30000) publish(Remote.state.value, force = true)
+            }
+        }
         showForeground()
     }
 
@@ -93,7 +104,18 @@ class PlaybackService : Service() {
         }
     }
 
-    private fun publish(s: RemoteState) {
+    private var lastPosUpdate = 0L
+    private var lastPos = 0.0
+    private var remoteVolume = false
+
+    private fun applyVolumeMode(remote: Boolean) {
+        if (remote == remoteVolume && ::volume.isInitialized && started) return
+        remoteVolume = remote
+        if (remote) session.setPlaybackToRemote(volume)
+        else session.setPlaybackToLocal(android.media.AudioManager.STREAM_MUSIC)
+    }
+
+    private fun publish(s: RemoteState, force: Boolean = false) {
         val now = s.now
         val url = now?.art
         if (url != artUrl) {
@@ -107,7 +129,10 @@ class PlaybackService : Service() {
         if (s.volume.available) volume.currentVolume = s.volume.percent
 
         val playing = now?.playing == true
-        val posMs = ((now?.position ?: 0.0) * 1000).toLong()
+        val prog = Remote.progress.value
+        val posMs = (prog.position * 1000).toLong()
+        lastPosUpdate = android.os.SystemClock.elapsedRealtime()
+        lastPos = prog.position
         // Only touch the session when something visible changed (position drifts every poll).
         val key = listOf(now?.title, now?.artist, playing, art != null, s.online).joinToString("|")
         session.setPlaybackState(
@@ -123,7 +148,7 @@ class PlaybackService : Service() {
                 )
                 .build()
         )
-        if (key == lastKey) return
+        if (force || key == lastKey) return    // a position-only refresh stops here
         lastKey = key
         session.setMetadata(
             MediaMetadataCompat.Builder()
