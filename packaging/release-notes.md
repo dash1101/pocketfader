@@ -16,30 +16,28 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.7
+### What's new in alpha.8
 
-- **Install YTM Beacon from the app**: on the Discord presence card, **Install**, **Start** or **Update** YTM Beacon. The computer
-  always downloads Beacon's newest release, checks its checksum, and runs Beacon's own installer.
-- **A livelier Android app** (Settings → Effects; all light drawing effects, off with *Reduce animations*):
-  - **Cover glow**: Off, Soft, Strong or Extreme halo of the cover's colour around the album art.
-  - **Glow on text, icons and buttons** (optional): the song title, the lyric being sung, and the buttons that are on.
-  - **Wavy seek bar** that ripples while music plays and settles flat when paused.
-  - **Cover shapes**: Rounded, Soft, Circle (spins slowly like a record) or Cut corners.
-  - **Motion**: the play button eases between a circle and a softer square, buttons dip when pressed, the title fades
-    between songs, screens fade and slide, and the current queue row has dancing equalizer bars.
-- **Sleep timer**: a moon button next to the song title pauses playback after 15 min to 2 h, or when the song ends
-  (also in the API, see docs/API.md).
-- **Queue reordering**: moving a song no longer ends in `order_mismatch` on a slow or busy tab. The extension now waits
-  for the queue to finish redrawing between steps and corrects itself if a copy is left behind. (Reproduced and fixed against
-  a stand-in queue with delayed redraws; ten moves in a row all came out right.)
-- **Like**: when the page has no like button the extension uses YouTube Music's own like call and reads the result back.
-- **Shuffle and loop**: when the extension can't find those buttons it now says so instead of pretending. Extension 1.6 also
-  saves a description of how your YouTube Music page is built (element names only) next to the config
-  (`ytm-layout.json`) so the buttons can be mapped properly. **Reload the extension, refresh the YouTube Music tab and leave
-  it open for 15 seconds.**
+- **Ambient cover glow (Android)**: the glow is no longer one flat colour. It's a soft blur of the cover's own edges carried
+  outward, so each side of the album art lights up in the colours that are actually there. It's drawn behind the list, so it
+  spreads under the top bar instead of being cut off in a hard line.
+- **Smoother seek wave**: drawn from many short steps and eased flat at both ends, so there are no rough edges.
+- **Settings in pages**: Settings opens as an overview of categories (Sound & outputs, Lyrics, Controls, Appearance, Effects,
+  Screen & always-on, Connection, Discord presence, Updates, Performance, About). The old **Mixer** (volume, output devices,
+  equalizer) is now **Sound & outputs**, and Discord presence has its own page.
+- **Settings in the bottom navigation** replaces Mixer. In Settings → Appearance you can also choose a **floating pill**
+  navigation bar instead of the classic bar.
+- **Scrolling on old tablets**: fixed a slowdown from alpha.7 where the whole screen was redrawn on every update (the sleep timer's
+  clock changed each time). There's also a new **Pictures in the queue** switch (Settings → Performance) to turn the little
+  cover pictures off if the queue is still slow on an old device. Not measured on a device, so tell us how it feels.
+- **Like and autoplay (extension 1.7)**: newer YouTube Music builds use different player controls; the extension now looks for the
+  like button there. Autoplay can't be changed while loop is on (YouTube Music hides and ignores it), so the app says so
+  instead of silently failing. **Reload the extension and refresh the YouTube Music tab.**
+- Friendlier messages in the app for a queue move, like or autoplay that didn't go through.
 
 ### Earlier
 
+- alpha.7: install/start/update YTM Beacon from the app, effects (cover glow, wavy seek bar, cover shapes, transitions), a sleep timer, sturdier queue reordering.
 - alpha.6: readable colours on every theme, accent colour picker, Discord presence card, safer app updates.
 - alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons.
 - alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and in-app updates.

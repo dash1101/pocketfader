@@ -13,7 +13,7 @@ Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows y
 | **Playing** | The player (cover, seek bar, shuffle / previous / play-pause / next / loop, like, volume) with **Up next** and **Lyrics** underneath. |
 | **Search** | Search YouTube Music. The ⋮ menu on any song can play it, put it next, add it to your queue, add it to a playlist or start a radio. |
 | **Library** | Your YouTube Music **Home** shelves and **Playlists**. Open a playlist to play or shuffle it, and edit your own (reorder, remove, rename, delete), or create new ones. |
-| **Mixer** | Master volume, every output device with its **own level** (set it before you switch to it), and the built-in equalizer. |
+| **Settings** | Split into pages: **Sound & outputs** (master volume, every output device with its **own level**, the built-in equalizer), Lyrics, Controls, Appearance (theme, accent colour, navigation style), Effects, Screen & always-on, Connection, **Discord presence**, Updates, Performance and About. |
 
 **Up next** shows what's already played (collapsed), the current track, what's coming, and YouTube Music's
 autoplay suggestions. Suggestions that won't play (because the queue is looping or autoplay is off) are dimmed
@@ -23,7 +23,7 @@ shuffle / loop / autoplay chips spells out what is being shuffled or looped.
 **Lyrics** follow the song line by line (tap a line to jump to it). Pick a source (LRCLIB, NetEase, YouTube
 Music), look again with ↻, and switch **Romanize** or **Translation** on when a source has them.
 
-On tablets and in landscape the player stays on the left; Queue, Lyrics, Search, Library and Mixer are tabs on the right.
+On tablets and in landscape the player stays on the left; Queue, Lyrics, Search and Library are tabs on the right (Settings is the gear in the top bar).
 
 Outside the app, a **media notification** shows what's playing with previous / play-pause / next and works on
 the lock screen and with Bluetooth headsets. While something is playing, the phone's **hardware volume keys

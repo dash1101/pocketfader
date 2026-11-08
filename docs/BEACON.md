@@ -6,7 +6,7 @@ lets you **see whether it's working and switch it on or off from your phone**.
 
 ## What you get
 
-- A **Discord presence** card in the Android app (Mixer tab) and in the web app (Settings):
+- A **Discord presence** card in the Android app (Settings → Discord presence) and in the web app (Settings):
   - a status line that says what's happening and what to do if something's wrong (YTM Beacon not running, Discord closed,
     the browser extension not set up or gone quiet, a song hidden on purpose…);
   - a **Show on Discord** switch;
