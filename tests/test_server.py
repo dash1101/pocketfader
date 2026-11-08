@@ -291,3 +291,37 @@ class TailscaleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SleepTimerTests(Base):
+    def test_set_and_cancel(self):
+        code, r, _ = self.req("POST", "/api/sleep", {"minutes": 30})
+        self.assertEqual(code, 200)
+        self.assertTrue(1795 <= r["remainingSec"] <= 1800)
+        self.assertEqual(self.req("GET", "/api/state")[1]["sleep"]["remainingSec"] > 1700, True)
+        self.assertEqual(self.req("POST", "/api/sleep", {"minutes": 0})[1], {"remainingSec": 0})
+        self.assertEqual(self.req("GET", "/api/state")[1]["sleep"]["remainingSec"], 0)
+
+    def test_rejects_bad_values(self):
+        for bad in (-5, 721, "soon", True, 2.5, [1]):
+            self.assertEqual(self.req("POST", "/api/sleep", {"minutes": bad})[0], 400, bad)
+
+    def test_end_of_song_uses_the_remaining_time(self):
+        # FakeMedia reports 100s long, 5s in: ~96s left
+        code, r, _ = self.req("POST", "/api/sleep", {"minutes": "track"})
+        self.assertEqual(code, 200)
+        self.assertTrue(90 <= r["remainingSec"] <= 100, r)
+
+    def test_firing_pauses_through_the_host_player(self):
+        self.app.set_sleep(0.05)
+        import time
+        time.sleep(0.4)
+        self.assertEqual(self.media.calls, ["playpause"])    # the fake: nothing real is paused
+        self.assertEqual(self.app.sleep_left(), 0)
+
+    def test_cancel_stops_the_pause(self):
+        self.app.set_sleep(0.2)
+        self.app.set_sleep(None)
+        import time
+        time.sleep(0.5)
+        self.assertEqual(self.media.calls, [])

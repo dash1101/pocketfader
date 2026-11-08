@@ -35,6 +35,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -176,6 +182,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+private fun DestContent(d: Dest, s: RemoteState) {
+    when (d) {
+        Dest.Playing -> PlayingPage(s, Modifier.fillMaxSize())
+        Dest.Search -> SearchScreen(s, Modifier.fillMaxSize())
+        Dest.Library -> LibraryScreen(s, Modifier.fillMaxSize())
+        Dest.Mixer -> MixerScreen(s, Modifier.fillMaxSize())
+    }
+}
+
 private enum class Dest(val key: String, val label: String, val icon: ImageVector) {
     Playing("playing", "Playing", Icons.Filled.PlayCircle),
     Search("search", "Search", Icons.Filled.Search),
@@ -225,7 +241,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     val washBrush = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
     val pageBg = MaterialTheme.colorScheme.background
     val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
-    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null)) {
     Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -299,11 +315,17 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                         }
                     }
                 }
-                else -> when (dest) {
-                    Dest.Playing -> PlayingPage(s, Modifier.fillMaxSize())
-                    Dest.Search -> SearchScreen(s, Modifier.fillMaxSize())
-                    Dest.Library -> LibraryScreen(s, Modifier.fillMaxSize())
-                    Dest.Mixer -> MixerScreen(s, Modifier.fillMaxSize())
+                else -> if (prefs.transitions && !prefs.reduceMotion) {
+                    // a short fade with a hint of upward slide; only the incoming screen is really drawn for long
+                    AnimatedContent(
+                        targetState = dest,
+                        transitionSpec = {
+                            (fadeIn(tween(200, delayMillis = 60)) + slideInVertically(tween(260)) { it / 28 }) togetherWith fadeOut(tween(90))
+                        },
+                        label = "screen",
+                    ) { d -> DestContent(d, s) }
+                } else {
+                    DestContent(dest, s)
                 }
             }
         }

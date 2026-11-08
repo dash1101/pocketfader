@@ -44,7 +44,9 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -77,10 +79,10 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28) {
+fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28, shape: androidx.compose.ui.graphics.Shape? = null) {
     Box(
         modifier
-            .clip(RoundedCornerShape(corner.dp))
+            .clip(shape ?: RoundedCornerShape(corner.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
@@ -129,50 +131,73 @@ fun rememberTap(): () -> Unit {
 @Composable
 fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
     val now = s.now
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
     val hasTrack = now != null && now.title.isNotBlank()
+    val playing = now?.playing == true
     Column(modifier.padding(horizontal = 24.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         val calm = LocalReduceMotion.current
         val scale by androidx.compose.animation.core.animateFloatAsState(
-            if (now?.playing == true || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "cover",
+            if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "cover",
         )
-        Cover(
-            now?.art,
-            Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f)
-                .graphicsLayer { scaleX = scale; scaleY = scale }
-                .then(if (calm) Modifier else Modifier.shadow(20.dp, RoundedCornerShape(32.dp), clip = false)),
-            corner = 32,
-        )
-        Spacer(Modifier.height(22.dp))
+        val glowColor = LocalTint.current ?: MaterialTheme.colorScheme.primary
+        val pulse = rememberPulse(playing && !calm && prefs.coverGlow != "off")
+        val shape = coverShape(prefs.coverShape)
+        // "Vinyl": the round cover turns slowly while music plays
+        val spin: State<Float> = if (prefs.coverShape == "circle" && playing && !calm) {
+            androidx.compose.animation.core.rememberInfiniteTransition(label = "spin").animateFloat(
+                0f, 360f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(26000, easing = androidx.compose.animation.core.LinearEasing)), label = "spin",
+            )
+        } else {
+            remember { mutableStateOf(0f) }
+        }
+        Box(Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f)) {
+            Cover(
+                now?.art,
+                Modifier.fillMaxSize()
+                    .graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = spin.value }
+                    .coverGlow(glowColor, prefs.coverGlow, pulse)
+                    .then(if (calm || prefs.coverGlow != "off") Modifier else Modifier.shadow(20.dp, shape, clip = false)),
+                shape = shape,
+            )
+        }
+        Spacer(Modifier.height(if (prefs.coverGlow == "extreme") 34.dp else 22.dp))
 
         val videoId = now?.videoId
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    now?.title?.takeIf { it.isNotBlank() } ?: "Nothing playing",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (hasTrack) {
-                    Text(
-                        now?.artist.orEmpty(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                // the title and artist fade into each other when the track changes
+                androidx.compose.animation.Crossfade(
+                    targetState = (now?.title.orEmpty()) to (now?.artist.orEmpty()),
+                    animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else 280), label = "title",
+                ) { (title, artist) ->
+                    Column {
+                        Text(
+                            title.takeIf { it.isNotBlank() } ?: "Nothing playing",
+                            style = MaterialTheme.typography.headlineMedium.glow(),
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (title.isNotBlank()) {
+                            Text(
+                                artist,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
+            if (s.canSleep) SleepButton(s)
             if (s.bridge && videoId != null) {
                 val liked = now?.liked == true
-                IconButton(onClick = { Remote.like(videoId, !liked) }) {
-                    Icon(
-                        if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                        if (liked) "Unlike" else "Like",
-                        tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                val primary = MaterialTheme.colorScheme.primary
+                PressIconButton(
+                    if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, if (liked) "Unlike" else "Like", 48, 24,
+                    tint = if (liked) primary else MaterialTheme.colorScheme.onSurfaceVariant, glow = liked, enabled = true,
+                ) { Remote.like(videoId, !liked) }
             }
         }
 
@@ -187,15 +212,30 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
             )
         }
 
-        SeekBar(now?.duration ?: 0.0, now?.playing == true)
+        SeekBar(now?.duration ?: 0.0, playing, prefs.wavyBar)
         Transport(now, s.bridge, hasTrack)
         Spacer(Modifier.height(4.dp))
         VolumeRow(s.volume)
     }
 }
 
+/** An icon button that dips a little when pressed and can glow when it's "on". */
 @Composable
-private fun SeekBar(duration: Double, playing: Boolean) {
+fun PressIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, sizeDp: Int, iconDp: Int,
+    tint: androidx.compose.ui.graphics.Color, glow: Boolean, enabled: Boolean, onClick: () -> Unit,
+) {
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    IconButton(
+        onClick = onClick, enabled = enabled, interactionSource = src,
+        modifier = Modifier.size(sizeDp.dp).pressScale(src).iconGlow(tint, glow, sizeDp / 2 + 10),
+    ) {
+        Icon(icon, description, Modifier.size(iconDp.dp), tint = if (enabled) tint else tint.copy(alpha = 0.38f))
+    }
+}
+
+@Composable
+private fun SeekBar(duration: Double, playing: Boolean, wavy: Boolean) {
     val reduce = LocalReduceMotion.current
     val progress by Remote.progress.collectAsStateWithLifecycle()
     var drag by remember { mutableStateOf<Float?>(null) }
@@ -214,14 +254,16 @@ private fun SeekBar(duration: Double, playing: Boolean) {
     val shown = drag ?: fraction
 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Slider(
+        WavySeekBar(
             value = shown.coerceIn(0f, 1f),
+            enabled = duration > 0,
+            playing = playing,
+            wavy = wavy,
             onValueChange = { drag = it },
             onValueChangeFinished = {
                 drag?.let { Remote.transport("seek", it * duration) }
                 drag = null
             },
-            enabled = duration > 0,
         )
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(formatTime(shown * duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -230,41 +272,55 @@ private fun SeekBar(duration: Double, playing: Boolean) {
     }
 }
 
-/** Shuffle · previous · play/pause · next · loop. The two outer buttons light up when they're on. */
+/** Shuffle · previous · play/pause · next · loop. The two outer buttons light up (and glow, if enabled) when they're on. */
 @Composable
 private fun Transport(now: Now?, bridge: Boolean, enabled: Boolean) {
     val tap = rememberTap()
     val playing = now?.playing == true
     val on = MaterialTheme.colorScheme.primary
     val off = MaterialTheme.colorScheme.onSurfaceVariant
+    val plain = MaterialTheme.colorScheme.onSurface
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val shuffle = now?.shuffle == true
-        IconButton(onClick = { tap(); Remote.setShuffle(!shuffle) }, enabled = bridge && enabled) {
-            Icon(Icons.Filled.Shuffle, if (shuffle) "Shuffle on" else "Shuffle off", tint = if (shuffle) on else off)
+        PressIconButton(Icons.Filled.Shuffle, if (shuffle) "Shuffle on" else "Shuffle off", 48, 24, if (shuffle) on else off, shuffle, bridge && enabled) {
+            tap(); Remote.setShuffle(!shuffle)
         }
-        IconButton(onClick = { tap(); Remote.transport("prev") }, Modifier.size(60.dp), enabled = enabled) {
-            Icon(Icons.Filled.SkipPrevious, "Previous", Modifier.size(34.dp))
-        }
-        FilledIconButton(onClick = { tap(); Remote.transport("playpause") }, Modifier.size(76.dp), enabled = enabled) {
-            Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(42.dp))
-        }
-        IconButton(onClick = { tap(); Remote.transport("next") }, Modifier.size(60.dp), enabled = enabled) {
-            Icon(Icons.Filled.SkipNext, "Next", Modifier.size(34.dp))
-        }
+        PressIconButton(Icons.Filled.SkipPrevious, "Previous", 60, 34, plain, false, enabled) { tap(); Remote.transport("prev") }
+        PlayButton(playing, enabled) { tap(); Remote.transport("playpause") }
+        PressIconButton(Icons.Filled.SkipNext, "Next", 60, 34, plain, false, enabled) { tap(); Remote.transport("next") }
         val repeat = now?.repeat ?: "NONE"
-        IconButton(
-            onClick = { tap(); Remote.setRepeat(when (repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
-            enabled = bridge && enabled,
-        ) {
-            Icon(
-                if (repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                when (repeat) { "ALL" -> "Loop queue"; "ONE" -> "Loop track"; else -> "Loop off" },
-                tint = if (repeat != "NONE") on else off,
-            )
+        PressIconButton(
+            if (repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+            when (repeat) { "ALL" -> "Loop queue"; "ONE" -> "Loop track"; else -> "Loop off" }, 48, 24,
+            if (repeat != "NONE") on else off, repeat != "NONE", bridge && enabled,
+        ) { tap(); Remote.setRepeat(when (repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) }
+    }
+}
+
+/** Play / pause: a round button while playing that eases into a softer square when paused, and dips when pressed. */
+@Composable
+private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val reduce = LocalReduceMotion.current
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val percent by androidx.compose.animation.core.animateFloatAsState(
+        if (playing) 50f else 30f, androidx.compose.animation.core.tween(if (reduce) 0 else 260), label = "shape",
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    Surface(
+        onClick = onClick, enabled = enabled, interactionSource = src,
+        shape = RoundedCornerShape(percent = percent.toInt()),
+        color = if (enabled) primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = Modifier.size(76.dp).pressScale(src).iconGlow(primary, playing && enabled, 58),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            androidx.compose.animation.Crossfade(playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else 160), label = "pp") { p ->
+                Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play", Modifier.size(42.dp))
+            }
         }
     }
 }

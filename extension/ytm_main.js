@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.5.0";
+  const EXT_VERSION = "1.6.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -222,11 +222,28 @@
       ext: EXT_VERSION,                             // which version of this script the page is running
     };
   }
+  // When the page has no player-bar like button, fall back to YouTube Music's own like endpoints (the same calls its
+  // page makes, with your login), and read the state back from the song's `next` data.
+  const likeApi = { vid: null, status: null, busy: false };
+  async function apiLikeStatus(vid) {
+    const nx = await innertube("next", { videoId: vid, isAudioOnly: true }, true);
+    const r = deepFind(nx, "likeButtonRenderer", [])[0] || deepFind(nx, "musicLikeButtonRenderer", [])[0];
+    return (r && r.likeStatus) || null;
+  }
+  function ensureApiLike(vid) {
+    if (!vid || likeApi.busy || likeApi.vid === vid) return;
+    likeApi.busy = true; likeApi.vid = vid; likeApi.status = null;
+    apiLikeStatus(vid).then((st) => { if (likeApi.vid === vid) likeApi.status = st; }).catch(() => {}).finally(() => { likeApi.busy = false; });
+  }
   // Read the current song's like state from the player-bar like button.
   function likeStatus() {
     const lb = (bar() && bar().querySelector("ytmusic-like-button-renderer")) ||
       document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
-    if (!lb) return null;
+    if (!lb) {
+      const vid = mp() && mp().getVideoData && mp().getVideoData().video_id;
+      ensureApiLike(vid);
+      return likeApi.vid === vid ? likeApi.status : null;
+    }
     const s = lb.getAttribute("like-status") || (lb.data && lb.data.likeStatus);
     if (s) return s;
     // fallback: the thumbs-up control's pressed state
@@ -568,24 +585,38 @@
      We pick whichever of the two directions needs fewer steps, and verify the final order.
      If a build of YTM *moves* an existing row instead of duplicating it, the removals are
      skipped automatically (detected from whether the row count grew). */
-  async function queueMove(spec) {
-    const upcomingRows = () => {
-      const rows = queueRows().filter((r) => sectionOf(r) === "queue");
-      return { rows, cur: rows.findIndex((r) => r.hasAttribute("selected")) };
-    };
-    const { rows: rows0, cur } = upcomingRows();
-    const src = findRow({ ...spec, section: "queue" });
-    if (!src) return { ok: false, error: "not_in_queue" };
-    const fromAbs = rows0.indexOf(src);
-    if (fromAbs <= cur) return { ok: false, error: "cannot_move_played_or_current" };
-    const base = cur + 1;
-    const U = rows0.slice(base).map((r) => ({ videoId: r.data.videoId }));
+  const upcoming = () => {
+    const rows = queueRows().filter((r) => sectionOf(r) === "queue");
+    return { rows, cur: rows.findIndex((r) => r.hasAttribute("selected")) };
+  };
+  const upcomingIds = () => { const { rows, cur } = upcoming(); return rows.slice(cur + 1).map((r) => r.data && r.data.videoId); };
+  const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  // Wait until the queue has stopped changing (row count and order steady for a moment). A slow or busy tab can
+  // take a second or more to redraw after a menu action, and acting on a half-drawn queue is what scrambles a move.
+  async function settleQueue(ms = 3500) {
+    const end = Date.now() + ms;
+    let prev = null, since = Date.now();
+    for (;;) {
+      const sig = upcomingIds().join(",");
+      if (sig !== prev) { prev = sig; since = Date.now(); }
+      else if (Date.now() - since >= 400) return;
+      if (Date.now() > end) return;
+      await sleep(80);
+    }
+  }
+  // Make the upcoming tracks play in the order `want` (a list of videoIds), using only menu actions.
+  async function buildOrder(want) {
+    const ids = upcomingIds();
+    const U = ids.map((v) => ({ videoId: v }));
+    const used = new Set(), target = [];
+    for (const v of want) {
+      const k = U.findIndex((u, i) => u.videoId === v && !used.has(i));
+      if (k < 0) return { ok: false, error: "queue_changed" };
+      used.add(k);
+      target.push(U[k]);
+    }
+    if (target.length !== U.length) return { ok: false, error: "queue_changed" };
     const len = U.length;
-    const from = fromAbs - base;
-    const dest = Math.max(0, Math.min(len - 1, Number(spec.to) - base));
-    if (from === dest) return { ok: true, noop: true };
-    const target = U.slice();
-    target.splice(dest, 0, target.splice(from, 1)[0]);
     // Two ways to build the target, each as few menu actions as possible:
     //   front: "Play next" the first m+1 target rows, in reverse  -> [target[0..m]] ++ (U minus those)
     //   end:   "Add to queue" the target rows from m on, in order -> (U minus those) ++ [target[m..]]
@@ -604,30 +635,69 @@
     const useFront = mP + 1 <= len - mE;
     const seq = useFront ? target.slice(0, mP + 1).reverse() : target.slice(mE);
     if (seq.length > 40) return { ok: false, error: "move_too_large" };
-    const want = target.map((t) => t.videoId);
-
     let dup = null;   // does an insert duplicate the row (true) or move it (false)?
     for (const entry of seq) {
-      const before = upcomingRows().rows.length;
+      const before = upcoming().rows.length;
       const r = await rowMenu(queueRows().find((x) => x.data && x.data.videoId === entry.videoId),
         useFront ? "Play next" : "Add to queue");
       if (!r.ok) return { ok: false, error: r.error, step: "insert" };
-      if (dup === null) { await sleep(300); dup = upcomingRows().rows.length > before; }
+      const changed = await waitFor(() => upcoming().rows.length !== before, 2500);
+      if (dup === null) dup = !!changed && upcoming().rows.length > before;
+      if (dup) await waitFor(() => upcoming().rows.length === before + 1, 1500);
+      await settleQueue(1500);
     }
     if (dup) {
       // Old rows now sit after the front-inserted copies, or before the end-appended ones.
       const idx = useFront ? seq.map((e) => seq.length + U.indexOf(e)) : seq.map((e) => U.indexOf(e));
       for (const i of idx.sort((a, b) => b - a)) {
-        const { rows, cur: c } = upcomingRows();
+        const { rows, cur: c } = upcoming();
+        const before = rows.length;
         const r = await rowMenu(rows[c + 1 + i], "Remove from queue");
         if (!r.ok) return { ok: false, error: r.error, step: "remove" };
+        await waitFor(() => upcoming().rows.length < before, 2500);
+        await settleQueue(1500);
       }
     }
-    await sleep(300);
-    const { rows: rowsN, cur: curN } = upcomingRows();
-    const got = rowsN.slice(curN + 1).map((r) => r.data.videoId);
-    const ok = got.length === want.length && got.every((v, i) => v === want[i]);
-    return { ok, steps: seq.length * (dup ? 2 : 1), via: useFront ? "front" : "end", ...(ok ? {} : { error: "order_mismatch", got }) };
+    return { ok: true, steps: seq.length * (dup ? 2 : 1), via: useFront ? "front" : "end" };
+  }
+
+  async function queueMove(spec) {
+    const { rows: rows0, cur } = upcoming();
+    const src = findRow({ ...spec, section: "queue" });
+    if (!src) return { ok: false, error: "not_in_queue" };
+    const fromAbs = rows0.indexOf(src);
+    if (fromAbs <= cur) return { ok: false, error: "cannot_move_played_or_current" };
+    const base = cur + 1;
+    const ids = rows0.slice(base).map((r) => r.data.videoId);
+    const len = ids.length;
+    const from = fromAbs - base;
+    const dest = Math.max(0, Math.min(len - 1, Number(spec.to) - base));
+    if (from === dest) return { ok: true, noop: true };
+    const want = ids.slice();
+    want.splice(dest, 0, want.splice(from, 1)[0]);
+
+    const built = await buildOrder(want);
+    if (!built.ok) { await settleQueue(); return built; }
+    await settleQueue();
+    let got = upcomingIds();
+    // If the queue didn't end up exactly right (a leftover copy, or a row that landed one place off), correct it from
+    // what's really there instead of giving up.
+    for (let attempt = 0; !sameList(got, want) && attempt < 3; attempt++) {
+      if (got.length > want.length) {
+        let i = got.findIndex((v, k) => v !== want[k]);
+        if (i < 0) i = got.length - 1;
+        const { rows, cur: c } = upcoming();
+        const r = await rowMenu(rows[c + 1 + i], "Remove from queue");
+        if (!r.ok) break;
+      } else if (got.length === want.length) {
+        const r = await buildOrder(want);
+        if (!r.ok) break;
+      } else break;
+      await settleQueue();
+      got = upcomingIds();
+    }
+    const ok = sameList(got, want);
+    return { ok, steps: built.steps, via: built.via, ...(ok ? {} : { error: "order_mismatch", got }) };
   }
 
   // Legacy name used by older clients.
@@ -746,7 +816,8 @@
   }
   function probe() {
     const out = {};
-    const bar = document.querySelector("ytmusic-player-bar");
+    const bar = document.querySelector("ytmusic-player-bar") || deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-BAR")[0] || null;
+    out.ext = EXT_VERSION;
     out.playerBar = bar ? { attrs: attrs(bar), props: interestingProps(bar) } : null;
     const q = document.querySelector("ytmusic-player-queue");
     out.queuePanel = q ? { attrs: attrs(q), props: interestingProps(q) } : null;
@@ -790,6 +861,15 @@
     } catch (e) { out.mediaSession = "err"; }
     out.barImgs = bar ? deepAll(bar, (el) => el.tagName === "IMG").map((i) => (i.className || "") + " " + String(i.src).slice(0, 90)).slice(0, 8) : [];
     out.url = location.pathname + location.search;
+    // What this page is built from: every custom element present (so a layout without the usual player bar can be mapped),
+    // and anything docked to the bottom of the window.
+    const tags = {};
+    deepAll(document, (el) => { if (el.tagName.includes("-")) tags[el.tagName.toLowerCase()] = (tags[el.tagName.toLowerCase()] || 0) + 1; return false; });
+    out.tags = Object.fromEntries(Object.entries(tags).sort((x, y) => y[1] - x[1]).slice(0, 150));
+    out.viewport = [innerWidth, innerHeight];
+    out.docked = deepAll(document, (el) => { try { const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+      return el.tagName.includes("-") && cs.position === "fixed" && r.bottom >= innerHeight - 4 && r.height > 20 && r.height < 200; } catch (e) { return false; } })
+      .map((el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")).slice(0, 12);
     return out;
   }
 
@@ -836,7 +916,20 @@
           // The InnerTube like endpoint returns 200 but doesn't actually register, so for the
           // currently-playing song we click the real player-bar like/dislike button (proven to work).
           const cur = mp() && mp().getVideoData && mp().getVideoData().video_id;
-          const lb = document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+          const lb = (bar() && bar().querySelector("ytmusic-like-button-renderer")) ||
+            document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+          if (!lb) {
+            const vid = cmd.videoId || cur;
+            if (!vid) return { ok: false, error: "no_like_button" };
+            const ep = cmd.action === "dislike" ? "like/dislike" : cmd.action === "remove" ? "like/removelike" : "like/like";
+            const want = cmd.action === "dislike" ? "DISLIKE" : cmd.action === "remove" ? "INDIFFERENT" : "LIKE";
+            const r = await innertube(ep, { target: { videoId: vid } }, true);
+            if (r && r.error) return { ok: false, error: "like_failed: " + (r.error.message || r.error.code || "") };
+            await sleep(500);
+            const st = await apiLikeStatus(vid).catch(() => null);
+            likeApi.vid = vid; likeApi.status = st;
+            return { ok: st === want, liked: st, via: "api", ...(st === want ? {} : { error: "like_not_applied" }) };
+          }
           if (lb && (!cmd.videoId || cmd.videoId === cur)) {
             const status = () => lb.getAttribute("like-status") || (lb.data && lb.data.likeStatus) || "INDIFFERENT";
             const btns = lb.querySelectorAll("button");   // [0] = like, [1] = dislike
@@ -900,6 +993,12 @@
     lastFast = sig;
     window.postMessage({ __vmr: "state", state: { now, ts: Date.now(), partial: true } }, "*");
   }, 250);
+
+  // A snapshot of how this page is laid out, sent once after load, so controls that can't be found can be diagnosed
+  // without asking anyone to open developer tools.
+  setTimeout(() => {
+    try { window.postMessage({ __vmr: "state", state: { diag: probe(), ts: Date.now(), partial: true, now: nowPlaying() } }, "*"); } catch (e) {}
+  }, 12000);
 
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");

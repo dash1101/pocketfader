@@ -50,6 +50,9 @@ class App:
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
         self.token = token
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
+        self._sleep_lock = threading.Lock()
+        self._sleep_timer = None
+        self._sleep_at = None
 
     def start(self):
         for b in (self.audio, self.engine, self.media):
@@ -73,6 +76,7 @@ class App:
             "ytm_bridge": self.bridge.connected,
             "lyrics": True,
             "beacon": True,
+            "sleep": True,
         }
 
     def state(self):
@@ -85,6 +89,7 @@ class App:
                        "eq": eng.get("eq", {}), "routing": eng.get("routing", {})},
             "capabilities": self.capabilities(),
             "limits": {"eq_min": EQ_MIN, "eq_max": EQ_MAX},
+            "sleep": {"remainingSec": self.sleep_left()},
         }
 
     def ytm_state(self):
@@ -103,6 +108,55 @@ class App:
                     "playing": bool(m.get("playing")), "position": m.get("position", 0),
                     "duration": m.get("duration", 0), "app": m.get("name") or m.get("app")},
         }
+
+    # ---- sleep timer: pause playback after a while (or at the end of the current song) ----
+    def sleep_left(self):
+        """Seconds until the sleep timer pauses playback; 0 when none is set."""
+        at = self._sleep_at
+        return max(0, int(round(at - time.time()))) if at else 0
+
+    def set_sleep(self, seconds):
+        """seconds: how long until playback is paused; None or 0 cancels the timer."""
+        with self._sleep_lock:
+            if self._sleep_timer:
+                self._sleep_timer.cancel()
+            self._sleep_timer, self._sleep_at = None, None
+            if seconds:
+                self._sleep_at = time.time() + seconds
+                t = threading.Timer(seconds, self._sleep_fire)
+                t.daemon = True
+                t.start()
+                self._sleep_timer = t
+
+    def _sleep_fire(self):
+        with self._sleep_lock:
+            self._sleep_timer, self._sleep_at = None, None
+        try:
+            if self.bridge.connected:
+                if (self.bridge.get_state().get("now") or {}).get("playing"):
+                    self.bridge.request({"type": "transport", "action": "pause"})
+            elif self.media.snapshot().get("playing"):
+                self.media.play_pause()
+        except Exception:
+            pass
+
+    def sleep_for_track_end(self):
+        """Seconds left in the current song, or None when that isn't known."""
+        now = (self.ytm_state().get("now") or {})
+        dur, pos = now.get("duration") or 0, now.get("position") or 0
+        left = dur - pos
+        return int(left) + 1 if dur and left > 0 else None
+
+    def save_diag(self, diag):
+        """The extension's one-off description of how the YouTube Music page is built (element names, never your data),
+        kept next to the config so a missing control can be diagnosed. Overwritten at each page load."""
+        try:
+            f = config_dir() / "ytm-layout.json"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(diag, indent=1)[:400_000])
+            f.chmod(0o600)
+        except OSError:
+            pass
 
     def warm_lyrics(self, state):
         """When the track changes, look its lyrics (and the next couple of tracks') up in the background,
@@ -323,7 +377,7 @@ class Handler(BaseHTTPRequestHandler):
                               [("Content-Disposition", f'attachment; filename="{f.name}"')])
         if path == "/api/beacon":
             try:
-                return self._json(200, app.beacon.status())
+                return self._json(200, app.beacon.status_with_install())
             except BeaconError as e:
                 return self._json(502, {"error": e.message})
         if path == "/api/prefs":
@@ -363,6 +417,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- extension -> server ----
         if path == "/ext/state":
+            diag = body.pop("diag", None)
+            if isinstance(diag, dict):
+                app.save_diag(diag)
             app.bridge.push_state(body)
             app.warm_lyrics(body)
             return self._json(200, {"ok": True})
@@ -378,10 +435,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "type must be a string"})
             return self._json(200, app.ytm_command(body))
 
-        if path in ("/api/beacon/visibility", "/api/beacon/settings"):
+        if path in ("/api/beacon/visibility", "/api/beacon/settings", "/api/beacon/install"):
             try:
                 if path.endswith("visibility"):
                     return self._json(200, app.beacon.set_visibility(body))
+                if path.endswith("install"):
+                    return self._json(200, app.beacon.start_install(body))
                 return self._json(200, app.beacon.set_settings(body))
             except BadRequest as e:
                 return self._json(400, {"error": str(e)})
@@ -389,6 +448,23 @@ class Handler(BaseHTTPRequestHandler):
                 if e.code == "NOT_RUNNING":
                     return self._json(503, {"error": "YTM Beacon isn't running on the computer"})
                 return self._json(502, {"error": e.message})
+
+        if path == "/api/sleep":
+            # {"minutes": 1..720} pauses playback after that long; {"minutes": "track"} at the end of this song;
+            # {"minutes": 0} (or null) cancels
+            m = body.get("minutes")
+            if m in (0, None):
+                app.set_sleep(None)
+            elif m == "track":
+                left = app.sleep_for_track_end()
+                if left is None:
+                    return self._json(409, {"error": "the length of the current song isn't known"})
+                app.set_sleep(left)
+            elif isinstance(m, int) and not isinstance(m, bool) and 1 <= m <= 720:
+                app.set_sleep(m * 60)
+            else:
+                return self._json(400, {"error": "minutes must be 1 to 720, \"track\", or 0 to cancel"})
+            return self._json(200, {"remainingSec": app.sleep_left()})
 
         if path == "/api/volume":
             if not app.audio.snapshot().get("available"):

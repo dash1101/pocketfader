@@ -87,7 +87,7 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
             c.isAppearanceLightNavigationBars = !dark
         }
     }
-    CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion) {
+    CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion, LocalGlowUi provides prefs.glowUi) {
         MaterialTheme(colorScheme = scheme) {
             // The base layer gives every piece of text a readable default colour, whatever theme is chosen.
             androidx.compose.material3.Surface(color = scheme.background, contentColor = scheme.onBackground, content = content)

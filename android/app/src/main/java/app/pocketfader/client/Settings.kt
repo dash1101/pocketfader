@@ -22,7 +22,12 @@ data class Prefs(
     val accent: Int = 0,                     // chosen accent colour (ARGB); 0 = automatic
     val coverWash: Boolean = true,           // tint the background with the cover's colour
     val coverHighlight: Boolean = false,     // lyric highlight takes the cover's colour instead of the accent
-    val showBeacon: Boolean = true,          // Discord presence card in Mixer (when the computer supports it)
+    val showBeacon: Boolean = true,
+    val coverGlow: String = "strong",        // off | soft | strong | extreme: halo around the cover
+    val glowUi: Boolean = false,             // glow around text, icons and buttons
+    val wavyBar: Boolean = true,             // the seek bar ripples while music plays
+    val coverShape: String = "rounded",      // rounded | soft | circle | cut
+    val transitions: Boolean = true,         // fade/slide between screens          // Discord presence card in Mixer (when the computer supports it)
     // display
     val keepAwake: String = "off",           // off | playing | always
     val dimAfterMin: Int = 0,                // 0 = never; dims while kept awake and untouched
@@ -83,6 +88,8 @@ object Settings {
             theme = s("theme", d.theme), dynamicColor = b("dynamicColor", d.dynamicColor),
             accent = i("accent", d.accent), coverWash = b("coverWash", d.coverWash),
             coverHighlight = b("coverHighlight", d.coverHighlight), showBeacon = b("showBeacon", d.showBeacon),
+            coverGlow = s("coverGlow", d.coverGlow), glowUi = b("glowUi", d.glowUi), wavyBar = b("wavyBar", d.wavyBar),
+            coverShape = s("coverShape", d.coverShape), transitions = b("transitions", d.transitions),
             keepAwake = s("keepAwake", d.keepAwake), dimAfterMin = i("dimAfterMin", d.dimAfterMin),
             immersive = b("immersive", d.immersive), pixelShift = b("pixelShift", d.pixelShift),
             pixelShiftMin = i("pixelShiftMin", d.pixelShiftMin), pixelShiftDp = i("pixelShiftDp", d.pixelShiftDp),
@@ -103,6 +110,8 @@ object Settings {
             .putString("theme", p.theme).putBoolean("dynamicColor", p.dynamicColor)
             .putInt("accent", p.accent).putBoolean("coverWash", p.coverWash)
             .putBoolean("coverHighlight", p.coverHighlight).putBoolean("showBeacon", p.showBeacon)
+            .putString("coverGlow", p.coverGlow).putBoolean("glowUi", p.glowUi).putBoolean("wavyBar", p.wavyBar)
+            .putString("coverShape", p.coverShape).putBoolean("transitions", p.transitions)
             .putString("keepAwake", p.keepAwake).putInt("dimAfterMin", p.dimAfterMin)
             .putBoolean("immersive", p.immersive).putBoolean("pixelShift", p.pixelShift)
             .putInt("pixelShiftMin", p.pixelShiftMin).putInt("pixelShiftDp", p.pixelShiftDp)

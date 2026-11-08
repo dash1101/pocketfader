@@ -1,6 +1,9 @@
 package app.pocketfader.client
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -209,7 +212,10 @@ private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, onMore: (Tr
         Box {
             Thumb(t.art, 46)
             if (t.selected) {
-                Icon(Icons.Filled.Equalizer, "Playing now", Modifier.align(Alignment.Center).size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                val playing = Remote.state.collectAsStateWithLifecycle().value.now?.playing == true
+                Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                    EqBars(androidx.compose.ui.graphics.Color.White, playing, Modifier.size(22.dp))
+                }
             }
         }
         Column(Modifier.weight(1f)) {

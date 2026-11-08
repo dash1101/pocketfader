@@ -9,11 +9,22 @@ This module is a whitelist, not a proxy: exactly three operations (status, visib
 input validated, and nothing Beacon returns about paths, its process or its Discord application id is
 passed on. Playback information is never sent *into* Beacon; its browser extension already does that.
 """
+import hashlib
 import http.client
+import io
 import json
+import os
+import platform
 import re
+import shutil
+import subprocess
+import tarfile
+import tempfile
 import threading
 import time
+import urllib.request
+import zipfile
+from pathlib import Path
 
 PORTS = (41713, 41714, 41715, 41716, 41717)
 HOST = "127.0.0.1"          # literal address: Beacon listens on IPv4 only, "localhost" may try ::1 first
@@ -24,6 +35,13 @@ MAX_HIDE_MINUTES = 1440
 # The only settings the phone may change, and what each accepts.
 BOOL_SETTINGS = ("privateMode", "showPaused", "showProgress", "showStateIcon", "showButtons", "showAlbumArt")
 STATUS_DISPLAY = ("name", "state", "details")
+
+
+REPO = "dash1101/ytm-beacon"
+RELEASE_BASE = f"https://github.com/{REPO}/releases/latest/download"
+LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+LATEST_TTL = 6 * 3600
+INSTALL_ACTIONS = ("install", "update", "start")
 
 
 class BeaconError(Exception):
@@ -50,6 +68,16 @@ def version_ok(text):
 
 
 # ---- validation (phone -> Beacon) ----
+
+def validate_install(body):
+    if body in (None, {}):
+        return {"action": "auto"}
+    if not isinstance(body, dict) or set(body) - {"action"}:
+        raise BadRequest("expected {\"action\": \"install\"|\"update\"|\"start\"}")
+    if body.get("action") not in INSTALL_ACTIONS:
+        raise BadRequest("action must be one of: " + ", ".join(INSTALL_ACTIONS))
+    return {"action": body["action"]}
+
 
 def _is_int(v):
     return isinstance(v, int) and not isinstance(v, bool)
@@ -182,12 +210,170 @@ def normalize(s, now=None):
     return out
 
 
+class Installer:
+    """Installs, updates or starts YTM Beacon on this computer, always from its latest GitHub release.
+
+    Nothing the phone sends reaches a shell: the actions are a fixed list, the download address is fixed, the
+    archive's SHA-256 is checked against the release's checksums.txt (the same checks as Beacon's own install
+    script), and the commands run are Beacon's own `install` / `update` and, on Linux, starting its user service.
+    """
+
+    def __init__(self, base_url=None, latest_api=LATEST_API, runner=None, system=None, machine=None, home=None):
+        self.base_url = base_url or os.environ.get("POCKETFADER_BEACON_BASE_URL") or RELEASE_BASE
+        self.latest_api = latest_api
+        self._run = runner or self._default_run
+        self.system = (system or platform.system()).lower()
+        self.machine = (machine or platform.machine()).lower()
+        self.home = Path(home) if home else Path.home()
+        self._lock = threading.Lock()
+        self._job = {"state": "idle", "message": ""}
+        self._latest = (0.0, None)
+        self._fetching = False
+
+    # -- what's installed, what's out there --
+    def binary(self):
+        """Where Beacon's program is, or None."""
+        cands = []
+        if self.system == "windows":
+            cands.append(Path(os.environ.get("LOCALAPPDATA", self.home / "AppData" / "Local")) / "ytm-beacon" / "ytm-beacon.exe")
+        else:
+            cands.append(self.home / ".local" / "bin" / "ytm-beacon")
+        for c in cands:
+            if c.is_file():
+                return c
+        found = shutil.which("ytm-beacon")
+        return Path(found) if found else None
+
+    def can_install(self):
+        return self.system in ("linux", "darwin", "windows") and self._arch() is not None
+
+    def can_start(self):
+        return self.system == "linux" and shutil.which("systemctl") is not None
+
+    def _arch(self):
+        return {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(self.machine)
+
+    def latest(self):
+        """The newest released version (e.g. "v0.1.4"), looked up at most every few hours and never blocking."""
+        at, val = self._latest
+        if self.latest_api and time.time() - at > LATEST_TTL and not self._fetching:
+            self._fetching = True
+            threading.Thread(target=self._fetch_latest, daemon=True).start()
+        return val
+
+    def _fetch_latest(self):
+        try:
+            req = urllib.request.Request(self.latest_api, headers={"User-Agent": "pocketfader", "Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                tag = json.loads(r.read(1 << 20)).get("tag_name")
+            self._latest = (time.time(), tag if parse_version(tag) else None)
+        except Exception:
+            self._latest = (time.time() - LATEST_TTL + 300, self._latest[1])   # try again in five minutes
+        finally:
+            self._fetching = False
+
+    def info(self, running_version=None):
+        latest = self.latest()
+        lv, rv = parse_version(latest), parse_version(running_version)
+        return {
+            "installed": self.binary() is not None or running_version is not None,
+            "canInstall": self.can_install(),
+            "canStart": self.can_start(),
+            "latest": latest,
+            "updateAvailable": bool(lv and rv and lv > rv),
+            "job": dict(self._job),
+        }
+
+    # -- doing it --
+    def start(self, action, running):
+        """Begins the job in the background. action: install | update | start | auto. running: Beacon answers now."""
+        with self._lock:
+            if self._job["state"] == "running":
+                raise BeaconError("REJECTED", "Already working on it.")
+            if action == "auto":
+                action = "update" if (running or self.binary()) else "install"
+            if action == "start" and not self.can_start():
+                raise BeaconError("REJECTED", "Starting it from here isn't supported on this computer. Start YTM Beacon there.")
+            if action in ("install", "update") and not self.can_install():
+                raise BeaconError("REJECTED", "This computer type isn't supported by YTM Beacon's installer.")
+            self._job = {"state": "running", "message": {"install": "Downloading YTM Beacon…", "update": "Updating YTM Beacon…",
+                                                         "start": "Starting YTM Beacon…"}[action]}
+        threading.Thread(target=self._work, args=(action,), daemon=True).start()
+        return dict(self._job)
+
+    def _set(self, state, message):
+        with self._lock:
+            self._job = {"state": state, "message": message}
+
+    def _scrub(self, text):
+        text = (text or "").strip().splitlines()[-1:] or [""]
+        return text[0].replace(str(self.home), "~")[:200]
+
+    def _work(self, action):
+        try:
+            if action == "start":
+                code, out = self._run(["systemctl", "--user", "start", "ytm-beacon.service"], 30)
+                self._set("done" if code == 0 else "failed", "Started YTM Beacon." if code == 0 else "Couldn't start it: " + self._scrub(out))
+            elif action == "update" and self.binary():
+                code, out = self._run([str(self.binary()), "update"], 180)
+                self._set("done" if code == 0 else "failed", self._scrub(out) or "Updated." if code == 0 else "Update failed: " + self._scrub(out))
+            else:
+                self._download_and_install()
+        except Exception as e:  # never let a thread die silently: the phone would wait forever
+            self._set("failed", "Couldn't finish: " + self._scrub(str(e)))
+
+    def _fetch(self, name, limit=64 << 20):
+        with urllib.request.urlopen(urllib.request.Request(f"{self.base_url.rstrip('/')}/{name}", headers={"User-Agent": "pocketfader"}), timeout=60) as r:
+            return r.read(limit)
+
+    def _download_and_install(self):
+        osname, arch = {"linux": "linux", "darwin": "darwin", "windows": "windows"}[self.system], self._arch()
+        ext = "zip" if osname == "windows" else "tar.gz"
+        name = f"ytm-beacon_{osname}_{arch}.{ext}"
+        try:
+            blob = self._fetch(name)
+            sums = self._fetch("checksums.txt").decode("utf-8", "replace")
+        except Exception:
+            return self._set("failed", "Couldn't download YTM Beacon. Check the computer's internet connection.")
+        want = next((ln.split()[0] for ln in sums.splitlines() if ln.strip().endswith(" " + name) or ln.strip().endswith("*" + name)), "")
+        if not want or want != hashlib.sha256(blob).hexdigest():
+            return self._set("failed", "The download didn't match its checksum, so it was not installed.")
+        self._set("running", "Installing YTM Beacon…")
+        with tempfile.TemporaryDirectory(prefix="pf-beacon-") as tmp:
+            exe = Path(tmp) / ("ytm-beacon.exe" if osname == "windows" else "ytm-beacon")
+            if ext == "zip":
+                with zipfile.ZipFile(io.BytesIO(blob)) as z:
+                    z.extract(exe.name, tmp)
+            else:
+                with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as t:
+                    member = next((m for m in t.getmembers() if m.isfile() and Path(m.name).name == exe.name), None)
+                    if member is None:
+                        return self._set("failed", "The download didn't contain the program.")
+                    exe.write_bytes(t.extractfile(member).read())
+            exe.chmod(0o755)
+            code, out = self._run([str(exe), "install"], 180)
+        self._set("done" if code == 0 else "failed",
+                  "Installed YTM Beacon. Next, add its browser extension: a setup page opens on the computer." if code == 0
+                  else "The installer stopped: " + self._scrub(out))
+
+    @staticmethod
+    def _default_run(cmd, timeout):
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+            return p.returncode, (p.stdout or "") + (p.stderr or "")
+        except subprocess.TimeoutExpired:
+            return 1, "timed out"
+        except OSError as e:
+            return 1, str(e)
+
+
 class Beacon:
     """Talks to a YTM Beacon on this computer. Thread safe; remembers which port answered."""
 
-    def __init__(self, ports=PORTS, host=HOST, timeout=TIMEOUT, dry_run=False, cache_s=1.0):
+    def __init__(self, ports=PORTS, host=HOST, timeout=TIMEOUT, dry_run=False, cache_s=1.0, installer=None):
         self.ports, self.host, self.timeout = tuple(ports), host, timeout
         self.dry_run = dry_run
+        self.installer = installer or Installer()
         self._port = None
         self._lock = threading.Lock()
         self._cache = (0.0, None)
@@ -268,6 +454,19 @@ class Beacon:
             out = normalize(None)
         self._cache = (time.monotonic(), out)
         return out
+
+    def status_with_install(self, fresh=False):
+        """status() plus what the installer knows (always current, never cached)."""
+        out = dict(self.status(fresh))
+        out["install"] = self.installer.info(out.get("version") if out.get("reachable") else None)
+        return out
+
+    def start_install(self, body):
+        req = validate_install(body)
+        if self.dry_run:
+            return {"ok": True, "dryRun": True}
+        running = bool(self.status(fresh=True).get("reachable"))
+        return self.installer.start(req["action"], running)
 
     def set_visibility(self, body):
         req = validate_visibility(body)

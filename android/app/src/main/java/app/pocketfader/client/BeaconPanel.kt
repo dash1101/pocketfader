@@ -113,6 +113,20 @@ object BeaconModel {
         }
     }
 
+    suspend fun install(action: String) {
+        val prev = status ?: return
+        status = prev.copy(install = prev.install.copy(jobState = "running", jobMessage = "Working…"))
+        try {
+            withContext(Dispatchers.IO) { Remote.beaconInstall(action) }
+            refresh()
+        } catch (e: Exception) {
+            status = prev
+            Remote.notify("Couldn't start that: ${e.friendly()}")
+        }
+    }
+
+    val installing: Boolean get() = status?.install?.jobState == "running"
+
     suspend fun setSetting(key: String, value: Any) {
         val prev = status ?: return
         heldSettings[key] = value to (SystemClock.elapsedRealtime() + 4000)
@@ -196,7 +210,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
     LaunchedEffect(resumed, online) {
         if (resumed && online) while (true) {
             BeaconModel.refresh()
-            delay(5000)
+            delay(if (BeaconModel.installing) 1500 else 5000)
         }
     }
 
@@ -232,6 +246,8 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     )
                 }
+
+                InstallRow(st, online)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
@@ -346,5 +362,36 @@ private fun BRow(title: String, subtitle: String?, checked: Boolean, enabled: Bo
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+    }
+}
+
+/** Install, start or update YTM Beacon on the computer (always the newest release; the computer checks it). */
+@Composable
+private fun InstallRow(st: BeaconStatus, online: Boolean) {
+    val scope = rememberCoroutineScope()
+    val i = st.install
+    val running = i.jobState == "running"
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (running) {
+            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        if (i.jobMessage.isNotBlank() && i.jobState != "idle") {
+            Text(i.jobMessage, style = MaterialTheme.typography.bodySmall,
+                color = if (i.jobState == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            when {
+                !st.reachable && !i.installed && i.canInstall ->
+                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("install") } }) {
+                        Text("Install YTM Beacon" + (i.latest?.let { " $it" } ?: ""))
+                    }
+                !st.reachable && i.installed && i.canStart ->
+                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("start") } }) { Text("Start YTM Beacon") }
+                st.reachable && (i.updateAvailable || st.headline == "unsupported") && i.canInstall ->
+                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("update") } }) {
+                        Text("Update YTM Beacon" + (i.latest?.let { " to $it" } ?: ""))
+                    }
+            }
+        }
     }
 }

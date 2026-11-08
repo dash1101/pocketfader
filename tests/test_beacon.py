@@ -3,6 +3,7 @@
 Everything runs against a tiny stub of Beacon's local API; the real Beacon is never contacted.
 """
 import copy
+import time
 import http.client
 import json
 import tempfile
@@ -12,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from pocketfader import beacon as bc
-from pocketfader.beacon import BadRequest, Beacon, BeaconError
+from pocketfader.beacon import BadRequest, Beacon, BeaconError, Installer
 from pocketfader.config import JsonFile
 from pocketfader.server import App, Handler
 
@@ -190,7 +191,7 @@ class ClientTests(unittest.TestCase):
         self.addCleanup(self.stub.close)
 
     def client(self, **kw):
-        return Beacon(ports=(self.stub.port,), cache_s=0, **kw)
+        return Beacon(ports=(self.stub.port,), cache_s=0, installer=Installer(latest_api=None), **kw)
 
     def test_status_and_port_check(self):
         c = self.client()
@@ -283,7 +284,7 @@ class RouteTests(unittest.TestCase):
         self.stub = StubBeacon()
         self.tmp = tempfile.TemporaryDirectory()
         self.app = App(FakeAudio(), NullEngine(), FakeMedia(True), prefs=JsonFile(Path(self.tmp.name) / "p.json"),
-                       beacon=Beacon(ports=(self.stub.port,), cache_s=0))
+                       beacon=Beacon(ports=(self.stub.port,), cache_s=0, installer=Installer(latest_api=None)))
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.app = self.app
         threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.02), daemon=True).start()
@@ -339,6 +340,156 @@ class RouteTests(unittest.TestCase):
         self.assertEqual((code, st["headline"], st["reachable"]), (200, "unreachable", False))
         code, r = self.req("POST", "/api/beacon/visibility", {"action": "show"})
         self.assertEqual(code, 503)
+
+
+# ---- installing / updating Beacon from the phone ----
+
+def make_release(tmp, name="ytm-beacon_linux_amd64.tar.gz", good_sum=True):
+    """A fake GitHub 'latest release' folder served over HTTP: an archive holding a program, and checksums.txt."""
+    import hashlib
+    import io
+    import tarfile
+    d = Path(tmp)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as t:
+        data = b"#!/bin/sh\necho installed\n"
+        ti = tarfile.TarInfo("./ytm-beacon")
+        ti.size, ti.mode = len(data), 0o755
+        t.addfile(ti, io.BytesIO(data))
+    blob = buf.getvalue()
+    (d / name).write_bytes(blob)
+    digest = hashlib.sha256(blob).hexdigest() if good_sum else "0" * 64
+    (d / "checksums.txt").write_text(f"{digest}  {name}\n")
+    from http.server import SimpleHTTPRequestHandler
+
+    class Quiet(SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=str(d), **k)
+
+        def log_message(self, *a):
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Quiet)
+    threading.Thread(target=lambda: httpd.serve_forever(poll_interval=0.02), daemon=True).start()
+    return httpd, f"http://127.0.0.1:{httpd.server_address[1]}"
+
+
+class InstallerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name) / "home"
+        self.home.mkdir()
+        self.calls = []
+
+    def runner(self, code=0, out=""):
+        def run(cmd, timeout):
+            self.calls.append(cmd)
+            return code, out
+        return run
+
+    def wait(self, inst, secs=5):
+        end = time.time() + secs
+        while inst._job["state"] == "running" and time.time() < end:
+            time.sleep(0.02)
+        return inst._job
+
+    def make(self, base, **kw):
+        return Installer(base_url=base, latest_api=None, system="linux", machine="x86_64", home=self.home,
+                         runner=kw.pop("runner", None) or self.runner(), **kw)
+
+    def test_install_checks_checksum_then_runs_the_installer(self):
+        rel = Path(self.tmp.name) / "rel"
+        rel.mkdir()
+        httpd, base = make_release(rel)
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        inst = self.make(base)
+        inst.start("install", running=False)
+        job = self.wait(inst)
+        self.assertEqual(job["state"], "done", job)
+        self.assertEqual(len(self.calls), 1)
+        self.assertTrue(self.calls[0][0].endswith("ytm-beacon") and self.calls[0][1:] == ["install"])
+        self.assertNotIn(str(self.home), job["message"])
+
+    def test_bad_checksum_is_never_run(self):
+        rel = Path(self.tmp.name) / "rel"
+        rel.mkdir()
+        httpd, base = make_release(rel, good_sum=False)
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        inst = self.make(base)
+        inst.start("install", running=False)
+        job = self.wait(inst)
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("checksum", job["message"])
+        self.assertEqual(self.calls, [])
+
+    def test_download_failure_is_reported(self):
+        inst = self.make("http://127.0.0.1:1")
+        inst.start("install", running=False)
+        job = self.wait(inst)
+        self.assertEqual(job["state"], "failed")
+        self.assertEqual(self.calls, [])
+
+    def test_auto_updates_when_already_installed(self):
+        (self.home / ".local" / "bin").mkdir(parents=True)
+        exe = self.home / ".local" / "bin" / "ytm-beacon"
+        exe.write_text("#!/bin/sh\n")
+        inst = self.make("http://127.0.0.1:1", runner=self.runner(0, "Updated to v0.1.5"))
+        inst.start("auto", running=False)
+        job = self.wait(inst)
+        self.assertEqual(self.calls, [[str(exe), "update"]])
+        self.assertEqual((job["state"], job["message"]), ("done", "Updated to v0.1.5"))
+
+    def test_only_one_job_at_a_time(self):
+        gate = threading.Event()
+        inst = self.make("http://127.0.0.1:1", runner=lambda c, t: (gate.wait(5), (0, ""))[1])
+        (self.home / ".local" / "bin").mkdir(parents=True)
+        (self.home / ".local" / "bin" / "ytm-beacon").write_text("x")
+        inst.start("update", running=True)
+        with self.assertRaises(BeaconError):
+            inst.start("update", running=True)
+        gate.set()
+        self.wait(inst)
+
+    def test_unsupported_computer(self):
+        inst = Installer(latest_api=None, system="linux", machine="riscv64", home=self.home, runner=self.runner())
+        with self.assertRaises(BeaconError):
+            inst.start("install", running=False)
+
+    def test_start_is_a_fixed_command(self):
+        inst = self.make("http://127.0.0.1:1")
+        if not inst.can_start():
+            self.skipTest("no systemctl here")
+        inst.start("start", running=False)
+        self.wait(inst)
+        self.assertEqual(self.calls, [["systemctl", "--user", "start", "ytm-beacon.service"]])
+
+    def test_info_reports_updates(self):
+        inst = self.make("http://127.0.0.1:1")
+        inst._latest = (time.time(), "v0.1.5")
+        i = inst.info("v0.1.4")
+        self.assertEqual((i["installed"], i["latest"], i["updateAvailable"]), (True, "v0.1.5", True))
+        self.assertFalse(inst.info("v0.1.5")["updateAvailable"])
+        self.assertFalse(inst.info(None)["updateAvailable"])
+
+    def test_validation(self):
+        self.assertEqual(bc.validate_install({}), {"action": "auto"})
+        self.assertEqual(bc.validate_install({"action": "update"}), {"action": "update"})
+        for bad in ({"action": "rm -rf"}, {"action": "install", "url": "http://x"}, {"url": "x"}, [], "install"):
+            with self.assertRaises(BadRequest, msg=str(bad)):
+                bc.validate_install(bad)
+
+    def test_route_and_dry_run(self):
+        stub = StubBeacon()
+        self.addCleanup(stub.close)
+        b = Beacon(ports=(stub.port,), cache_s=0, dry_run=True, installer=self.make("http://127.0.0.1:1"))
+        self.assertEqual(b.start_install({"action": "update"}), {"ok": True, "dryRun": True})
+        self.assertEqual(self.calls, [])
+        st = b.status_with_install()
+        self.assertTrue(st["install"]["installed"])
+        self.assertIn("job", st["install"])
 
 
 if __name__ == "__main__":

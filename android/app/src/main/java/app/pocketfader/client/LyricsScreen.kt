@@ -25,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -272,6 +273,7 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
                             fontSize = (if (isActive) base + 2 else base).sp,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
                             color = if (isActive) (LocalAccent.current ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.onSurface,
+                            style = if (isActive) LocalTextStyle.current.glow(LocalAccent.current ?: MaterialTheme.colorScheme.primary) else LocalTextStyle.current,
                             lineHeight = ((base + 6)).sp,
                             textAlign = align,
                         )
@@ -322,7 +324,7 @@ private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, 
             }
         }
     }
-    Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp, textAlign = align)
+    Text(text, style = LocalTextStyle.current.glow(on), fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp, textAlign = align)
 }
 
 @Composable

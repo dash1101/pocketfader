@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -86,6 +87,26 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "Open on", "The screen shown when the app starts.",
                 listOf("playing" to "Playing", "search" to "Search", "library" to "Library", "mixer" to "Mixer"), p.startTab,
             ) { v -> Settings.update { it.copy(startTab = v) } }
+        }
+
+        Section("Effects") {
+            Choice(
+                "Cover glow", "A halo of the cover's colour around the album art. Extreme is the brightest.",
+                listOf("off" to "Off", "soft" to "Soft", "strong" to "Strong", "extreme" to "Extreme"), p.coverGlow,
+            ) { v -> Settings.update { it.copy(coverGlow = v) } }
+            Choice(
+                "Cover shape", "Circle spins slowly like a record while music plays.",
+                listOf("rounded" to "Rounded", "soft" to "Soft", "circle" to "Circle", "cut" to "Cut corners"), p.coverShape,
+            ) { v -> Settings.update { it.copy(coverShape = v) } }
+            Toggle("Glow on text, icons and buttons", "A soft glow around the song title, the lyric being sung and the buttons that are on.", p.glowUi) { v ->
+                Settings.update { it.copy(glowUi = v) }
+            }
+            Toggle("Wavy seek bar", "The played part of the bar ripples while music plays.", p.wavyBar) { v -> Settings.update { it.copy(wavyBar = v) } }
+            Toggle("Screen transitions", "A short fade and slide between Playing, Search, Library and Mixer.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
+            Text(
+                "These are light drawing effects. “Reduce animations” (under Performance) stops all motion and keeps the rest.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Section("Screen & always-on") {
@@ -213,7 +234,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     val icon = when (title) {
-        "Connection" -> Icons.Filled.Link; "Appearance" -> Icons.Filled.Palette; "Screen & always-on" -> Icons.Filled.Smartphone
+        "Connection" -> Icons.Filled.Link; "Appearance" -> Icons.Filled.Palette; "Effects" -> Icons.Filled.AutoAwesome; "Screen & always-on" -> Icons.Filled.Smartphone
         "Controls" -> Icons.Filled.TouchApp; "Lyrics" -> Icons.Filled.MusicNote; "Performance" -> Icons.Filled.Speed
         "Updates" -> Icons.Filled.SystemUpdate; "Discord presence" -> Icons.Filled.Chat; else -> Icons.Filled.Info
     }

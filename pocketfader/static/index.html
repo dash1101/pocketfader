@@ -2735,6 +2735,13 @@ function beaconSection() {
     const head = row('Status', txt + (st.detail ? ' (' + st.detail + ')' : ''));
     const v = el('div', 'val'); v.innerHTML = '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' + dot + '"></span>'; head.appendChild(v);
     box.appendChild(head);
+    const I = st.install || {}, running = !!(I.job && I.job.state === 'running');
+    if (I.job && I.job.state !== 'idle' && I.job.message) box.appendChild(row(I.job.message, ''));
+    const mkI = (label, action) => { const b = el('button', 'pill ghost'); b.textContent = label; b.style.height = '38px'; b.disabled = running;
+      b.addEventListener('click', async () => { if (await call('/api/beacon/install', { action })) refresh(true); }); return b; };
+    if (!st.reachable && !I.installed && I.canInstall) box.appendChild(row('Install YTM Beacon' + (I.latest ? ' ' + I.latest : ''), 'Downloads the latest release on the computer and installs it.', mkI('Install', 'install')));
+    else if (!st.reachable && I.installed && I.canStart) box.appendChild(row('Start YTM Beacon', '', mkI('Start', 'start')));
+    else if (st.reachable && (I.updateAvailable || st.headline === 'unsupported') && I.canInstall) box.appendChild(row('Update YTM Beacon' + (I.latest ? ' to ' + I.latest : ''), '', mkI('Update', 'update')));
     if (st.nowPlaying) box.appendChild(row((st.nowPlaying.state === 'playing' ? '▶ ' : '⏸ ') + st.nowPlaying.title, st.nowPlaying.artist));
     const usable = st.reachable && st.headline !== 'unsupported';
     box.appendChild(row('Show on Discord', st.discord && st.discord.user ? 'as ' + st.discord.user : '',
@@ -2783,7 +2790,9 @@ function beaconSection() {
     } catch (e) {}
   }
   setTimeout(() => refresh(true), 60);   // after the settings sheet has attached this section
-  const timer = setInterval(() => { if (!sec.isConnected) { clearInterval(timer); return; } if (!document.hidden) refresh(); }, 5000);
+  const tick = () => { if (!sec.isConnected) return; if (!document.hidden) refresh();
+    setTimeout(tick, st && st.install && st.install.job && st.install.job.state === 'running' ? 1500 : 5000); };
+  setTimeout(tick, 5000);
   return sec;
 }
 

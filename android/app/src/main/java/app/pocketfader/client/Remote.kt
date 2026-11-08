@@ -32,6 +32,9 @@ data class RemoteState(
     val canOutputs: Boolean = false,
     val canLyrics: Boolean = false,
     val canBeacon: Boolean = false,
+    val canSleep: Boolean = false,
+    val sleepLeft: Int = 0,               // seconds until playback is paused by the sleep timer (0 = none)
+    val sleepAt: Long = 0L,               // SystemClock.elapsedRealtime() when sleepLeft was read
 )
 
 /**
@@ -174,6 +177,9 @@ object Remote {
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
                 canLyrics = st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
+                canSleep = st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
+                sleepLeft = if (st == null) cur.sleepLeft else st.optJSONObject("sleep")?.optInt("remainingSec", 0) ?: 0,
+                sleepAt = if (st == null) cur.sleepAt else SystemClock.elapsedRealtime(),
                 outputs = if (settling) cur.outputs else (outs ?: cur.outputs),
             )
         }
@@ -220,6 +226,11 @@ object Remote {
             boost()
             runCatching { pollOnce(a) }
         }
+    }
+
+    /** minutes: 1..720, "track" (when this song ends) or 0 to cancel. The computer pauses playback when time is up. */
+    fun setSleep(minutes: Any) {
+        runApi { it.post("/api/sleep", JSONObject().put("minutes", minutes)) }
     }
 
     fun transport(action: String, position: Double? = null) {
@@ -351,6 +362,11 @@ object Remote {
         val body = JSONObject().put("action", if (show) "show" else "hide")
         if (!show && minutes != null) body.put("minutes", minutes)
         need().post("/api/beacon/visibility", body, 8000)
+    }
+
+    /** action: "install" | "update" | "start" (the computer downloads the latest release and installs it). */
+    fun beaconInstall(action: String) {
+        need().post("/api/beacon/install", JSONObject().put("action", action), 8000)
     }
 
     fun beaconSetting(key: String, value: Any) {

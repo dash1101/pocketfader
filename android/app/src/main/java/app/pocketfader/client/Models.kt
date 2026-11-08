@@ -300,6 +300,17 @@ data class BeaconSettings(
 data class BeaconSong(val title: String, val artist: String, val playing: Boolean)
 
 @Immutable
+data class BeaconInstall(
+    val installed: Boolean = false,
+    val canInstall: Boolean = false,
+    val canStart: Boolean = false,
+    val latest: String? = null,
+    val updateAvailable: Boolean = false,
+    val jobState: String = "idle",          // idle | running | done | failed
+    val jobMessage: String = "",
+)
+
+@Immutable
 data class BeaconStatus(
     val reachable: Boolean = false,
     val version: String = "",
@@ -310,6 +321,7 @@ data class BeaconStatus(
     val discordUser: String? = null,
     val song: BeaconSong? = null,
     val settings: BeaconSettings = BeaconSettings(),
+    val install: BeaconInstall = BeaconInstall(),
     val receivedAt: Long = 0L,              // SystemClock.elapsedRealtime() when this arrived (counts the hide timer down)
 )
 
@@ -335,6 +347,15 @@ fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
             showAlbumArt = s.optBoolean("showAlbumArt", true),
             statusDisplay = s.str("statusDisplay") ?: "name",
         ),
+        install = o.optJSONObject("install")?.let { i ->
+            val job = i.optJSONObject("job")
+            BeaconInstall(
+                installed = i.optBoolean("installed", false), canInstall = i.optBoolean("canInstall", false),
+                canStart = i.optBoolean("canStart", false), latest = i.str("latest"),
+                updateAvailable = i.optBoolean("updateAvailable", false),
+                jobState = job?.str("state") ?: "idle", jobMessage = job?.str("message").orEmpty(),
+            )
+        } ?: BeaconInstall(),
         receivedAt = receivedAt,
     )
 }
