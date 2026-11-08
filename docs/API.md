@@ -91,5 +91,14 @@ Pocketfader relays a small, fixed set of YTM Beacon's controls; nothing else of 
 | `POST /api/beacon/visibility` | `{"action":"show"}` or `{"action":"hide"}` or `{"action":"hide","minutes":60}` | `minutes` is a whole number from 1 to 1440 and only goes with `hide`; the card comes back by itself. Replies `{enabled, snoozeSec, visible}`. `show` and `hide` can safely be repeated. |
 | `POST /api/beacon/settings` | any of `privateMode`, `showPaused`, `showProgress`, `showStateIcon`, `showButtons`, `showAlbumArt` (true/false), `pauseTimeoutMinutes` (0–1440, 0 = never), `statusDisplay` (`name`\|`state`\|`details`) | Only the keys you send change. Anything else, or a wrong type, is rejected with `400`. Replies with the new settings. |
 
+| `POST /api/beacon/install` | `{"action":"install"\|"update"\|"start"}` (or `{}` to pick automatically) | Runs in the background and returns at once; follow it in `GET /api/beacon` → `install.job` (`state`: `idle`, `running`, `done`, `failed`, and a `message`). `install` downloads the newest YTM Beacon release, verifies its checksum and runs its installer; `update` runs `ytm-beacon update`; `start` starts its user service (Linux). |
+
 `503` means Beacon isn't running; `502` means Beacon refused the change (the message says why).
+`GET /api/beacon` also carries `install: {installed, canInstall, canStart, latest, updateAvailable, job}`.
 `/api/state` has `capabilities.beacon: true` when this version of the server can do this.
+
+## Sleep timer
+
+| Endpoint | Body | Notes |
+|---|---|---|
+| `POST /api/sleep` | `{"minutes": 1..720}`, `{"minutes": "track"}` or `{"minutes": 0}` | Pause playback after that long, when the current song ends, or cancel. Replies `{remainingSec}`; `/api/state` has `sleep.remainingSec` (0 = no timer) and `capabilities.sleep`. |

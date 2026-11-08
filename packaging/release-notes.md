@@ -16,31 +16,32 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.6
+### What's new in alpha.7
 
-- **Readable on every theme (Android)**: text that didn't name a colour fell back to black, which vanished on the Dark and
-  Black themes. Every screen now starts from the theme's own text colour. On the light theme, the line being sung is now
-  your accent colour instead of a washed-out grey.
-- **Accent colour (Android)**: Settings → Appearance. Pick Auto, one of ten colours, or any colour with sliders or a hex code.
-  It can never disappear into the theme: a dark accent on the Black theme (or a pale one on Light) is shown a little
-  lighter or darker, and the setting tells you when it did that. The cover's colour is now a separate, optional tint
-  (**Cover colours in the background**, **Lyric highlight follows the cover**), and the tint is weakened whenever it
-  would make the text hard to read.
-- **Discord presence**: if you use [YTM Beacon](https://github.com/dash1101/ytm-beacon) (0.1.4+) on the computer, the
-  Android app (Mixer) and the web app (Settings) show whether it's working, switch it on or off, hide it for 30 min, 1 h or
-  3 h, and change what it shows. See [docs/BEACON.md](docs/BEACON.md).
-- **Update installer**: if Android would refuse an update because it was signed with a different key (older test builds
-  used a temporary key), the app now says so and points you to the download page, instead of ending in "App not installed".
-  This version and later are signed with the permanent key and install over each other. If you're on alpha.4 or earlier,
-  uninstall once, then install this one.
-- **Shuffle and loop**: the extension (now **1.5**) searches more of the page for the buttons, falls back to the player's
-  own shuffle and loop controls when a layout has none, no longer searches the whole page on every update, and reports
-  its version. **Reload the extension in your browser and refresh the YouTube Music tab** (an old tab keeps running the old
-  version until you do). The app now says that, in plain words, if the button still can't be found.
+- **Install YTM Beacon from the app**: on the Discord presence card, **Install**, **Start** or **Update** YTM Beacon. The computer
+  always downloads Beacon's newest release, checks its checksum, and runs Beacon's own installer.
+- **A livelier Android app** (Settings → Effects; all light drawing effects, off with *Reduce animations*):
+  - **Cover glow**: Off, Soft, Strong or Extreme halo of the cover's colour around the album art.
+  - **Glow on text, icons and buttons** (optional): the song title, the lyric being sung, and the buttons that are on.
+  - **Wavy seek bar** that ripples while music plays and settles flat when paused.
+  - **Cover shapes**: Rounded, Soft, Circle (spins slowly like a record) or Cut corners.
+  - **Motion**: the play button eases between a circle and a softer square, buttons dip when pressed, the title fades
+    between songs, screens fade and slide, and the current queue row has dancing equalizer bars.
+- **Sleep timer**: a moon button next to the song title pauses playback after 15 min to 2 h, or when the song ends
+  (also in the API, see docs/API.md).
+- **Queue reordering**: moving a song no longer ends in `order_mismatch` on a slow or busy tab. The extension now waits
+  for the queue to finish redrawing between steps and corrects itself if a copy is left behind. (Reproduced and fixed against
+  a stand-in queue with delayed redraws; ten moves in a row all came out right.)
+- **Like**: when the page has no like button the extension uses YouTube Music's own like call and reads the result back.
+- **Shuffle and loop**: when the extension can't find those buttons it now says so instead of pretending. Extension 1.6 also
+  saves a description of how your YouTube Music page is built (element names only) next to the config
+  (`ytm-layout.json`) so the buttons can be mapped properly. **Reload the extension, refresh the YouTube Music tab and leave
+  it open for 15 seconds.**
 
 ### Earlier
 
-- alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons, cover-tinted Now playing screen.
+- alpha.6: readable colours on every theme, accent colour picker, Discord presence card, safer app updates.
+- alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons.
 - alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and in-app updates.
 
 ### Quick start

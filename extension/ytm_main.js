@@ -156,10 +156,8 @@
   //   repeat  -> attribute repeat-mode = NONE | ALL | ONE on <ytmusic-player-bar>
   //   shuffle -> attribute shuffle-on present on <ytmusic-player-bar>
   //   autoplay-> <tp-yt-paper-toggle-button id="automix">.checked  (queue.autoplayEnabled mirrors it)
-  // Last resort when this page has no recognisable shuffle / repeat buttons: the player's own API (setShuffle, setLoop,
-  // setLoopVideo). It can't be read back, so what we last set is remembered here.
+  // With no shuffle / repeat control on the page these just read as off (see apiShuffle below).
   const apiModes = { repeat: "NONE", shuffle: false };
-  const apiPlayer = () => { const p = mp(); return p && typeof p.setShuffle === "function" ? p : null; };
   function repeatMode() {
     const m = bar() && bar().getAttribute("repeat-mode");
     if (m) return m === "ALL" || m === "ONE" ? m : "NONE";
@@ -460,28 +458,16 @@
     return direct || labelControl(cls);
   };
   const missing = (what) => `no_${what}_button (player bar ${bar() ? "found" : "not found"}, ${deepAll(document, (el) => BTN.test(el.tagName)).length} buttons on the page; reload the extension, then use Settings to send the diagnostics)`;
-  function apiRepeat(mode) {
-    const p = apiPlayer();
-    if (!p) return { ok: false, error: missing("repeat") };
-    try {
-      if (typeof p.setLoopVideo === "function") p.setLoopVideo(mode === "ONE");
-      if (typeof p.setLoop === "function") p.setLoop(mode === "ALL");
-    } catch (e) { return { ok: false, error: "player_api_failed" }; }
-    apiModes.repeat = mode;
-    return { ok: true, repeat: mode, via: "player" };
-  }
-  function apiShuffle(on) {
-    const p = apiPlayer();
-    if (!p) return { ok: false, error: missing("shuffle") };
-    try { p.setShuffle(on); } catch (e) { return { ok: false, error: "player_api_failed" }; }
-    apiModes.shuffle = on;
-    return { ok: true, shuffle: on, via: "player" };
-  }
+  // This page has no shuffle / repeat buttons we can find. YouTube Music keeps its queue in its own store (the
+  // player's own playlist list is empty), so the player's setShuffle/setLoop do nothing useful here: say so honestly
+  // instead of pretending, and leave a description of the page (see the layout snapshot below) so it can be mapped.
+  const apiRepeat = () => ({ ok: false, error: missing("repeat") });
+  const apiShuffle = () => ({ ok: false, error: missing("shuffle") });
   async function setRepeat(mode) {
     if (!["NONE", "ALL", "ONE"].includes(mode)) return { ok: false, error: "bad_mode" };
     for (let i = 0; i < 3 && repeatMode() !== mode; i++) {
       const b = barButton("repeat");
-      if (!b) return apiRepeat(mode);
+      if (!b) return apiRepeat();
       const before = repeatMode();
       b.click();
       await waitFor(() => repeatMode() !== before, 1200);
@@ -491,7 +477,7 @@
   async function setShuffle(on) {
     if (shuffleOn() !== on) {
       const b = barButton("shuffle");
-      if (!b) return apiShuffle(on);
+      if (!b) return apiShuffle();
       b.click();
       await waitFor(() => shuffleOn() === on, 1500);
       await sleep(350);   // the queue reorders just after the flag flips
