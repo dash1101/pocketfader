@@ -178,11 +178,25 @@ object Remote {
                 canLyrics = st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
                 canSleep = st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
-                sleepLeft = if (st == null) cur.sleepLeft else st.optJSONObject("sleep")?.optInt("remainingSec", 0) ?: 0,
-                sleepAt = if (st == null) cur.sleepAt else SystemClock.elapsedRealtime(),
+                sleepLeft = sleepFrom(st, cur).first,
+                sleepAt = sleepFrom(st, cur).second,
                 outputs = if (settling) cur.outputs else (outs ?: cur.outputs),
             )
         }
+    }
+
+    /**
+     * The sleep timer as (seconds left, when that was read). While the same timer is simply counting down it keeps its old
+     * values: a fresh timestamp on every poll would change the state each time and redraw the whole screen for nothing.
+     */
+    private fun sleepFrom(st: JSONObject?, cur: RemoteState): Pair<Int, Long> {
+        if (st == null) return cur.sleepLeft to cur.sleepAt
+        val left = st.optJSONObject("sleep")?.optInt("remainingSec", 0) ?: 0
+        if (left <= 0) return 0 to 0L
+        val nowMs = SystemClock.elapsedRealtime()
+        val curEnd = cur.sleepAt + cur.sleepLeft * 1000L
+        if (cur.sleepLeft > 0 && kotlin.math.abs(curEnd - (nowMs + left * 1000L)) < 3000) return cur.sleepLeft to cur.sleepAt
+        return left to nowMs
     }
 
     // ------------------------------------------------------------------ commands
@@ -215,6 +229,10 @@ object Remote {
                             err == "extension_offline" -> "The YouTube Music extension isn't connected"
                             err.startsWith("no_shuffle_button") || err.startsWith("no_repeat_button") ->
                                 "Couldn't find that button on YouTube Music. In your browser, reload the Pocketfader extension, then refresh the YouTube Music tab."
+                            err == "autoplay_off_while_looping" -> "Turn loop off first: YouTube Music ignores autoplay while the queue is looping."
+                            err == "autoplay_not_applied" -> "YouTube Music didn't change autoplay. Try once more, or switch it in the browser."
+                            err == "like_not_applied" || err.startsWith("like_failed") -> "YouTube Music didn't accept the like. Make sure you're signed in there."
+                            err == "order_mismatch" || err == "queue_changed" -> "The queue changed while moving that song. Try again."
                             else -> err.take(160)
                         }
                     )

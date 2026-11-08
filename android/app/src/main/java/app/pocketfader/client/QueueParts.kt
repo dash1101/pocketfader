@@ -92,7 +92,9 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
                 if (auto != null) {
                     FilterChip(
                         selected = auto, onClick = { tap(); Remote.setAutoplay(!auto) },
-                        label = { Text(if (auto) "Autoplay on" else "Autoplay off") },
+                        // YouTube Music ignores autoplay while the queue is looping
+                        enabled = now.repeat == "NONE",
+                        label = { Text(if (now.repeat != "NONE") "Autoplay: off while looping" else if (auto) "Autoplay on" else "Autoplay off") },
                         leadingIcon = { Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp)) },
                     )
                 }
@@ -106,7 +108,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
  * The queue as list items: modes, tracks already played (collapsed), the current track, what's up next,
  * and YouTube Music's autoplay suggestions, which can be added to the queue from here.
  */
-fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit, onMore: (Track) -> Unit) {
+fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit, showArt: Boolean = true, onMore: (Track) -> Unit) {
     val main = s.queue.filter { it.section != "autoplay" }
     val auto = s.queue.filter { it.section == "autoplay" }
     val now = s.now
@@ -145,16 +147,16 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
             }
         }
         if (playedOpen) {
-            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1, onMore = onMore)
+            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1, showArt = showArt, onMore = onMore)
         }
     }
     if (current != null) {
         item(key = "q-now-h") { SectionHeader("Now playing", null) }
-        item(key = "q-now", contentType = "track") { TrackRow(current, dimmed = false, suggestion = false, onMore = onMore) }
+        item(key = "q-now", contentType = "track") { TrackRow(current, dimmed = false, suggestion = false, showArt = showArt, onMore = onMore) }
     }
     if (upcoming.isNotEmpty()) {
         item(key = "q-up-h") { SectionHeader("Up next · ${upcoming.size}", null) }
-        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1, onMore = onMore)
+        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1, showArt = showArt, onMore = onMore)
     }
     if (auto.isNotEmpty()) {
         item(key = "q-auto-h") {
@@ -174,16 +176,16 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
                 if (s.bridge && a != null) Switch(checked = a, onCheckedChange = { Remote.setAutoplay(it) })
             }
         }
-        items2(auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0, suggestion = true, onMore = onMore)
+        items2(auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0, suggestion = true, showArt = showArt, onMore = onMore)
     }
 }
 
 private fun LazyListScope.items2(
     list: List<Track>, prefix: String, dimmed: Boolean, canMove: Boolean, lastIndex: Int,
-    suggestion: Boolean = false, onMore: (Track) -> Unit,
+    suggestion: Boolean = false, showArt: Boolean = true, onMore: (Track) -> Unit,
 ) {
     for (t in list) {
-        item(key = "$prefix-${t.index}-${t.videoId}", contentType = "track") { TrackRow(t, dimmed, suggestion, onMore) }
+        item(key = "$prefix-${t.index}-${t.videoId}", contentType = "track") { TrackRow(t, dimmed, suggestion, showArt, onMore) }
     }
 }
 
@@ -197,7 +199,7 @@ private fun SectionHeader(title: String, note: String?) {
 
 /** One light row. No per-row menus or layers: everything heavy lives in [TrackActionsDialog]. */
 @Composable
-private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, onMore: (Track) -> Unit) {
+private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, showArt: Boolean, onMore: (Track) -> Unit) {
     val title = if (t.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
     val fade = if (dimmed) 0.55f else 1f
@@ -209,8 +211,8 @@ private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, onMore: (Tr
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box {
-            Thumb(t.art, 46)
+        Box(Modifier.size(46.dp)) {
+            if (showArt) Thumb(t.art, 46)
             if (t.selected) {
                 val playing = Remote.state.collectAsStateWithLifecycle().value.now?.playing == true
                 Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {

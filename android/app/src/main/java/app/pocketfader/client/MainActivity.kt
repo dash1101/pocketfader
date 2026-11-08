@@ -183,12 +183,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun DestContent(d: Dest, s: RemoteState) {
+private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, onEditConnection: () -> Unit) {
     when (d) {
         Dest.Playing -> PlayingPage(s, Modifier.fillMaxSize())
         Dest.Search -> SearchScreen(s, Modifier.fillMaxSize())
         Dest.Library -> LibraryScreen(s, Modifier.fillMaxSize())
-        Dest.Mixer -> MixerScreen(s, Modifier.fillMaxSize())
+        Dest.Settings -> SettingsScreen(cfg, s, onEditConnection = onEditConnection, modifier = Modifier.fillMaxSize())
     }
 }
 
@@ -196,11 +196,11 @@ private enum class Dest(val key: String, val label: String, val icon: ImageVecto
     Playing("playing", "Playing", Icons.Filled.PlayCircle),
     Search("search", "Search", Icons.Filled.Search),
     Library("library", "Library", Icons.Filled.LibraryMusic),
-    Mixer("mixer", "Mixer", Icons.Filled.Tune),
+    Settings("settings", "Settings", Icons.Filled.Settings),
 }
 
 // On wide screens the player is always visible on the left, so the right pane gets its own tabs.
-private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Search("Search"), Library("Library"), Mixer("Mixer") }
+private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Search("Search"), Library("Library") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -217,7 +217,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     var dest by rememberSaveable { mutableStateOf(Dest.values().firstOrNull { it.key == prefs.startTab } ?: Dest.Playing) }
     var pane by rememberSaveable {
         mutableStateOf(
-            when (prefs.startTab) { "search" -> Pane.Search; "library" -> Pane.Library; "mixer" -> Pane.Mixer; else -> Pane.Queue }
+            when (prefs.startTab) { "search" -> Pane.Search; "library" -> Pane.Library; else -> Pane.Queue }
         )
     }
     val wide = LocalConfiguration.current.screenWidthDp >= 840
@@ -236,12 +236,13 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         if (e != null && s.online) snackbar.showSnackbar(e)
     }
 
-    val tint by rememberArtTint(s.now?.art)
+    val art by rememberArt(s.now?.art)
+    val tint = art.tint
     val showArt = !showSettings && (wide || dest == Dest.Playing)
     val washBrush = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
     val pageBg = MaterialTheme.colorScheme.background
     val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
-    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null)) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null)) {
     Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -255,18 +256,23 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
                 actions = {
-                    if (!showSettings) IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, "Settings") }
+                    if (wide && !showSettings) IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, "Settings") }
                 },
             )
         },
         bottomBar = {
             if (!wide && !showSettings) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
-                    Dest.values().forEach { d ->
-                        NavigationBarItem(
-                            selected = dest == d, onClick = { dest = d },
-                            icon = { Icon(d.icon, d.label) }, label = { Text(d.label) },
-                        )
+                val dests = Dest.values()
+                if (prefs.navStyle == "pill") {
+                    PillNav(dests.map { it.label }, dests.map { it.icon }, dest.ordinal) { dest = dests[it] }
+                } else {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
+                        dests.forEach { d ->
+                            NavigationBarItem(
+                                selected = dest == d, onClick = { dest = d },
+                                icon = { Icon(d.icon, d.label) }, label = { Text(d.label) },
+                            )
+                        }
                     }
                 }
             }
@@ -281,7 +287,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             "A new version is ready: ${UpdateManager.info?.latest}",
                             Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
-                        androidx.compose.material3.TextButton(onClick = { showSettings = true }) { Text("Update") }
+                        androidx.compose.material3.TextButton(onClick = { SettingsNav.deepLink = "updates"; if (wide) showSettings = true else dest = Dest.Settings }) { Text("Update") }
                         androidx.compose.material3.TextButton(onClick = { UpdateManager.dismissed = true }) { Text("Later") }
                     }
                 }
@@ -310,7 +316,6 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                                 Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
                                 Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
                                 Pane.Library -> LibraryScreen(s, Modifier.fillMaxSize())
-                                Pane.Mixer -> MixerScreen(s, Modifier.fillMaxSize())
                             }
                         }
                     }
@@ -323,9 +328,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             (fadeIn(tween(200, delayMillis = 60)) + slideInVertically(tween(260)) { it / 28 }) togetherWith fadeOut(tween(90))
                         },
                         label = "screen",
-                    ) { d -> DestContent(d, s) }
+                    ) { d -> DestContent(d, s, cfg) { showConnect = true } }
                 } else {
-                    DestContent(dest, s)
+                    DestContent(dest, s, cfg) { showConnect = true }
                 }
             }
         }

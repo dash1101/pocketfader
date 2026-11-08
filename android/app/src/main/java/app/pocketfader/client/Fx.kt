@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -32,7 +33,13 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
@@ -47,8 +54,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Visual effects. Everything here is a drawing trick (a gradient, a path, a transform) rather than a blur or an offscreen
@@ -89,6 +98,51 @@ fun Modifier.coverGlow(color: Color, level: String, pulse: State<Float>? = null)
             radius = r, center = c,
         )
     }
+}
+
+/** How far the blurred picture reaches (a scale of the cover), how strong it is, and how colourful. */
+private fun ambientSpec(level: String): Triple<Float, Float, Float>? = when (level) {
+    "soft" -> Triple(1.3f, 0.6f, 1.1f)
+    "strong" -> Triple(1.55f, 0.85f, 1.3f)
+    "extreme" -> Triple(1.95f, 1f, 1.6f)
+    else -> null
+}
+
+/**
+ * A soft light that carries the cover's own edges outward, like an ambient backdrop: the cover's tiny copy is scaled up
+ * (smooth scaling makes it a blur), put behind the cover, and faded to nothing toward its outer edge. It is one image and
+ * one gradient, drawn once; only its brightness moves.
+ */
+@Composable
+fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Float>, modifier: Modifier = Modifier) {
+    val (reach, strength, sat) = ambientSpec(level) ?: return
+    val filter = remember(sat) { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(sat) }) }
+    Box(
+        modifier
+            .graphicsLayer {
+                val k = reach * scale
+                scaleX = k
+                scaleY = k
+                this.alpha = strength * pulse.value
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
+            .drawBehind {
+                drawImage(
+                    thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                    colorFilter = filter, filterQuality = FilterQuality.High,
+                )
+                // fade out toward the edge; the cover itself sits over the middle
+                val r = size.maxDimension / 2f * 1.2f
+                val f = 1f / (reach * 1.2f)
+                drawRect(
+                    Brush.radialGradient(
+                        0f to Color.Black, f to Color.Black, f + (1f - f) * 0.45f to Color.Black.copy(alpha = 0.5f), 1f to Color.Transparent,
+                        center = center, radius = r,
+                    ),
+                    blendMode = BlendMode.DstIn,
+                )
+            },
+    )
 }
 
 /** A slow breathing value (about 0.85 to 1) while [on], 1 otherwise. */
@@ -223,20 +277,25 @@ fun WavySeekBar(
         val amp = amplitude.dp.toPx()
         // what's left to play: a plain rounded line
         drawLine(track, Offset(xp, cy), Offset(x1, cy), strokeWidth = stroke, cap = StrokeCap.Round)
-        // what's played: a wave (or a straight line once it has settled)
+        // what's played: a wave that eases in at the start and flattens into the handle (so it joins the line with no
+        // kink), drawn from many short steps so the curve is smooth; a straight line once it has settled
         if (xp > x0) {
             if (amp < 0.2f) {
                 drawLine(color, Offset(x0, cy), Offset(xp, cy), strokeWidth = stroke, cap = StrokeCap.Round)
             } else {
-                val len = 22.dp.toPx()
-                val step = 5.dp.toPx()
-                val path = Path()
+                val len = 28.dp.toPx()
+                val step = 2.dp.toPx()
+                val taper = 20.dp.toPx()
+                val twoPi = (2 * PI).toFloat()
                 val ph = phase.value
-                path.moveTo(x0, cy + amp * sin(ph))
+                val path = Path()
                 var x = x0
+                path.moveTo(x0, cy)
                 while (x < xp) {
                     x = minOf(x + step, xp)
-                    path.lineTo(x, cy + amp * sin((x - x0) / len * (2 * PI).toFloat() + ph))
+                    val t = (minOf(x - x0, xp - x) / taper).coerceIn(0f, 1f)
+                    val env = t * t * (3f - 2f * t)
+                    path.lineTo(x, cy + amp * env * sin((x - x0) / len * twoPi + ph))
                 }
                 drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }

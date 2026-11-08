@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -139,8 +140,6 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         val scale by androidx.compose.animation.core.animateFloatAsState(
             if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "cover",
         )
-        val glowColor = LocalTint.current ?: MaterialTheme.colorScheme.primary
-        val pulse = rememberPulse(playing && !calm && prefs.coverGlow != "off")
         val shape = coverShape(prefs.coverShape)
         // "Vinyl": the round cover turns slowly while music plays
         val spin: State<Float> = if (prefs.coverShape == "circle" && playing && !calm) {
@@ -150,12 +149,12 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         } else {
             remember { mutableStateOf(0f) }
         }
+        // (the glow behind the cover is drawn by PlayerGlow, outside the scrolling list, so it isn't cut off at the top)
         Box(Modifier.widthIn(max = 420.dp).fillMaxWidth().aspectRatio(1f)) {
             Cover(
                 now?.art,
                 Modifier.fillMaxSize()
                     .graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = spin.value }
-                    .coverGlow(glowColor, prefs.coverGlow, pulse)
                     .then(if (calm || prefs.coverGlow != "off") Modifier else Modifier.shadow(20.dp, shape, clip = false)),
                 shape = shape,
             )
@@ -216,6 +215,38 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         Transport(now, s.bridge, hasTrack)
         Spacer(Modifier.height(4.dp))
         VolumeRow(s.volume)
+    }
+}
+
+/**
+ * The soft light around the cover. It lives behind the scrolling list (not inside it) and follows the cover's position, so
+ * it can spread under the top bar instead of being cut off at the top edge of the list.
+ */
+@Composable
+fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: Modifier = Modifier) {
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
+    if (!visible || prefs.coverGlow == "off") return
+    val calm = LocalReduceMotion.current
+    val playing = s.now?.playing == true
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "glow-scale",
+    )
+    val pulse = rememberPulse(playing && !calm)
+    val thumb = LocalArtThumb.current
+    val tint = LocalTint.current ?: MaterialTheme.colorScheme.primary
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
+        val coverW = minOf(420.dp, maxWidth - 48.dp)
+        Box(
+            Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(((maxWidth - coverW) / 2).roundToPx(), 8.dp.roundToPx() - scrollPx()) }
+                .size(coverW),
+        ) {
+            if (thumb != null) {
+                AmbientGlow(thumb, prefs.coverGlow, scale, pulse, Modifier.matchParentSize())
+            } else {
+                Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale }.coverGlow(tint, prefs.coverGlow, pulse))
+            }
+        }
     }
 }
 
@@ -367,7 +398,9 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     var jump by remember { mutableIntStateOf(0) }
     FollowLyrics(listState, firstLineIndex = 3, active = active, enabled = tab == 1, jump = jump)
 
+    val glowVisible by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     Box(modifier.fillMaxSize()) {
+        PlayerGlow(s, glowVisible, { listState.firstVisibleItemScrollOffset })
         LazyColumn(Modifier.fillMaxSize(), state = listState) {
             item(key = "player") { PlayerPanel(s) }
             stickyHeader(key = "tabs") {
@@ -379,7 +412,7 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
                 }
             }
             if (tab == 0) {
-                queueItems(s, playedOpen, { playedOpen = !playedOpen }) { menuTrack = it }
+                queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
             } else {
                 item(key = "ly-controls") { LyricsControls(ui) }
                 lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
@@ -425,17 +458,22 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
 /** Wide layout, left pane: just the player. */
 @Composable
 fun PlayerPane(s: RemoteState, modifier: Modifier = Modifier) {
-    Column(modifier.verticalScroll(rememberScrollState())) { PlayerPanel(s) }
+    val scroll = rememberScrollState()
+    Box(modifier) {
+        PlayerGlow(s, true, { scroll.value })
+        Column(Modifier.fillMaxSize().verticalScroll(scroll)) { PlayerPanel(s) }
+    }
 }
 
 /** Wide layout, right pane: the queue on its own. */
 @Composable
 fun QueuePane(s: RemoteState, modifier: Modifier = Modifier) {
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
     var playedOpen by rememberSaveable { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
     LazyColumn(modifier.fillMaxSize()) {
-        queueItems(s, playedOpen, { playedOpen = !playedOpen }) { menuTrack = it }
+        queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
         item(key = "pad") { Spacer(Modifier.height(24.dp)) }
     }
 }

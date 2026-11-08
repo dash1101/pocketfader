@@ -154,6 +154,9 @@ private fun BeaconSettings.withValue(key: String, value: Any): BeaconSettings = 
     else -> this
 }
 
+/** One short line for the settings overview. */
+fun beaconSummary(s: BeaconStatus): String = headlineText(s).first.substringBefore(".").trim()
+
 private enum class Tone { Good, Warn, Bad, Off }
 
 private fun headlineText(s: BeaconStatus): Pair<String, Tone> = when (s.headline) {

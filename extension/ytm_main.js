@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.6.0";
+  const EXT_VERSION = "1.7.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -222,6 +222,20 @@
   }
   // When the page has no player-bar like button, fall back to YouTube Music's own like endpoints (the same calls its
   // page makes, with your login), and read the state back from the song's `next` data.
+  // Newer builds of YouTube Music build the player controls as <ytmusic-wiz-player-controls> (no <ytmusic-player-bar>),
+  // so the like control is looked up there, or anywhere on the page that isn't part of a list row or menu.
+  let lrCache = { el: null, at: 0 };
+  function likeRenderer() {
+    if (Date.now() - lrCache.at < 4000 && (lrCache.el === null || lrCache.el.isConnected)) return lrCache.el;
+    const host = document.querySelector("ytmusic-wiz-player-controls, ytmusic-player-bar");
+    let el = host && (host.querySelector("ytmusic-like-button-renderer") || deepAll(host, (e) => e.tagName === "YTMUSIC-LIKE-BUTTON-RENDERER")[0]);
+    if (!el) {
+      el = deepAll(document, (e) => e.tagName === "YTMUSIC-LIKE-BUTTON-RENDERER" &&
+        !e.closest("ytmusic-player-queue-item, ytmusic-responsive-list-item-renderer, ytmusic-two-row-item-renderer, ytmusic-menu-renderer, ytmusic-shelf-renderer"))[0] || null;
+    }
+    lrCache = { el, at: Date.now() };
+    return el;
+  }
   const likeApi = { vid: null, status: null, busy: false };
   async function apiLikeStatus(vid) {
     const nx = await innertube("next", { videoId: vid, isAudioOnly: true }, true);
@@ -235,8 +249,7 @@
   }
   // Read the current song's like state from the player-bar like button.
   function likeStatus() {
-    const lb = (bar() && bar().querySelector("ytmusic-like-button-renderer")) ||
-      document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+    const lb = likeRenderer();
     if (!lb) {
       const vid = mp() && mp().getVideoData && mp().getVideoData().video_id;
       ensureApiLike(vid);
@@ -491,8 +504,20 @@
   async function setAutoplay(on) {
     const t = autoplayToggle();
     if (!t) return { ok: false, error: "no_autoplay_toggle" };
-    if (autoplayOn() !== on) { t.click(); await waitFor(() => autoplayOn() === on, 1500); await sleep(200); }
-    return { ok: autoplayOn() === on, autoplay: autoplayOn() };
+    if (autoplayOn() !== on) {
+      t.click();
+      let ok = await waitFor(() => autoplayOn() === on, 900);
+      if (!ok) {   // second try: the queue panel's own handler for the switch
+        const q = queueEl();
+        try { if (q && typeof q.onAutomixToggleTap === "function") q.onAutomixToggleTap({ target: t, currentTarget: t, stopPropagation() {}, preventDefault() {} }); } catch (e) {}
+        ok = await waitFor(() => autoplayOn() === on, 900);
+      }
+      await sleep(200);
+    }
+    const now = autoplayOn();
+    if (now === on) return { ok: true, autoplay: now };
+    // YouTube Music hides and ignores the autoplay switch while the queue is looping
+    return { ok: false, autoplay: now, error: repeatMode() !== "NONE" ? "autoplay_off_while_looping" : "autoplay_not_applied" };
   }
 
   /* --- queue rows & per-row actions -----------------------------------------------------
@@ -853,6 +878,13 @@
     deepAll(document, (el) => { if (el.tagName.includes("-")) tags[el.tagName.toLowerCase()] = (tags[el.tagName.toLowerCase()] || 0) + 1; return false; });
     out.tags = Object.fromEntries(Object.entries(tags).sort((x, y) => y[1] - x[1]).slice(0, 150));
     out.viewport = [innerWidth, innerHeight];
+    const wiz = document.querySelector("ytmusic-wiz-player-controls");
+    out.wiz = wiz ? deepAll(wiz, (el) => /^(button|tp-yt-paper-icon-button|ytmusic-like-button-renderer|yt-button-shape|toggle-button-view-model|button-view-model)$/i.test(el.tagName)).map(describe).slice(0, 40) : null;
+    const lr = likeRenderer();
+    out.likeRenderer = lr ? { attrs: attrs(lr), in: chain(lr).slice(0, 5).join(" < "), buttons: deepAll(lr, (e) => e.tagName === "BUTTON").map(describe) } : null;
+    const at = autoplayToggle();
+    out.autoplayToggle = at ? { attrs: attrs(at), checked: at.checked, disabled: at.disabled, visible: !!at.offsetParent, in: chain(at).slice(0, 4).join(" < ") } : null;
+    out.state = { repeat: repeatMode(), shuffle: shuffleOn(), autoplay: autoplayOn(), liked: likeStatus() };
     out.docked = deepAll(document, (el) => { try { const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
       return el.tagName.includes("-") && cs.position === "fixed" && r.bottom >= innerHeight - 4 && r.height > 20 && r.height < 200; } catch (e) { return false; } })
       .map((el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")).slice(0, 12);
@@ -902,8 +934,7 @@
           // The InnerTube like endpoint returns 200 but doesn't actually register, so for the
           // currently-playing song we click the real player-bar like/dislike button (proven to work).
           const cur = mp() && mp().getVideoData && mp().getVideoData().video_id;
-          const lb = (bar() && bar().querySelector("ytmusic-like-button-renderer")) ||
-            document.querySelector("ytmusic-player-bar ytmusic-like-button-renderer");
+          const lb = likeRenderer();
           if (!lb) {
             const vid = cmd.videoId || cur;
             if (!vid) return { ok: false, error: "no_like_button" };
@@ -918,7 +949,8 @@
           }
           if (lb && (!cmd.videoId || cmd.videoId === cur)) {
             const status = () => lb.getAttribute("like-status") || (lb.data && lb.data.likeStatus) || "INDIFFERENT";
-            const btns = lb.querySelectorAll("button");   // [0] = like, [1] = dislike
+            let btns = lb.querySelectorAll("button");   // [0] = like, [1] = dislike
+            if (btns.length < 2) btns = deepAll(lb, (e) => e.tagName === "BUTTON");
             const likeBtn = btns[0], dislikeBtn = btns[1];
             const want = cmd.action === "dislike" ? "DISLIKE" : cmd.action === "remove" ? "INDIFFERENT" : "LIKE";
             const now = status();
@@ -983,7 +1015,21 @@
   // A snapshot of how this page is laid out, sent once after load, so controls that can't be found can be diagnosed
   // without asking anyone to open developer tools.
   setTimeout(() => {
-    try { window.postMessage({ __vmr: "state", state: { diag: probe(), ts: Date.now(), partial: true, now: nowPlaying() } }, "*"); } catch (e) {}
+    (async () => {
+      try {
+        const d = probe();
+        const vid = curVideo();
+        if (vid) {
+          try {
+            const nx = await innertube("next", { videoId: vid, isAudioOnly: true }, true);
+            const lb = deepFind(nx, "likeButtonRenderer", [])[0];
+            d.likeApi = { keys: Object.keys(nx || {}).slice(0, 12), found: !!lb, likeStatus: lb && lb.likeStatus, lbKeys: lb ? Object.keys(lb) : null,
+              musicLike: deepFind(nx, "musicLikeButtonRenderer", []).length };
+          } catch (e) { d.likeApi = { error: String(e && e.message || e) }; }
+        }
+        window.postMessage({ __vmr: "state", state: { diag: d, ts: Date.now(), partial: true, now: nowPlaying() } }, "*");
+      } catch (e) {}
+    })();
   }, 12000);
 
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly

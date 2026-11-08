@@ -1,6 +1,17 @@
 package app.pocketfader.client
 
 import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,11 +67,32 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName.orEmpty() } catch (e: Exception) { "" }
     }
 
+    // The settings are split into pages: an overview of categories, and one page per category.
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    val link = SettingsNav.deepLink
+    LaunchedEffect(link) {
+        if (link != null) {
+            page = link
+            SettingsNav.deepLink = null
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+    val current = page
+    if (current == null) {
+        SettingsOverview(p, s, cfg, version, modifier) { page = it }
+        return
+    }
+    Column(modifier.fillMaxSize()) {
+    PageHeader(allCats.firstOrNull { it.key == current }?.title ?: "Settings") { page = null }
+    if (current == "sound") {
+        MixerScreen(s, Modifier.weight(1f).fillMaxWidth())
+    } else {
+    CompositionLocalProvider(LocalInPage provides true) {
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Section("Connection") {
+        if (page == "connection") Section("Connection") {
             val status = when {
                 !s.configured -> "Not set up"
                 s.online -> "Connected" + if (s.volume.device.isNotBlank()) " · ${s.volume.device}" else ""
@@ -72,7 +104,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             FilledTonalButton(onClick = onEditConnection, modifier = Modifier.padding(top = 4.dp)) { Text("Edit connection") }
         }
 
-        Section("Appearance") {
+        if (page == "appearance") Section("Appearance") {
             Choice(
                 "Theme", "Black turns pixels fully off on OLED screens.",
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark", "black" to "Black"), p.theme,
@@ -84,12 +116,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Cover colours in the background", "Tint the Now playing screen with the cover's colour.", p.coverWash) { v -> Settings.update { it.copy(coverWash = v) } }
             Toggle("Lyric highlight follows the cover", "Off: the line being sung uses your accent colour.", p.coverHighlight) { v -> Settings.update { it.copy(coverHighlight = v) } }
             Choice(
+                "Navigation bar", "Classic keeps the bar along the bottom; Pill floats above the content.",
+                listOf("bar" to "Classic bar", "pill" to "Floating pill"), p.navStyle,
+            ) { v -> Settings.update { it.copy(navStyle = v) } }
+            Choice(
                 "Open on", "The screen shown when the app starts.",
-                listOf("playing" to "Playing", "search" to "Search", "library" to "Library", "mixer" to "Mixer"), p.startTab,
+                listOf("playing" to "Playing", "search" to "Search", "library" to "Library"), p.startTab,
             ) { v -> Settings.update { it.copy(startTab = v) } }
         }
 
-        Section("Effects") {
+        if (page == "effects") Section("Effects") {
             Choice(
                 "Cover glow", "A halo of the cover's colour around the album art. Extreme is the brightest.",
                 listOf("off" to "Off", "soft" to "Soft", "strong" to "Strong", "extreme" to "Extreme"), p.coverGlow,
@@ -102,14 +138,14 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Settings.update { it.copy(glowUi = v) }
             }
             Toggle("Wavy seek bar", "The played part of the bar ripples while music plays.", p.wavyBar) { v -> Settings.update { it.copy(wavyBar = v) } }
-            Toggle("Screen transitions", "A short fade and slide between Playing, Search, Library and Mixer.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
+            Toggle("Screen transitions", "A short fade and slide between Playing, Search, Library and Settings.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
             Text(
                 "These are light drawing effects. “Reduce animations” (under Performance) stops all motion and keeps the rest.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        Section("Screen & always-on") {
+        if (page == "screen") Section("Screen & always-on") {
             Choice(
                 "Keep screen on", "Handy when the phone or tablet is a dedicated remote or now-playing display.",
                 listOf("off" to "Off", "playing" to "While playing", "always" to "Always"), p.keepAwake,
@@ -137,7 +173,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             ) { v -> Settings.update { it.copy(pixelShiftDp = v.toInt()) } }
         }
 
-        Section("Controls") {
+        if (page == "controls") Section("Controls") {
             Toggle(
                 "Media notification", "Playback controls on the lock screen and in the notification shade. Also keeps the connection alive in the background.",
                 p.notification,
@@ -152,7 +188,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Haptic feedback", "A small buzz on the main buttons.", p.haptics) { v -> Settings.update { it.copy(haptics = v) } }
         }
 
-        Section("Lyrics") {
+        if (page == "lyrics") Section("Lyrics") {
             Toggle("Romanize", "Show lines in Latin letters (Korean, Japanese kana, Cyrillic, Greek, and anything a source provides).", p.lyricsRoman) { v ->
                 Settings.update { it.copy(lyricsRoman = v) }
             }
@@ -170,23 +206,34 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             ) { v -> Settings.update { it.copy(lyricsSource = v) } }
         }
 
-        Section("Performance") {
+        if (page == "performance") Section("Performance") {
             Choice(
                 "Update speed", "How often the app asks the computer what's playing. Battery saver is gentler on old phones.",
                 listOf("fast" to "Fast", "normal" to "Normal", "battery" to "Battery saver"), p.pollSpeed,
             ) { v -> Settings.update { it.copy(pollSpeed = v) } }
             Toggle("Reduce animations", "Fewer moving parts; smoother on older devices.", p.reduceMotion) { v -> Settings.update { it.copy(reduceMotion = v) } }
+            Toggle("Pictures in the queue", "Little cover pictures next to each queued song. Turn off if scrolling the queue is slow on an old device.", p.queueArt) { v ->
+                Settings.update { it.copy(queueArt = v) }
+            }
         }
 
-        Section("Discord presence") {
-            Toggle(
-                "Show the Discord presence card",
-                "In Mixer: see whether YTM Beacon is showing your music on Discord, and switch it on or off. Needs YTM Beacon on the computer.",
-                p.showBeacon,
-            ) { v -> Settings.update { it.copy(showBeacon = v) } }
+        if (page == "discord") {
+            if (s.canBeacon) {
+                BeaconCard(s.online)
+            } else {
+                Text(
+                    "This computer's Pocketfader doesn't support Discord presence yet. Update Pocketfader on the computer.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "YTM Beacon shows the song playing in YouTube Music on your Discord profile. Here you can see whether it's working, " +
+                    "turn it on or off, hide it for a while, change what it shows, and install or update it on the computer.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
-        Section("Updates") {
+        if (page == "updates") Section("Updates") {
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             val info = UpdateManager.info
             val newer = UpdateManager.available(ctx)
@@ -214,12 +261,15 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             }
         }
 
-        Section("About") {
+        if (page == "about") Section("About") {
             Info("Pocketfader app", version.ifBlank { "unknown" })
             Info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             OutlinedButton(onClick = { confirmReset = true }) { Text("Reset all settings") }
         }
         Spacer(Modifier.height(24.dp))
+    }
+    }
+    }
     }
 
     if (confirmReset) {
@@ -233,15 +283,13 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    val icon = when (title) {
-        "Connection" -> Icons.Filled.Link; "Appearance" -> Icons.Filled.Palette; "Effects" -> Icons.Filled.AutoAwesome; "Screen & always-on" -> Icons.Filled.Smartphone
-        "Controls" -> Icons.Filled.TouchApp; "Lyrics" -> Icons.Filled.MusicNote; "Performance" -> Icons.Filled.Speed
-        "Updates" -> Icons.Filled.SystemUpdate; "Discord presence" -> Icons.Filled.Chat; else -> Icons.Filled.Info
-    }
+    val inPage = LocalInPage.current
     Column {
-        Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        if (!inPage) {
+            Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(allCats.firstOrNull { it.title == title }?.icon ?: Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
         }
         Card(
             Modifier.fillMaxWidth(),
@@ -289,5 +337,106 @@ private fun Choice(
                 FilterChip(selected = selected == value, onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The overview: categories in groups. Tapping one opens its page.
+
+/** Lets other screens (the "new version" banner) open a particular settings page. */
+object SettingsNav {
+    var deepLink by mutableStateOf<String?>(null)
+}
+
+private val LocalInPage = androidx.compose.runtime.compositionLocalOf { false }
+
+private class Cat(val key: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
+private val groups = listOf(
+    "Listening" to listOf(
+        Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("lyrics", "Lyrics", Icons.Filled.MusicNote), Cat("controls", "Controls", Icons.Filled.TouchApp),
+    ),
+    "Look & feel" to listOf(
+        Cat("appearance", "Appearance", Icons.Filled.Palette), Cat("effects", "Effects", Icons.Filled.AutoAwesome),
+        Cat("screen", "Screen & always-on", Icons.Filled.Smartphone),
+    ),
+    "Connections" to listOf(
+        Cat("connection", "Connection", Icons.Filled.Link), Cat("discord", "Discord presence", Icons.Filled.Chat), Cat("updates", "Updates", Icons.Filled.SystemUpdate),
+    ),
+    "More" to listOf(Cat("performance", "Performance", Icons.Filled.Speed), Cat("about", "About", Icons.Filled.Info)),
+)
+private val allCats = groups.flatMap { it.second }
+
+private fun themeLabel(t: String) = when (t) { "light" -> "Light"; "dark" -> "Dark"; "black" -> "Black"; else -> "System" }
+
+private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String = when (key) {
+    "sound" -> if (s.volume.available) "${s.volume.percent}%" + (if (s.volume.muted) " (muted)" else "") + s.volume.device.let { if (it.isBlank()) "" else " · $it" } else "No audio output found"
+    "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
+    "controls" -> "Notification " + (if (p.notification) "on" else "off") + " · volume keys " + (if (p.volumeKeys) "on" else "off")
+    "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")
+    "effects" -> "Glow " + p.coverGlow + " · " + (if (p.wavyBar) "wavy bar" else "plain bar")
+    "screen" -> when (p.keepAwake) { "always" -> "Always on"; "playing" -> "On while playing"; else -> "Screen sleeps normally" } + (if (p.pixelShift) " · pixel shift" else "")
+    "connection" -> if (!s.configured) "Not set up" else if (s.online) "Connected · " + cfg.url.removePrefix("http://").removePrefix("https://").trimEnd('/') else "Can't reach the computer"
+    "discord" -> BeaconModel.status?.let { beaconSummary(it) } ?: "Show your music on Discord"
+    "updates" -> "Installed " + version.ifBlank { "unknown" }
+    "performance" -> (when (p.pollSpeed) { "fast" -> "Fast updates"; "battery" -> "Battery saver"; else -> "Normal updates" }) + (if (p.reduceMotion) " · reduced animations" else "")
+    else -> "Version " + version.ifBlank { "unknown" }
+}
+
+@Composable
+private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, version: String, modifier: Modifier, open: (String) -> Unit) {
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for ((label, cats) in groups) {
+            Text(
+                label.uppercase(), Modifier.padding(start = 8.dp, top = 10.dp), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+            )
+            Card(
+                Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            ) {
+                Column {
+                    for (c in cats) CategoryRow(c, summaryText(c.key, p, s, cfg, version)) { open(c.key) }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun summaryText(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String {
+    if (key == "updates") return if (UpdateManager.available(LocalContext.current)) "A new version is ready" else "Installed " + version.ifBlank { "unknown" }
+    return summaryOf(key, p, s, cfg, version)
+}
+
+@Composable
+private fun CategoryRow(c: Cat, summary: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(c.icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(c.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun PageHeader(title: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back to settings") }
+        Text(title, Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }
