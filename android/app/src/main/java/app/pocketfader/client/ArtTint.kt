@@ -85,3 +85,34 @@ fun artBackground(tint: Color?, black: Boolean): Wash {
     }
     return Wash(brush, colorAt)
 }
+
+/** A 64 px copy of the picture, blurred (three box passes, close to a Gaussian), so scaling it up gives a smooth glow with no blocks. */
+private fun softCopy(src: Bitmap): Bitmap {
+    val n = 64
+    val small = Bitmap.createScaledBitmap(src, n, n, true)
+    var px = IntArray(n * n)
+    small.getPixels(px, 0, n, 0, 0, n, n)
+    repeat(3) { px = boxBlur(px, n, 4) }
+    val out = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+    out.setPixels(px, 0, n, 0, 0, n, n)
+    return out
+}
+
+private fun boxBlur(src: IntArray, n: Int, r: Int): IntArray {
+    val tmp = IntArray(n * n)
+    val out = IntArray(n * n)
+    val m = 2 * r + 1
+    for (pass in 0..1) {
+        val from = if (pass == 0) src else tmp
+        val to = if (pass == 0) tmp else out
+        for (y in 0 until n) for (x in 0 until n) {
+            var a = 0; var rr = 0; var g = 0; var b = 0
+            for (k in -r..r) {
+                val c = if (pass == 0) from[y * n + (x + k).coerceIn(0, n - 1)] else from[(y + k).coerceIn(0, n - 1) * n + x]
+                a += c ushr 24; rr += (c shr 16) and 255; g += (c shr 8) and 255; b += c and 255
+            }
+            to[y * n + x] = ((a / m) shl 24) or ((rr / m) shl 16) or ((g / m) shl 8) or (b / m)
+        }
+    }
+    return out
+}

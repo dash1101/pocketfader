@@ -3043,5 +3043,215 @@ setView('home'); setRailTab('queue'); pollMusic(); pollMixer(); favPull();
 setInterval(favPull, 20000);   // keep favourites in step across devices
 setTimeout(moveNavPill, 80);   // once layout settles, park the pill on the active tab
 </script>
+
+<style id="parity">
+/* ============ look aligned with the Android app: rounder, tonal, softer ============ */
+:root { --radius:24px; }
+.pill { border-radius:999px; }
+.setrow, .tile .art, .themecard { border-radius:20px; }
+#sheetcard { border-radius:28px 28px 0 0; }
+.np .art { border-radius:28px; }
+html[data-shape="soft"] .np .art { border-radius:22%; }
+html[data-shape="circle"] .np .art { border-radius:50%; }
+html[data-shape="cut"] .np .art { border-radius:28px 6px 28px 6px; }
+html[data-shape="circle"][data-spin="1"] .np .art { animation:pfspin 26s linear infinite; }
+@keyframes pfspin { to { transform:rotate(360deg); } }
+/* the cover's light: a softened copy of the cover, faded evenly toward its edges */
+#np-glow { -webkit-mask-image:radial-gradient(closest-side, #000 62%, transparent 100%); mask-image:radial-gradient(closest-side, #000 62%, transparent 100%); border-radius:0; }
+html[data-glow="off"] #np-glow { display:none; }
+html[data-glow="soft"] #np-glow { inset:-6% -6% -10% -6%; opacity:.45; filter:blur(34px) saturate(1.3); }
+html[data-glow="strong"] #np-glow { inset:-14% -14% -18% -14%; opacity:.75; filter:blur(46px) saturate(1.6); }
+html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filter:blur(58px) saturate(2); }
+/* play button: a round button while playing, easing to a softer square when paused */
+#r-pp { flex:0 0 76px; height:76px; border-radius:30%; background:var(--accent); color:#0a0512; border:0; transition:border-radius .26s ease, transform .12s; }
+#r-pp.pl { border-radius:50%; }
+#r-pp:active { transform:scale(.92); }
+#r-pp svg { width:34px; height:34px; fill:currentColor; }
+.transport { justify-content:center; gap:14px; }
+.transport button:not(#r-pp) { flex:0 0 56px; height:56px; border-radius:50%; }
+/* the seek bar: the played part is a wave that ripples while music plays */
+.seek { position:relative; }
+#seekwave { position:absolute; left:0; right:0; top:0; width:100%; height:36px; z-index:1; pointer-events:none; }
+.seek #seek { position:relative; z-index:2; height:36px; background:transparent; -webkit-appearance:none; appearance:none; }
+.seek #seek::-webkit-slider-runnable-track { background:transparent; height:36px; }
+.seek #seek::-moz-range-track { background:transparent; height:36px; }
+.seek #seek::-webkit-slider-thumb { -webkit-appearance:none; width:4px; height:22px; border-radius:2px; background:var(--accent); margin-top:7px; }
+.seek #seek::-moz-range-thumb { width:4px; height:22px; border:0; border-radius:2px; background:var(--accent); }
+.times { margin-top:0; }
+/* floating pill navigation (phone layout) as an option */
+@media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
+  html[data-nav="pill"] #nav { left:16px; right:16px; bottom:calc(10px + var(--sa-bottom, env(safe-area-inset-bottom))); border-radius:999px;
+    border:1px solid var(--line); background:color-mix(in srgb, var(--panel) 94%, transparent); box-shadow:0 10px 28px rgba(0,0,0,.45);
+    padding:6px 8px; backdrop-filter:blur(10px); justify-content:space-around; }
+  html[data-nav="pill"] .navbtn { height:48px; border-radius:999px; flex-direction:row; gap:8px; font-size:0; flex:0 0 auto; padding:0 14px; }
+  html[data-nav="pill"] .navbtn.sel { font-size:12.5px; padding:0 18px; }
+  html[data-nav="pill"] .navbtn svg { width:23px; height:23px; }
+}
+/* little extras */
+.openytm { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--card); border-radius:20px; padding:14px 16px; margin:0 0 16px; }
+.openytm .m { flex:1; min-width:200px; color:var(--dim); font-size:13.5px; }
+.arthead { display:flex; gap:16px; align-items:center; margin:6px 0 14px; }
+.arthead img { width:104px; height:104px; border-radius:50%; object-fit:cover; background:var(--card2); flex:none; }
+.arthead .n { font-size:24px; font-weight:800; letter-spacing:-.01em; }
+.arthead .sub { color:var(--dim); font-size:13px; }
+.artdesc { color:var(--dim); font-size:13.5px; line-height:1.5; margin:0 0 14px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
+.artdesc.open { -webkit-line-clamp:unset; }
+#np-s.link { cursor:pointer; }
+#np-s.link:hover { text-decoration:underline; }
+#sleepbadge { font-size:12px; color:var(--accent); margin-right:2px; font-variant-numeric:tabular-nums; }
+#sleepmenu { position:fixed; z-index:90; background:var(--card2); border:1px solid var(--line); border-radius:18px; padding:8px; display:none; box-shadow:0 14px 34px rgba(0,0,0,.5); min-width:190px; }
+#sleepmenu.show { display:block; }
+#sleepmenu button { display:block; width:100%; text-align:left; border:0; background:transparent; padding:10px 14px; border-radius:12px; font-size:14px; }
+#sleepmenu button:hover { background:color-mix(in srgb, var(--accent) 16%, transparent); }
+#sleepmenu .h { padding:6px 14px; color:var(--dim); font-size:12px; }
+</style>
+<script id="parity-js">
+(() => {
+  'use strict';
+  // ---- the extra look settings (kept on this device) ----
+  const P = { glow: lsGet('vmr-glow', 'strong'), wavy: lsGet('vmr-wavy', true), nav: lsGet('vmr-nav', 'bar'), shape: lsGet('vmr-shape', 'rounded') };
+  const applyPrefs = () => { const r = document.documentElement; r.dataset.glow = P.glow; r.dataset.wavy = P.wavy ? '1' : '0';
+    r.dataset.nav = P.nav; r.dataset.shape = P.shape; r.dataset.spin = (P.shape === 'circle') ? '1' : '0'; setTimeout(moveNavPill, 60); };
+  applyPrefs();
+  const savePref = (k, v) => { P[k] = v; lsSet('vmr-' + k, v); applyPrefs(); };
+
+  // ---- play button shape follows play/pause ----
+  const pp = $('#r-pp'), ppIcon = $('#pp-icon');
+  const syncPlay = () => { const d = ppIcon.firstElementChild && ppIcon.firstElementChild.getAttribute('d'); const playing = d === PAUSE;
+    pp.classList.toggle('pl', playing); document.documentElement.dataset.playing = playing ? '1' : '0'; };
+  new MutationObserver(syncPlay).observe(ppIcon, { subtree: true, attributes: true, attributeFilter: ['d'] });
+  syncPlay();
+
+  // ---- wavy seek bar (a canvas under the real slider, which still does the seeking) ----
+  const seekEl = $('#seek'), cv = document.createElement('canvas'); cv.id = 'seekwave'; seekEl.parentElement.insertBefore(cv, seekEl);
+  let amp = 0, phase = 0, last = 0;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  function drawWave(ts) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (!w) { requestAnimationFrame(drawWave); return; }
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    const css = getComputedStyle(document.documentElement), acc = css.getPropertyValue('--accent').trim() || '#8b5cf6', dim = css.getPropertyValue('--line').trim() || '#444';
+    const playing = document.documentElement.dataset.playing === '1' && !seekEl.disabled && P.wavy && !reduce.matches && !document.hidden;
+    const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+    amp += ((playing ? 3.4 : 0) - amp) * Math.min(1, dt * 6); if (playing) phase += dt * 4.2;
+    const x0 = 10, x1 = w - 10, cy = h / 2, v = Math.max(0, Math.min(1, +seekEl.value / (+seekEl.max || 1000))), xp = x0 + (x1 - x0) * v;
+    g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 4;
+    g.strokeStyle = dim; g.beginPath(); g.moveTo(xp, cy); g.lineTo(x1, cy); g.stroke();
+    g.strokeStyle = acc; g.beginPath(); g.moveTo(x0, cy);
+    for (let x = x0; x <= xp; x += 2) { const t = Math.min(1, Math.min(x - x0, xp - x) / 20), env = t * t * (3 - 2 * t);
+      g.lineTo(x, cy + amp * env * Math.sin((x - x0) / 28 * 2 * Math.PI + phase)); }
+    g.lineTo(xp, cy); g.stroke();
+    requestAnimationFrame(drawWave);
+  }
+  requestAnimationFrame(drawWave);
+
+  // ---- artist pages ----
+  let artistArg = null;
+  window.openArtist = (browseId, name, videoId) => { artistArg = { browseId, name, videoId }; setView('artist'); };
+  async function renderArtist(m) {
+    m.innerHTML = ''; m.appendChild(topbar(artistArg.name || 'Artist'));
+    const box = el('div'); box.innerHTML = '<div class="spinner"></div>'; m.appendChild(box);
+    const r = await ytm({ type: 'artist', browseId: artistArg.browseId, videoId: artistArg.videoId, name: artistArg.name }, true);
+    if (view !== 'artist') return;
+    box.innerHTML = '';
+    if (!r || r.error || !r.name) { box.appendChild(emptyMsg(r && r.error === 'artist_not_found' ? "Couldn't find that artist on YouTube Music." : "Couldn't load the artist (is the YouTube Music extension connected?).")); return; }
+    const head = el('div', 'arthead'), img = el('img'); img.src = r.thumb || ART_FALLBACK; img.onerror = () => img.src = ART_FALLBACK;
+    const info = el('div'); info.innerHTML = '<div class="n"></div><div class="sub"></div>';
+    info.firstChild.textContent = r.name; info.lastChild.textContent = r.subscribers || ''; head.append(img, info); box.appendChild(head);
+    const acts = el('div', 'acts'); acts.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px';
+    const mk = (label, cls, fn) => { const b = el('button', 'pill ' + cls); b.textContent = label; b.addEventListener('click', fn); acts.appendChild(b); };
+    const pl = r.play && (r.play.playlistId), vid = r.play && r.play.videoId;
+    if (vid || pl) mk('Play', 'primary', () => { vid ? ytm({ type: 'play', videoId: vid, playlistId: pl }) : ytm({ type: 'startPlaylist', playlistId: pl }); toast('Playing'); });
+    if (pl) mk('Shuffle', 'ghost', () => { ytm({ type: 'startPlaylist', playlistId: pl, shuffle: true }); toast('Shuffling'); });
+    if (r.radio && r.radio.playlistId) mk('Radio', 'ghost', () => { ytm({ type: 'startPlaylist', playlistId: r.radio.playlistId }); toast('Starting radio'); });
+    box.appendChild(acts);
+    if (r.description) { const d = el('div', 'artdesc'); d.textContent = r.description; d.addEventListener('click', () => d.classList.toggle('open')); box.appendChild(d); }
+    for (const sh of r.shelves || []) {
+      const wrap = el('div', 'shelf'), h = el('h3'); h.textContent = sh.title; wrap.appendChild(h);
+      const list = el('div', 'list'); for (const it of (sh.items || []).slice(0, 12)) list.appendChild(listItem(it)); wrap.appendChild(list); box.appendChild(wrap);
+    }
+  }
+  const _render = render;
+  render = function () { if (view === 'artist') return renderArtist($('#main')); const out = _render.apply(this, arguments); setTimeout(openBanner, 80); return out; };
+  const _activate = activate;
+  activate = function (item) {
+    if (item && item.kind === 'artist' && item.browseId) { openArtist(item.browseId, item.title); return; }
+    if (item && item.kind === 'album' && item.browseId && !item.playlistId) { detailStack = item; setView('detail'); return; }
+    return _activate(item);
+  };
+  // tap the artist's name under the title
+  const npS = $('#np-s');
+  npS.addEventListener('click', () => { if (lastNow && lastNow.artist) openArtist(null, lastNow.artist, lastNow.videoId); });
+  new MutationObserver(() => npS.classList.toggle('link', !!(lastNow && lastNow.artist && lastConnected))).observe(npS, { childList: true, characterData: true, subtree: true });
+
+  // ---- open YouTube Music on the computer when nothing is connected ----
+  function openBanner() {
+    const m = $('#main'); const old = $('#openytm'); if (lastConnected || !['home', 'search', 'playlists'].includes(view)) { if (old) old.remove(); return; }
+    if (old || !m) return;
+    const b = el('div', 'openytm'); b.id = 'openytm';
+    b.innerHTML = '<div class="m">YouTube Music isn\'t connected on the computer. You can open it there, then play from here.</div>';
+    const btn = el('button', 'pill primary'); btn.textContent = 'Open YouTube Music on the computer';
+    btn.addEventListener('click', async () => { btn.disabled = true; await post('/api/ytm', { type: 'open' }); toast('Opening YouTube Music on the computer…'); setTimeout(() => btn.disabled = false, 4000); });
+    b.appendChild(btn); const tb = m.querySelector('.topbar'); if (tb && tb.nextSibling) m.insertBefore(b, tb.nextSibling); else m.prepend(b);
+  }
+  setInterval(openBanner, 3000);
+
+  // ---- sleep timer ----
+  const row = $('.nptrow'), sBadge = document.createElement('span'); sBadge.id = 'sleepbadge';
+  const sBtn = document.createElement('button'); sBtn.id = 'np-sleep'; sBtn.className = 'npfav'; sBtn.title = 'Sleep timer';
+  sBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12.3 3a9 9 0 109 11.3A7 7 0 0112.3 3z"/></svg>';
+  row.insertBefore(sBadge, $('#np-like')); row.insertBefore(sBtn, $('#np-like'));
+  const menu = document.createElement('div'); menu.id = 'sleepmenu'; document.body.appendChild(menu);
+  let sleepLeft = 0, sleepAt = 0, lastMs = null;
+  async function setSleep(minutes) { const r = await post('/api/sleep', { minutes }); if (r && r.error) toast(r.error); else { sleepLeft = (r && r.remainingSec) || 0; sleepAt = Date.now(); toast(sleepLeft ? 'Sleep timer set' : 'Sleep timer off'); } paintSleep(); }
+  function paintSleep() {
+    const left = sleepLeft ? Math.max(0, sleepLeft - Math.floor((Date.now() - sleepAt) / 1000)) : 0;
+    sBadge.textContent = left ? (left >= 3600 ? Math.floor(left / 3600) + 'h ' + Math.floor(left % 3600 / 60) + 'm' : left >= 60 ? Math.ceil(left / 60) + 'm' : left + 's') : '';
+    sBtn.classList.toggle('on', !!left);
+    const caps = mixerState && mixerState.capabilities; sBtn.style.display = (caps && caps.sleep) ? 'flex' : 'none';
+    if (mixerState && mixerState !== lastMs) { lastMs = mixerState; const r = mixerState.sleep && mixerState.sleep.remainingSec || 0;
+      if (!sleepLeft || Math.abs((sleepLeft - (Date.now() - sleepAt) / 1000) - r) > 3) { sleepLeft = r; sleepAt = Date.now(); } if (!r) sleepLeft = 0; }
+  }
+  setInterval(paintSleep, 1000);
+  sBtn.addEventListener('click', e => { e.stopPropagation(); menu.innerHTML = '<div class="h">Pause playback after…</div>';
+    for (const m of [15, 30, 45, 60, 90, 120]) { const b = document.createElement('button'); b.textContent = m + ' minutes'; b.onclick = () => { menu.classList.remove('show'); setSleep(m); }; menu.appendChild(b); }
+    const t = document.createElement('button'); t.textContent = 'When this song ends'; t.onclick = () => { menu.classList.remove('show'); setSleep('track'); }; menu.appendChild(t);
+    if (sleepLeft) { const o = document.createElement('button'); o.textContent = 'Turn off'; o.onclick = () => { menu.classList.remove('show'); setSleep(0); }; menu.appendChild(o); }
+    const r = sBtn.getBoundingClientRect(); menu.style.left = Math.max(8, Math.min(innerWidth - 210, r.left - 80)) + 'px'; menu.style.top = Math.min(innerHeight - 330, r.bottom + 6) + 'px'; menu.classList.add('show'); });
+  document.addEventListener('click', () => menu.classList.remove('show'));
+
+  // ---- settings: look, and other players ----
+  const _settings = renderSettings;
+  renderSettings = function (m) {
+    _settings.apply(this, arguments);
+    const mkSel = (title, desc, key, opts) => { const r = el('div', 'setrow'); r.innerHTML = '<div><div class="k"></div><div class="d"></div></div>';
+      r.querySelector('.k').textContent = title; r.querySelector('.d').textContent = desc;
+      const sel = document.createElement('select'); sel.style.cssText = 'height:38px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:0 8px';
+      for (const [v, l] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.appendChild(o); } sel.value = P[key];
+      sel.addEventListener('change', () => savePref(key, sel.value)); r.appendChild(sel); return r; };
+    const mkTog = (title, desc, on, fn) => { const r = el('div', 'setrow'); r.innerHTML = '<div><div class="k"></div><div class="d"></div></div>';
+      r.querySelector('.k').textContent = title; r.querySelector('.d').textContent = desc;
+      const t = el('button', 'toggle' + (on ? ' on' : '')); t.addEventListener('click', () => { const n = !t.classList.contains('on'); t.classList.toggle('on', n); fn(n); }); r.appendChild(t); return r; };
+    const fx = el('div', 'setsec'); fx.appendChild(Object.assign(el('h3'), { textContent: 'Effects' }));
+    fx.append(
+      mkSel('Cover glow', "A soft light of the cover's colours around the album art.", 'glow', [['off', 'Off'], ['soft', 'Soft'], ['strong', 'Strong'], ['extreme', 'Extreme']]),
+      mkSel('Cover shape', 'Circle spins slowly like a record.', 'shape', [['rounded', 'Rounded'], ['soft', 'Soft'], ['circle', 'Circle'], ['cut', 'Cut corners']]),
+      mkTog('Wavy seek bar', 'The played part of the bar ripples while music plays.', P.wavy, v => savePref('wavy', v)),
+      mkSel('Navigation bar (phone)', 'Classic keeps the bar along the bottom; Pill floats above the content.', 'nav', [['bar', 'Classic bar'], ['pill', 'Floating pill']]));
+    m.appendChild(fx);
+    const op = el('div', 'setsec'); op.appendChild(Object.assign(el('h3'), { textContent: 'Other players' }));
+    const tog = mkTog('Pause other players when YouTube Music starts', 'Other music or video playing on the computer is paused when a YouTube Music song starts.', false, v => post('/api/prefs', { pauseOthers: v }));
+    op.appendChild(tog);
+    fetch('/api/prefs').then(r => r.json()).then(j => tog.querySelector('.toggle').classList.toggle('on', !!j.pauseOthers)).catch(() => {});
+    const nb = el('div', 'setrow'); nb.innerHTML = '<div><div class="k">Pause other players now</div><div class="d">Pauses everything else that is playing on the computer.</div></div>';
+    const btn = el('button', 'pill ghost'); btn.textContent = 'Pause'; btn.style.height = '38px';
+    btn.addEventListener('click', async () => { const r = await post('/api/media/pause-others', {}); toast(r && r.paused && r.paused.length ? 'Paused ' + r.paused.join(', ') : 'Nothing else was playing'); });
+    nb.appendChild(btn); op.appendChild(nb); m.appendChild(op);
+  };
+  // set the view for an already-open artist/settings page
+  if (view === 'settings' || view === 'artist') render();
+})();
+</script>
 </body>
 </html>
