@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Pocketfader \u2014 YT Music Bridge",
-  "version": "1.10.0",
-  "description": "Lets the Pocketfader app control YouTube Music playing in this browser, and adds refinements: playback speed, I'm feeling lucky, themes, Gemini playlists, Discord presence controls.",
+  "version": "1.11.0",
+  "description": "Lets the Pocketfader app control YouTube Music playing in this browser.",
   "host_permissions": [
     "http://127.0.0.1:8777/*",
-    "http://localhost:8777/*",
-    "https://generativelanguage.googleapis.com/*"
+    "http://localhost:8777/*"
   ],
   "content_scripts": [
     {
@@ -28,19 +27,6 @@
       ],
       "world": "ISOLATED",
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://music.youtube.com/*"
-      ],
-      "js": [
-        "refine.js"
-      ],
-      "world": "ISOLATED",
-      "run_at": "document_idle"
     }
-  ],
-  "permissions": [
-    "storage"
   ]
 }

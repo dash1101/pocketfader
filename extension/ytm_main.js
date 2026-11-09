@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.10.0";
+  const EXT_VERSION = "1.11.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -253,15 +253,21 @@
     lrCache = { el, at: Date.now() };
     return el;
   }
-  const likeApi = { vid: null, status: null, busy: false };
+  // The like button only exists on the player page. Everywhere else the state comes from the song's `next` data: newer
+  // builds keep it in frameworkUpdates as a likeStatusEntity, older ones in a likeButtonRenderer. Re-read every 45 s so a
+  // like made in the page itself shows up too.
+  const likeApi = { vid: null, status: null, busy: false, at: 0 };
   async function apiLikeStatus(vid) {
     const nx = await innertube("next", { videoId: vid, isAudioOnly: true }, true);
+    const ent = deepFind(nx, "likeStatusEntity", []).find((e) => e && e.likeStatus);
+    if (ent) return ent.likeStatus;
     const r = deepFind(nx, "likeButtonRenderer", [])[0] || deepFind(nx, "musicLikeButtonRenderer", [])[0];
     return (r && r.likeStatus) || null;
   }
   function ensureApiLike(vid) {
-    if (!vid || likeApi.busy || likeApi.vid === vid) return;
-    likeApi.busy = true; likeApi.vid = vid; likeApi.status = null;
+    if (!vid || likeApi.busy || (likeApi.vid === vid && Date.now() - likeApi.at < 45000)) return;
+    likeApi.busy = true; likeApi.at = Date.now();
+    if (likeApi.vid !== vid) { likeApi.vid = vid; likeApi.status = null; }
     apiLikeStatus(vid).then((st) => { if (likeApi.vid === vid) likeApi.status = st; }).catch(() => {}).finally(() => { likeApi.busy = false; });
   }
   // Read the current song's like state from the player-bar like button.
@@ -1068,7 +1074,7 @@
             if (r && r.error) return { ok: false, error: "like_failed: " + (r.error.message || r.error.code || "") };
             await sleep(500);
             const st = await apiLikeStatus(vid).catch(() => null);
-            likeApi.vid = vid; likeApi.status = st;
+            likeApi.vid = vid; likeApi.status = st; likeApi.at = Date.now();
             return { ok: st === want, liked: st, via: "api", ...(st === want ? {} : { error: "like_not_applied" }) };
           }
           if (lb && (!cmd.videoId || cmd.videoId === cur)) {
@@ -1156,7 +1162,9 @@
           try {
             const nx = await innertube("next", { videoId: vid, isAudioOnly: true }, true);
             const lb = deepFind(nx, "likeButtonRenderer", [])[0];
+            const ent = deepFind(nx, "likeStatusEntity", [])[0];
             d.likeApi = { keys: Object.keys(nx || {}).slice(0, 12), found: !!lb, likeStatus: lb && lb.likeStatus, lbKeys: lb ? Object.keys(lb) : null,
+              entity: ent ? { likeStatus: ent.likeStatus, keys: Object.keys(ent) } : null,
               musicLike: deepFind(nx, "musicLikeButtonRenderer", []).length };
           } catch (e) { d.likeApi = { error: String(e && e.message || e) }; }
         }
