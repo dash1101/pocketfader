@@ -222,6 +222,7 @@ object Remote {
         scope.launch {
             try {
                 val r = a.post("/api/ytm", body)
+                if (r.optBoolean("opened")) notify("Opening YouTube Music on the computer…")
                 if (r.has("error")) {
                     val err = r.optString("error")
                     notify(
@@ -243,6 +244,38 @@ object Remote {
             }
             boost()
             runCatching { pollOnce(a) }
+        }
+    }
+
+    /** Opens YouTube Music in the computer's browser, so music can start when no tab was open. */
+    fun openYtm() {
+        notify("Opening YouTube Music on the computer…")
+        runApi { it.post("/api/ytm", JSONObject().put("type", "open")) }
+    }
+
+    fun serverPrefs(): JSONObject = need().get("/api/prefs")
+
+    fun setServerPref(key: String, value: Boolean) {
+        runApi { it.post("/api/prefs", JSONObject().put(key, value)) }
+    }
+
+    /** Pauses every other player that is playing on the computer. */
+    fun pauseOthers() {
+        val a = api ?: return
+        scope.launch {
+            try {
+                val r = a.post("/api/media/pause-others", JSONObject())
+                val names = r.optJSONArray("paused")
+                notify(
+                    when {
+                        !r.optBoolean("supported", true) -> "This computer can't pause other players from here."
+                        names == null || names.length() == 0 -> "Nothing else was playing."
+                        else -> "Paused " + (0 until names.length()).joinToString(", ") { names.optString(it) }
+                    }
+                )
+            } catch (e: Exception) {
+                notify("Couldn't pause: ${e.friendly()}")
+            }
         }
     }
 
@@ -342,6 +375,14 @@ object Remote {
             )
         }
         return r
+    }
+
+    fun artist(browseId: String?, videoId: String?, name: String?): ArtistPage {
+        val b = JSONObject().put("type", "artist")
+        if (browseId != null) b.put("browseId", browseId)
+        if (videoId != null) b.put("videoId", videoId)
+        if (name != null) b.put("name", name)
+        return parseArtist(ytmCall(b, 30000))
     }
 
     fun search(query: String): List<SearchItem> =

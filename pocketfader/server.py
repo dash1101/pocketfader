@@ -28,6 +28,7 @@ from .bridge import Bridge
 from .lyrics import LyricsService
 from .updater import Updater
 from .config import DEFAULT_PORT, JsonFile, config_dir
+from .opener import Opener, music_url, valid_id
 
 STATIC = Path(__file__).parent / "static"
 EQ_MIN, EQ_MAX = -12.0, 12.0
@@ -41,12 +42,15 @@ COOKIE = "pf_token"
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
         self.updater = updater or Updater()
         self.beacon = beacon or Beacon()
+        self.opener = opener or Opener()
+        self._stop_watch = threading.Event()
+        self._was_playing = False
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
         self.token = token
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
@@ -57,8 +61,10 @@ class App:
     def start(self):
         for b in (self.audio, self.engine, self.media):
             b.start()
+        threading.Thread(target=self._watch_others, name="pause-others", daemon=True).start()
 
     def stop(self):
+        self._stop_watch.set()
         for b in (self.audio, self.engine):
             b.stop()
 
@@ -184,10 +190,45 @@ class App:
             return None
         return self.bridge.request({"type": "lyrics", "videoId": video_id}, timeout=8.0)
 
+    # ---- other players ----
+    def pause_others(self):
+        """Pause every other media player that is playing on this computer (not the YouTube Music song that is playing)."""
+        fn = getattr(self.media, "pause_others", None)
+        if not fn:
+            return {"paused": [], "supported": False}
+        now = (self.bridge.get_state().get("now") or {}) if self.bridge.connected else {}
+        return {"paused": fn(now.get("title") or "", now.get("artist") or ""), "supported": True}
+
+    def _watch_others(self):
+        """With the 'pauseOthers' preference on, other players are paused when YouTube Music starts playing."""
+        while not self._stop_watch.wait(1.0):
+            try:
+                playing = bool(self.bridge.connected and (self.bridge.get_state().get("now") or {}).get("playing"))
+                if playing and not self._was_playing and self.prefs.load().get("pauseOthers"):
+                    self.pause_others()
+                self._was_playing = playing
+            except Exception:
+                pass
+
     def ytm_command(self, body):
         """Extension first (full YT Music control). Transport-only fallback to the host player."""
         if self.bridge.connected:
             return self.bridge.request(body)
+        # No YouTube Music tab: opening the song (or the home page) in the browser starts one.
+        t = body.get("type")
+        try:
+            if t in ("play", "startMix") and valid_id(body.get("videoId")):
+                url = music_url(body["videoId"], body.get("playlistId") if valid_id(body.get("playlistId")) else None)
+            elif t == "startPlaylist" and valid_id(body.get("playlistId")):
+                url = music_url(playlist_id=body["playlistId"])
+            elif t == "open":
+                url = music_url()
+            else:
+                url = None
+        except ValueError:
+            url = None
+        if url:
+            return {"ok": self.opener.open(url), "opened": True}
         if body.get("type") == "transport":
             act = body.get("action")
             if act == "playpause":
@@ -448,6 +489,9 @@ class Handler(BaseHTTPRequestHandler):
                 if e.code == "NOT_RUNNING":
                     return self._json(503, {"error": "YTM Beacon isn't running on the computer"})
                 return self._json(502, {"error": e.message})
+
+        if path == "/api/media/pause-others":
+            return self._json(200, app.pause_others())
 
         if path == "/api/sleep":
             # {"minutes": 1..720} pauses playback after that long; {"minutes": "track"} at the end of this song;

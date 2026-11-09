@@ -348,7 +348,7 @@ fun LyricsPane(s: RemoteState, modifier: Modifier = Modifier) {
     var jump by remember { mutableIntStateOf(0) }
     FollowLyrics(state, firstLineIndex = 1, active = active, enabled = true, jump = jump)
     Box(modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), state = state) {
+        LazyColumn(Modifier.fillMaxSize().edgeFade(state), state = state) {
             item(key = "ly-controls") { LyricsControls(ui) }
             lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
         }

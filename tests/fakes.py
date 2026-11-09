@@ -77,6 +77,7 @@ class FakeMedia:
     def prev(self): self.calls.append("prev"); return True
     def seek(self, s): self.calls.append(("seek", s)); return True
     def pin(self, a): self.pinned = a; return True
+    def pause_others(self, title="", artist=""): self.calls.append(("pause_others", title, artist)); return ["Other"]
 
 
 class FakeEngine:

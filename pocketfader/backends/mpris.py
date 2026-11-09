@@ -204,6 +204,23 @@ class Mpris:
         now_us = int(self.snapshot().get("position", 0) * 1e6)
         return self._send("Seek", "x", target_us - now_us)
 
+    def pause_others(self, keep_title="", keep_artist=""):
+        """Pause every player that is playing right now, except the one showing (keep_title, keep_artist). Only on request."""
+        with self._lock:
+            players, bus_of = dict(self._players), dict(self._bus_of)
+        paused = []
+        for app, p in players.items():
+            if not p.get("playing"):
+                continue
+            if keep_title and p.get("title") == keep_title and (not keep_artist or p.get("artist") == keep_artist):
+                continue
+            bus = bus_of.get(app)
+            if bus and self._call(bus, PLAYER, "Pause", write=True) is not None:
+                paused.append(p.get("name") or app)
+        if paused:
+            self._wake.set()
+        return paused
+
     def pin(self, app):
         self._pinned = app or None
         self._wake.set()

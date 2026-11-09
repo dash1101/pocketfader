@@ -48,8 +48,9 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
         Remote.setWantOutputs(true)
         onDispose { Remote.setWantOutputs(false) }
     }
+    val scroll = rememberScrollState()
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.edgeFade(scroll).verticalScroll(scroll).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Panel("Volume") {

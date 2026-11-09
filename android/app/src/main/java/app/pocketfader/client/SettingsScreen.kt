@@ -88,8 +88,9 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
         MixerScreen(s, Modifier.weight(1f).fillMaxWidth())
     } else {
     CompositionLocalProvider(LocalInPage provides true) {
+    val pageScroll = rememberScrollState()
     Column(
-        Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.weight(1f).edgeFade(pageScroll).verticalScroll(pageScroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (page == "connection") Section("Connection") {
@@ -186,6 +187,21 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 listOf("1" to "1%", "2" to "2%", "5" to "5%", "10" to "10%"), p.volumeStep.toString(), enabled = p.volumeKeys,
             ) { v -> Settings.update { it.copy(volumeStep = v.toInt()) } }
             Toggle("Haptic feedback", "A small buzz on the main buttons.", p.haptics) { v -> Settings.update { it.copy(haptics = v) } }
+            // other players on the computer (Spotify, a video in another tab, VLC...)
+            var pauseOthers by remember { mutableStateOf<Boolean?>(null) }
+            androidx.compose.runtime.LaunchedEffect(s.online) {
+                if (s.online) pauseOthers = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { Remote.serverPrefs().optBoolean("pauseOthers", false) }.getOrNull()
+                }
+            }
+            pauseOthers?.let { on ->
+                Toggle(
+                    "Pause other players when YouTube Music starts",
+                    "Other music or video playing on the computer is paused when a YouTube Music song starts, so they don't play over each other.",
+                    on,
+                ) { v -> pauseOthers = v; Remote.setServerPref("pauseOthers", v) }
+            }
+            OutlinedButton(onClick = { Remote.pauseOthers() }, enabled = s.online) { Text("Pause other players now") }
         }
 
         if (page == "lyrics") Section("Lyrics") {
@@ -256,8 +272,21 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Check automatically", "Looks for a new version when the app opens (the computer checks GitHub, at most every few hours).", p.autoUpdate) { v ->
                 Settings.update { it.copy(autoUpdate = v) }
             }
-            if (info != null && newer && info.notes.isNotBlank()) {
-                Text(info.notes.lines().take(14).joinToString("\n"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val notes = remember(info?.notes) { info?.notes?.let { parseReleaseNotes(it) } }
+            if (notes != null) {
+                // just the "What's new" part of the release, as a list, not the whole release page
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        notes.heading.replace("What's new in", "What's new in").ifBlank { "What's new" },
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    )
+                    for (item in notes.items.take(12)) {
+                        Row {
+                            Text("•", Modifier.padding(end = 8.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            Text(inlineMarkdown(item), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
         }
 
@@ -385,8 +414,9 @@ private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, 
 
 @Composable
 private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, version: String, modifier: Modifier, open: (String) -> Unit) {
+    val scroll = rememberScrollState()
     Column(
-        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier.edgeFade(scroll).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         for ((label, cats) in groups) {

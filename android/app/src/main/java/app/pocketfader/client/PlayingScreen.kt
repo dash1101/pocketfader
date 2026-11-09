@@ -180,6 +180,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                         if (title.isNotBlank()) {
                             Text(
                                 artist,
+                                // tap the artist to see their page: about, top songs, albums
+                                modifier = Modifier.then(if (s.bridge && artist.isNotBlank()) Modifier.clickable { Detail.openArtist(videoId, artist) } else Modifier),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -209,6 +211,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
+            // nothing to control because there's no YouTube Music tab: open one on the computer
+            if (s.online && !s.bridge) OpenYtmButton(Modifier.padding(bottom = 8.dp))
         }
 
         SeekBar(now?.duration ?: 0.0, playing, prefs.wavyBar)
@@ -236,15 +240,18 @@ fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: 
     val tint = LocalTint.current ?: MaterialTheme.colorScheme.primary
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
         val coverW = minOf(420.dp, maxWidth - 48.dp)
+        val coverPx = with(androidx.compose.ui.platform.LocalDensity.current) { coverW.toPx() }
+        // the light dims as the cover scrolls away, instead of vanishing all at once
+        val fade = { (1f - scrollPx() / (coverPx * 0.9f)).coerceIn(0f, 1f) }
         Box(
             Modifier
                 .offset { androidx.compose.ui.unit.IntOffset(((maxWidth - coverW) / 2).roundToPx(), 8.dp.roundToPx() - scrollPx()) }
                 .size(coverW),
         ) {
             if (thumb != null) {
-                AmbientGlow(thumb, prefs.coverGlow, scale, pulse, Modifier.matchParentSize())
+                AmbientGlow(thumb, prefs.coverGlow, scale, pulse, Modifier.matchParentSize(), fade)
             } else {
-                Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale }.coverGlow(tint, prefs.coverGlow, pulse))
+                Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade() }.coverGlow(tint, prefs.coverGlow, pulse))
             }
         }
     }
@@ -401,7 +408,7 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val glowVisible by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     Box(modifier.fillMaxSize()) {
         PlayerGlow(s, glowVisible, { listState.firstVisibleItemScrollOffset })
-        LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        LazyColumn(Modifier.fillMaxSize().edgeFade(listState), state = listState) {
             item(key = "player") { PlayerPanel(s) }
             stickyHeader(key = "tabs") {
                 Surface(color = MaterialTheme.colorScheme.background.copy(alpha = 0.94f)) {
@@ -422,8 +429,17 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
         menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
         if (tab == 1) JumpToLine(listState, 3, active, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 92.dp)) { jump++ }
         val showMini by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
-        if (showMini) {
-            MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier.align(Alignment.BottomCenter))
+        val still = !prefs.transitions || prefs.reduceMotion
+        // the slim bar glides up from the bottom when the full controls scroll out of view, and back down when they return
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showMini,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = if (still) androidx.compose.animation.EnterTransition.None
+            else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(280)) { it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+            exit = if (still) androidx.compose.animation.ExitTransition.None
+            else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(220)) { it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
+        ) {
+            MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier)
         }
     }
 }
@@ -472,7 +488,8 @@ fun QueuePane(s: RemoteState, modifier: Modifier = Modifier) {
     var playedOpen by rememberSaveable { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
-    LazyColumn(modifier.fillMaxSize()) {
+    val queueState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LazyColumn(modifier.fillMaxSize().edgeFade(queueState), state = queueState) {
         queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
         item(key = "pad") { Spacer(Modifier.height(24.dp)) }
     }

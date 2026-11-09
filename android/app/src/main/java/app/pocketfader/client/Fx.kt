@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -108,22 +109,36 @@ private fun ambientSpec(level: String): Triple<Float, Float, Float>? = when (lev
     else -> null
 }
 
+/** 0..1 rise with zero slope at both ends, so a fade built from it has no visible creases (no Mach bands). */
+private fun smoother(t: Float): Float {
+    val x = t.coerceIn(0f, 1f)
+    return x * x * x * (x * (x * 6f - 15f) + 10f)
+}
+
 /**
- * A soft light that carries the cover's own edges outward, like an ambient backdrop: the cover's tiny copy is scaled up
- * (smooth scaling makes it a blur), put behind the cover, and faded to nothing toward its outer edge. It is one image and
- * one gradient, drawn once; only its brightness moves.
+ * A soft light that carries the cover's own edges outward, like an ambient backdrop: a blurred copy of the cover is
+ * scaled up behind it and faded to nothing toward its outer edge, evenly on all four sides (the fade is applied
+ * across and then down, so the light has no outline and no circular halo). [fade] dims it as the cover scrolls away.
  */
 @Composable
-fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Float>, modifier: Modifier = Modifier) {
+fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Float>, modifier: Modifier = Modifier, fade: () -> Float = { 1f }) {
     val (reach, strength, sat) = ambientSpec(level) ?: return
     val filter = remember(sat) { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(sat) }) }
+    // where the cover's edge sits inside the scaled-up picture, as a fraction of its width, measured from each side
+    val inner = (1f - 1f / reach) / 2f
+    val ramp = remember(inner) {
+        val steps = 14
+        val up = (0..steps).map { i -> val t = i / steps.toFloat(); (t * inner) to Color.Black.copy(alpha = smoother(t)) }
+        val down = up.reversed().map { (p, c) -> (1f - p) to c }
+        (up + down).toTypedArray()
+    }
     Box(
         modifier
             .graphicsLayer {
                 val k = reach * scale
                 scaleX = k
                 scaleY = k
-                this.alpha = strength * pulse.value
+                this.alpha = strength * pulse.value * fade()
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             .drawBehind {
@@ -131,16 +146,9 @@ fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Fl
                     thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
                     colorFilter = filter, filterQuality = FilterQuality.High,
                 )
-                // fade out toward the edge; the cover itself sits over the middle
-                val r = size.maxDimension / 2f * 1.2f
-                val f = 1f / (reach * 1.2f)
-                drawRect(
-                    Brush.radialGradient(
-                        0f to Color.Black, f to Color.Black, f + (1f - f) * 0.45f to Color.Black.copy(alpha = 0.5f), 1f to Color.Transparent,
-                        center = center, radius = r,
-                    ),
-                    blendMode = BlendMode.DstIn,
-                )
+                // fade to nothing at the outer edge: across, then down (the two multiply)
+                drawRect(Brush.horizontalGradient(*ramp), blendMode = BlendMode.DstIn)
+                drawRect(Brush.verticalGradient(*ramp), blendMode = BlendMode.DstIn)
             },
     )
 }
@@ -306,3 +314,54 @@ fun WavySeekBar(
         drawRoundRect(color, Offset(xp - hw / 2f, cy - hh / 2f), Size(hw, hh), CornerRadius(hw / 2f))
     }
 }
+
+
+// ---------------------------------------------------------------------------------------------
+// A soft fade where scrolled content leaves the screen.
+
+/** The colours the page background has at the top and bottom of the content area (so the fade blends in). */
+@androidx.compose.runtime.Immutable
+class EdgeFade(val top: Color, val bottom: Color)
+
+val LocalEdgeFade = compositionLocalOf<EdgeFade?> { null }
+
+/**
+ * Draws a gentle gradient of the page colour over the top and/or bottom edge of a scrolling area, only on an edge that has
+ * more content beyond it (so nothing is faded when you're at the start or end). It paints over the content instead of using
+ * an offscreen layer, which keeps it cheap on old devices.
+ */
+@Composable
+fun Modifier.edgeFade(canBack: () -> Boolean, canForward: () -> Boolean): Modifier {
+    val fade = LocalEdgeFade.current ?: return this
+    return drawWithContent {
+        drawContent()
+        val h = 26.dp.toPx()
+        if (canBack()) {
+            val c = fade.top
+            drawRect(
+                Brush.verticalGradient(
+                    0f to c, 0.35f to c.copy(alpha = 0.7f), 0.7f to c.copy(alpha = 0.22f), 1f to c.copy(alpha = 0f), startY = 0f, endY = h,
+                ),
+                size = Size(size.width, h),
+            )
+        }
+        if (canForward()) {
+            val c = fade.bottom
+            drawRect(
+                Brush.verticalGradient(
+                    0f to c.copy(alpha = 0f), 0.3f to c.copy(alpha = 0.22f), 0.65f to c.copy(alpha = 0.7f), 1f to c,
+                    startY = size.height - h, endY = size.height,
+                ),
+                topLeft = Offset(0f, size.height - h), size = Size(size.width, h),
+            )
+        }
+    }
+}
+
+@Composable
+fun Modifier.edgeFade(list: androidx.compose.foundation.lazy.LazyListState): Modifier =
+    edgeFade({ list.canScrollBackward }, { list.canScrollForward })
+
+@Composable
+fun Modifier.edgeFade(scroll: androidx.compose.foundation.ScrollState): Modifier =
+    edgeFade({ scroll.value > 0 }, { scroll.canScrollForward })

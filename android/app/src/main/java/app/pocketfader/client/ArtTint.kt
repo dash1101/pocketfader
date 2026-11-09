@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 /** Highlight colour taken from the cover (only when the setting asks for it); null means use the theme accent. */
 val LocalAccent = compositionLocalOf<Color?> { null }
 
-/** The cover's main colour and a tiny (32 px) copy of the picture, used for the ambient glow around it. */
+/** The cover's main colour and a small (64 px), already blurred copy of the picture, used for the ambient glow around it. */
 @Immutable
 data class ArtInfo(val tint: Color? = null, val thumb: ImageBitmap? = null)
 
@@ -51,19 +51,23 @@ fun rememberArt(url: String?): State<ArtInfo> {
             val p = Palette.from(bmp).maximumColorCount(10).generate()
             val tint = (p.vibrantSwatch ?: p.mutedSwatch ?: p.dominantSwatch)?.rgb?.let { Color(it) }
             // scaled up smoothly later, this little picture becomes a soft blur of the cover's own edges
-            val thumb = try { Bitmap.createScaledBitmap(bmp, 32, 32, true).asImageBitmap() } catch (e: Exception) { null }
+            val thumb = try { softCopy(bmp).asImageBitmap() } catch (e: Exception) { null }
             ArtInfo(tint, thumb)
         }
     }
     return art
 }
 
+/** The background wash: a brush, and the colour it has at a given fraction of the screen's height (0 top, 1 bottom). */
+@Immutable
+class Wash(val brush: Brush, val colorAt: (Float) -> Color)
+
 /**
  * A soft wash of the cover's colour fading into the background. It is weakened as needed so the normal text colour
  * always stays easy to read on top of it (a dark cover on the light theme, a bright one on the dark theme).
  */
 @Composable
-fun artBackground(tint: Color?, black: Boolean): Brush {
+fun artBackground(tint: Color?, black: Boolean): Wash {
     val reduce = LocalReduceMotion.current
     val base = MaterialTheme.colorScheme.background
     val text = MaterialTheme.colorScheme.onBackground
@@ -71,7 +75,13 @@ fun artBackground(tint: Color?, black: Boolean): Brush {
     val animated by animateColorAsState(target, tween(if (reduce) 0 else 700), label = "art")
     var strength = if (black) 0.22f else 0.42f
     while (strength > 0.02f && contrast(text, lerp(base, animated, strength)) < 7f) strength *= 0.8f
-    return Brush.verticalGradient(
-        0f to lerp(base, animated, strength), 0.55f to lerp(base, animated, strength * 0.35f), 1f to base,
+    val k0 = strength
+    val brush = Brush.verticalGradient(
+        0f to lerp(base, animated, k0), 0.55f to lerp(base, animated, k0 * 0.35f), 1f to base,
     )
+    val colorAt = { t: Float ->
+        val k = if (t <= 0.55f) k0 + (k0 * 0.35f - k0) * (t / 0.55f) else k0 * 0.35f * (1f - (t - 0.55f) / 0.45f)
+        lerp(base, animated, k.coerceIn(0f, 1f))
+    }
+    return Wash(brush, colorAt)
 }

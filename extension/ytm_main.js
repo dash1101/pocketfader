@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.7.0";
+  const EXT_VERSION = "1.9.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -117,7 +117,7 @@
     let kind = "unknown";
     if (videoId) kind = "song";
     else if (playlistId) kind = "playlist";
-    else if (browseId) kind = browseId.startsWith("MPRE") ? "album" : "browse";
+    else if (browseId) kind = browseId.startsWith("MPRE") ? "album" : /^(UC|MPLA)/.test(browseId) ? "artist" : "browse";
     const setVideoId = r.playlistItemData?.playlistSetVideoId || null;
     return { title, subtitle, thumb, videoId, browseId, playlistId, kind, setVideoId };
   }
@@ -127,7 +127,7 @@
   let barCache = null, barAt = 0;
   const bar = () => {
     // a "not here" answer is remembered too, so a page without the bar isn't searched end to end on every state push
-    if (Date.now() - barAt < 4000 && (barCache === null || barCache.isConnected)) return barCache;
+    if (barCache ? (barCache.isConnected && Date.now() - barAt < 4000) : Date.now() - barAt < 60000) return barCache;
     barCache = document.querySelector("ytmusic-player-bar") ||
       deepAll(document, (el) => el.tagName === "YTMUSIC-PLAYER-BAR")[0] || null;
     barAt = Date.now();
@@ -138,15 +138,17 @@
   const ctlCache = {};
   function labelControl(word) {
     const c = ctlCache[word];
-    if (c && Date.now() - c.at < 4000 && (c.el === null || c.el.isConnected)) return c.el;
-    const el = findLabelControl(word);
+    // a found control is re-checked every few seconds; "not found" is remembered for 30 s (a whole-page scan is costly)
+    if (c && (c.el ? c.el.isConnected && Date.now() - c.at < 4000 : Date.now() - c.at < 30000)) return c.el;
+    const host = document.querySelector("ytmusic-wiz-player-controls, ytmusic-player-bar");
+    const el = (host && findLabelControl(word, host)) || findLabelControl(word, document);
     ctlCache[word] = { el, at: Date.now() };
     return el;
   }
-  function findLabelControl(word) {
+  function findLabelControl(word, root) {
     const w = word.toLowerCase();
     const label = (el) => ((el.getAttribute("aria-label") || el.getAttribute("title") || "") + " " + (el.className && el.className.baseVal === undefined ? el.className : "")).toLowerCase();
-    const hits = deepAll(document, (el) => BTN.test(el.tagName) && label(el).includes(w) && !el.closest("ytmusic-player-queue-item, ytmusic-menu-renderer"));
+    const hits = deepAll(root, (el) => BTN.test(el.tagName) && label(el).includes(w) && !el.closest("ytmusic-player-queue-item, ytmusic-menu-renderer"));
     return hits.find((el) => el.tagName === "BUTTON") || hits[0] || null;
   }
   const pressed = (el) => el && (el.getAttribute("aria-pressed") === "true" || el.getAttribute("aria-checked") === "true" ||
@@ -196,6 +198,7 @@
     return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
   }
   function nowPlaying() {
+    const t0 = performance.now();
     const p = mp();
     if (!p || !p.getVideoData) return { playing: false, paused: false, videoId: null };
     const vd = p.getVideoData() || {};
@@ -218,15 +221,28 @@
       autoplay: autoplayOn(),                       // true | false | null (unknown)
       playlistId: (p.getPlaylistId && p.getPlaylistId()) || null,
       ext: EXT_VERSION,                             // which version of this script the page is running
+      tickMs: Math.round(performance.now() - t0),   // how long reading this state took
     };
   }
   // When the page has no player-bar like button, fall back to YouTube Music's own like endpoints (the same calls its
   // page makes, with your login), and read the state back from the song's `next` data.
   // Newer builds of YouTube Music build the player controls as <ytmusic-wiz-player-controls> (no <ytmusic-player-bar>),
   // so the like control is looked up there, or anywhere on the page that isn't part of a list row or menu.
+  let vmCache = { v: null, at: 0 };
+  const vmButton = (vm) => vm && (vm.querySelector("button") || deepAll(vm, (e) => e.tagName === "BUTTON")[0] || null);
+  // The newest builds draw like / dislike as <like-button-view-model> and <dislike-button-view-model>.
+  function likeVm() {
+    const c = vmCache;
+    if (c.v ? c.v.like.isConnected && Date.now() - c.at < 4000 : Date.now() - c.at < 15000) return c.v;
+    const find = (tag) => document.querySelector(tag.toLowerCase()) || deepAll(document, (e) => e.tagName === tag)[0] || null;
+    const like = find("LIKE-BUTTON-VIEW-MODEL");
+    vmCache = { v: like ? { like, dislike: find("DISLIKE-BUTTON-VIEW-MODEL") } : null, at: Date.now() };
+    return vmCache.v;
+  }
+  const isPressed = (b) => !!b && (b.getAttribute("aria-pressed") === "true" || b.getAttribute("aria-checked") === "true");
   let lrCache = { el: null, at: 0 };
   function likeRenderer() {
-    if (Date.now() - lrCache.at < 4000 && (lrCache.el === null || lrCache.el.isConnected)) return lrCache.el;
+    if (lrCache.el ? lrCache.el.isConnected && Date.now() - lrCache.at < 4000 : Date.now() - lrCache.at < 15000) return lrCache.el;
     const host = document.querySelector("ytmusic-wiz-player-controls, ytmusic-player-bar");
     let el = host && (host.querySelector("ytmusic-like-button-renderer") || deepAll(host, (e) => e.tagName === "YTMUSIC-LIKE-BUTTON-RENDERER")[0]);
     if (!el) {
@@ -249,6 +265,11 @@
   }
   // Read the current song's like state from the player-bar like button.
   function likeStatus() {
+    const vm = likeVm();
+    if (vm) {
+      const lbtn = vmButton(vm.like), dbtn = vmButton(vm.dislike);
+      if (lbtn) return isPressed(lbtn) ? "LIKE" : isPressed(dbtn) ? "DISLIKE" : "INDIFFERENT";
+    }
     const lb = likeRenderer();
     if (!lb) {
       const vid = mp() && mp().getVideoData && mp().getVideoData().video_id;
@@ -357,6 +378,41 @@
     return cards
       .map(extractItem)
       .filter((it) => it && (it.playlistId || it.browseId));
+  }
+  /* --- artists: the artist's page (about, top songs, albums, singles...) --- */
+  async function artistFor(videoId) {
+    const nx = await innertube("next", { videoId, isAudioOnly: true }, true);
+    const rows = deepFind(nx, "playlistPanelVideoRenderer", []);
+    const row = rows.find((r) => r.selected) || rows[0];
+    const run = ((row && row.longBylineText && row.longBylineText.runs) || []).find((r) => /^(UC|MPLA)/.test((r.navigationEndpoint && r.navigationEndpoint.browseEndpoint && r.navigationEndpoint.browseEndpoint.browseId) || ""));
+    return run ? { id: run.navigationEndpoint.browseEndpoint.browseId, name: run.text } : null;
+  }
+  async function artistPage(browseId) {
+    const j = await innertube("browse", { browseId }, true);
+    const h = deepFind(j, "musicImmersiveHeaderRenderer", [])[0] || deepFind(j, "musicVisualHeaderRenderer", [])[0] || {};
+    const shelves = [];
+    for (const sh of deepFind(j, "musicShelfRenderer", [])) {
+      const items = (sh.contents || []).map((c) => extractItem(c.musicResponsiveListItemRenderer)).filter(Boolean);
+      if (items.length) shelves.push({ title: runText(sh.title) || "Songs", items });
+    }
+    for (const sh of deepFind(j, "musicCarouselShelfRenderer", [])) {
+      const items = (sh.contents || []).map((c) => extractItem(c.musicTwoRowItemRenderer || c.musicResponsiveListItemRenderer)).filter(Boolean);
+      const title = runText(sh.header && sh.header.musicCarouselShelfBasicHeaderRenderer && sh.header.musicCarouselShelfBasicHeaderRenderer.title) || "More";
+      if (items.length) shelves.push({ title, items });
+    }
+    const we = h.playButton && h.playButton.buttonRenderer && h.playButton.buttonRenderer.command && h.playButton.buttonRenderer.command.watchEndpoint;
+    const re = h.startRadioButton && h.startRadioButton.buttonRenderer && h.startRadioButton.buttonRenderer.command && h.startRadioButton.buttonRenderer.command.watchPlaylistEndpoint;
+    return {
+      browseId,
+      name: runText(h.title) || null,
+      description: runText(h.description) || null,
+      thumb: pickThumb((h.thumbnail && h.thumbnail.musicThumbnailRenderer && h.thumbnail.musicThumbnailRenderer.thumbnail) ||
+        (h.foregroundThumbnail && h.foregroundThumbnail.musicThumbnailRenderer && h.foregroundThumbnail.musicThumbnailRenderer.thumbnail), 300),
+      subscribers: runText(h.subscriptionButton && h.subscriptionButton.subscribeButtonRenderer && h.subscriptionButton.subscribeButtonRenderer.subscriberCountText) || null,
+      play: we ? { videoId: we.videoId || null, playlistId: we.playlistId || null } : null,
+      radio: re ? { playlistId: re.playlistId || null } : null,
+      shelves,
+    };
   }
   async function playlistItems(browseIdOrPl) {
     let browseId = browseIdOrPl;
@@ -885,9 +941,15 @@
     const at = autoplayToggle();
     out.autoplayToggle = at ? { attrs: attrs(at), checked: at.checked, disabled: at.disabled, visible: !!at.offsetParent, in: chain(at).slice(0, 4).join(" < ") } : null;
     out.state = { repeat: repeatMode(), shuffle: shuffleOn(), autoplay: autoplayOn(), liked: likeStatus() };
-    out.docked = deepAll(document, (el) => { try { const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
-      return el.tagName.includes("-") && cs.position === "fixed" && r.bottom >= innerHeight - 4 && r.height > 20 && r.height < 200; } catch (e) { return false; } })
+    // only the few elements that could be a player bar are measured (measuring every custom element is slow on a big page)
+    out.docked = deepAll(document, (el) => { try {
+      if (!/player|bar|mini|control/i.test(el.tagName)) return false;
+      const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+      return cs.position === "fixed" && r.bottom >= innerHeight - 4 && r.height > 20 && r.height < 200; } catch (e) { return false; } })
       .map((el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")).slice(0, 12);
+    const vmx = likeVm();
+    out.likeVm = vmx ? { like: vmButton(vmx.like) ? describe(vmButton(vmx.like)) : null, dislike: vmButton(vmx.dislike) ? describe(vmButton(vmx.dislike)) : null,
+      chain: chain(vmx.like).slice(0, 6).join(" < ") } : null;
     return out;
   }
 
@@ -929,11 +991,32 @@
         case "playlistDelete": return await playlistDelete(cmd);
         case "queueClear": return { ok: await dismissQueue() };
         case "search": return { items: await search(cmd.query) };
+        case "artist": {
+          let id = cmd.browseId;
+          if (!id && cmd.videoId) { const a = await artistFor(cmd.videoId).catch(() => null); id = a && a.id; }
+          if (!id && cmd.name) { const r = await search(cmd.name).catch(() => []); const hit = r.find((x) => x.kind === "artist"); id = hit && hit.browseId; }
+          if (!id) return { error: "artist_not_found" };
+          return await artistPage(id);
+        }
         case "suggest": return { suggestions: await searchSuggestions(cmd.query) };
         case "like": {
           // The InnerTube like endpoint returns 200 but doesn't actually register, so for the
           // currently-playing song we click the real player-bar like/dislike button (proven to work).
           const cur = mp() && mp().getVideoData && mp().getVideoData().video_id;
+          const vm = likeVm();
+          if (vm && vmButton(vm.like) && (!cmd.videoId || cmd.videoId === cur)) {
+            const lbtn = vmButton(vm.like), dbtn = vmButton(vm.dislike);
+            const want = cmd.action === "dislike" ? "DISLIKE" : cmd.action === "remove" ? "INDIFFERENT" : "LIKE";
+            const cur2 = () => isPressed(lbtn) ? "LIKE" : isPressed(dbtn) ? "DISLIKE" : "INDIFFERENT";
+            if (cur2() !== want) {
+              if (want === "LIKE") lbtn.click();
+              else if (want === "DISLIKE") (dbtn || lbtn).click();
+              else if (cur2() === "LIKE") lbtn.click();
+              else if (dbtn) dbtn.click();
+              await waitFor(() => cur2() === want, 1500);
+            }
+            return { ok: cur2() === want, liked: cur2(), via: "view-model" };
+          }
           const lb = likeRenderer();
           if (!lb) {
             const vid = cmd.videoId || cur;
@@ -1014,7 +1097,7 @@
 
   // A snapshot of how this page is laid out, sent once after load, so controls that can't be found can be diagnosed
   // without asking anyone to open developer tools.
-  setTimeout(() => {
+  const sendLayout = () => {
     (async () => {
       try {
         const d = probe();
@@ -1030,7 +1113,10 @@
         window.postMessage({ __vmr: "state", state: { diag: d, ts: Date.now(), partial: true, now: nowPlaying() } }, "*");
       } catch (e) {}
     })();
-  }, 12000);
+  };
+  // once, a few seconds after load, and only while the tab is actually in front (a hidden tab shouldn't do page-wide work)
+  const layoutSoon = () => setTimeout(() => { if (document.hidden) document.addEventListener("visibilitychange", layoutSoon, { once: true }); else sendLayout(); }, 12000);
+  layoutSoon();
 
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");

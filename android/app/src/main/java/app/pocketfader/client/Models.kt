@@ -1,6 +1,12 @@
 package app.pocketfader.client
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -358,4 +364,81 @@ fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
         } ?: BeaconInstall(),
         receivedAt = receivedAt,
     )
+}
+
+// ---- artists
+
+@Immutable
+data class ArtistPage(
+    val browseId: String,
+    val name: String,
+    val description: String?,
+    val thumb: String?,
+    val subscribers: String?,
+    val playVideoId: String?,
+    val playPlaylistId: String?,
+    val radioPlaylistId: String?,
+    val shelves: List<Shelf>,
+)
+
+fun parseArtist(o: JSONObject): ArtistPage {
+    val play = o.optJSONObject("play")
+    val radio = o.optJSONObject("radio")
+    return ArtistPage(
+        browseId = o.optString("browseId"),
+        name = o.str("name").orEmpty(),
+        description = o.str("description"),
+        thumb = o.str("thumb"),
+        subscribers = o.str("subscribers"),
+        playVideoId = play?.str("videoId"),
+        playPlaylistId = play?.str("playlistId"),
+        radioPlaylistId = radio?.str("playlistId"),
+        shelves = parseShelves(JSONObject().put("sections", o.optJSONArray("shelves") ?: org.json.JSONArray())),
+    )
+}
+
+// ---- release notes ("What's new")
+
+/** The "What's new" part of a release's notes as a heading and bullet points (the rest of the page is download help). */
+@Immutable
+data class ReleaseNotes(val heading: String, val items: List<String>)
+
+fun parseReleaseNotes(md: String): ReleaseNotes? {
+    val lines = md.lines()
+    val start = lines.indexOfFirst { Regex("""^#{1,4}\s*What'?s new""", RegexOption.IGNORE_CASE).containsMatchIn(it.trim()) }
+    if (start < 0) return null
+    val heading = lines[start].trim().trimStart('#').trim()
+    val items = ArrayList<String>()
+    var cur: StringBuilder? = null
+    for (i in start + 1 until lines.size) {
+        val ln = lines[i]
+        if (Regex("""^#{1,4}\s""").containsMatchIn(ln.trim())) break
+        if (ln.trimStart().startsWith("- ") || ln.trimStart().startsWith("* ")) {
+            cur?.let { items.add(it.toString()) }
+            cur = StringBuilder(ln.trimStart().drop(2).trim())
+        } else if (ln.isBlank()) {
+            cur?.let { items.add(it.toString()) }
+            cur = null
+        } else if (cur != null) {
+            cur.append(' ').append(ln.trim())
+        }
+    }
+    cur?.let { items.add(it.toString()) }
+    return if (items.isEmpty()) null else ReleaseNotes(heading, items)
+}
+
+/** **bold**, `code` and [links](url) from a line of Markdown, as styled text (links keep only their words). */
+fun inlineMarkdown(text: String): AnnotatedString = buildAnnotatedString {
+    val re = Regex("""\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\([^)]*\)""")
+    var at = 0
+    for (m in re.findAll(text)) {
+        append(text.substring(at, m.range.first))
+        when {
+            m.groups[1] != null -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[1]) }
+            m.groups[2] != null -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(m.groupValues[2]) }
+            else -> append(m.groupValues[3])
+        }
+        at = m.range.last + 1
+    }
+    append(text.substring(at))
 }

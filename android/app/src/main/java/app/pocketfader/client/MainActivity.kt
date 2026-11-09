@@ -224,6 +224,8 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     val snackbar = remember { SnackbarHostState() }
 
     BackHandler(enabled = showSettings) { showSettings = false }
+    // leaving for another tab closes an artist / album page that was open on top
+    LaunchedEffect(dest) { Detail.close() }
     LaunchedEffect(Unit) { Remote.messages.collect { snackbar.showSnackbar(it) } }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val updateScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -239,10 +241,11 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     val art by rememberArt(s.now?.art)
     val tint = art.tint
     val showArt = !showSettings && (wide || dest == Dest.Playing)
-    val washBrush = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
+    val wash = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
+    val washBrush = wash.brush
     val pageBg = MaterialTheme.colorScheme.background
     val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
-    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null)) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null), LocalEdgeFade provides EdgeFade(wash.colorAt(0.11f), wash.colorAt(0.93f))) {
     Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -303,6 +306,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                 }
             }
             when {
+                Detail.active -> DetailHost(Modifier.fillMaxSize())
                 showSettings -> SettingsScreen(cfg, s, onEditConnection = { showConnect = true }, modifier = Modifier.fillMaxSize())
                 wide -> Row(Modifier.fillMaxSize()) {
                     PlayerPane(s, Modifier.weight(0.85f).fillMaxSize())

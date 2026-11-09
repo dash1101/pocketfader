@@ -51,6 +51,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     var searched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    val resultsState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     fun doSearch() {
         val q = query.trim()
@@ -92,9 +93,14 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
         when {
             busy -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             error != null -> Note(error!!)
-            !s.bridge -> Note("Search uses the YouTube Music extension on the computer. It isn't connected right now.")
+            !s.bridge -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Note("Search uses the YouTube Music extension on the computer. It isn't connected right now.")
+                if (s.online) OpenYtmButton()
+            }
             searched && results.isEmpty() -> Note("No results.")
-            else -> LazyColumn(Modifier.fillMaxSize()) {
+            // nothing typed yet: what YouTube Music recommends (the same picks as your home page)
+            !searched && query.isBlank() -> HomeTab(onOpen = { Detail.open(it) })
+            else -> LazyColumn(Modifier.fillMaxSize().edgeFade(resultsState), state = resultsState) {
                 items(results, key = { (it.videoId ?: it.playlistId ?: it.title) + it.kind }) { item -> ResultRow(item) }
             }
         }
@@ -118,8 +124,9 @@ private fun ResultRow(item: SearchItem) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = playable) {
-                if (item.videoId != null) Remote.play(item.videoId, item.playlistId.takeIf { item.kind != "song" })
+            .clickable(enabled = playable || item.kind == "artist") {
+                if (item.kind == "artist") Detail.open(item)
+                else if (item.videoId != null) Remote.play(item.videoId, item.playlistId.takeIf { item.kind != "song" })
                 else if (item.playlistId != null) Remote.startPlaylist(item.playlistId, false)
             }
             .padding(horizontal = 16.dp, vertical = 6.dp),

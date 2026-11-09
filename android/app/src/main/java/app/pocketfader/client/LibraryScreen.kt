@@ -111,9 +111,10 @@ object LibraryStore {
     }
 }
 
-private fun activate(item: SearchItem, onOpen: (SearchItem) -> Unit) {
+internal fun activate(item: SearchItem, onOpen: (SearchItem) -> Unit) {
     val vid = item.videoId
     when {
+        item.kind == "artist" -> Detail.open(item)
         item.kind == "song" && vid != null -> Remote.play(vid)
         item.playlistId != null || item.browseId != null -> onOpen(item)
         vid != null -> Remote.play(vid)
@@ -143,7 +144,10 @@ fun LibraryScreen(s: RemoteState, modifier: Modifier = Modifier) {
             }) { Icon(Icons.Filled.Refresh, "Refresh") }
         }
         if (!s.bridge && (if (tab == 0) LibraryStore.home else LibraryStore.playlists) == null) {
-            Message("Your library comes from YouTube Music, so it needs the Pocketfader extension connected on the computer.")
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Message("Your library comes from YouTube Music, so it needs the Pocketfader extension connected on the computer.")
+                if (s.online) OpenYtmButton()
+            }
         } else if (tab == 0) {
             HomeTab(onOpen = { opened = it })
         } else {
@@ -169,15 +173,16 @@ private fun Loading() {
 }
 
 @Composable
-private fun HomeTab(onOpen: (SearchItem) -> Unit) {
+internal fun HomeTab(onOpen: (SearchItem) -> Unit) {
     LaunchedEffect(Unit) { LibraryStore.ensureHome() }
+    val homeState = androidx.compose.foundation.lazy.rememberLazyListState()
     val shelves = LibraryStore.home
     val err = LibraryStore.homeError
     when {
         shelves == null && err != null -> Message(err)
         shelves == null -> Loading()
         shelves.isEmpty() -> Message("Nothing on your home page yet.")
-        else -> LazyColumn(Modifier.fillMaxSize()) {
+        else -> LazyColumn(Modifier.fillMaxSize().edgeFade(homeState), state = homeState) {
             items(shelves, key = { it.title }) { shelf ->
                 Text(
                     shelf.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
@@ -250,7 +255,7 @@ private fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
 }
 
 @Composable
-private fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var tracks by remember(item) { mutableStateOf<List<SearchItem>?>(null) }
     var error by remember(item) { mutableStateOf<String?>(null) }

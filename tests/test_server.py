@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer
 import threading
 
 from pocketfader.beacon import Beacon
+from pocketfader.opener import Opener
 from pocketfader.config import JsonFile
 from pocketfader.server import App, Handler
 
@@ -25,7 +26,7 @@ class Base(unittest.TestCase):
         self.audio, self.media, self.engine = FakeAudio(), FakeMedia(self.media_avail), self.engine_cls()
         self.app = App(self.audio, self.engine, self.media,
                        prefs=JsonFile(Path(self.tmp.name) / "prefs.json"), token=self.token,
-                       beacon=Beacon(ports=(), dry_run=True))
+                       beacon=Beacon(ports=(), dry_run=True), opener=Opener(dry_run=True))
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.app = self.app
         threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.02), daemon=True).start()
@@ -325,3 +326,32 @@ class SleepTimerTests(Base):
         import time
         time.sleep(0.5)
         self.assertEqual(self.media.calls, [])
+
+
+class OpenAndPauseTests(Base):
+    def test_play_without_a_tab_opens_the_song(self):
+        code, r, _ = self.req("POST", "/api/ytm", {"type": "play", "videoId": "dQw4w9WgXcQ", "playlistId": "PLabc12345"})
+        self.assertEqual((code, r), (200, {"ok": True, "opened": True}))
+        self.assertEqual(self.app.opener.opened, ["https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc12345"])
+
+    def test_open_home_and_playlist(self):
+        self.req("POST", "/api/ytm", {"type": "open"})
+        self.req("POST", "/api/ytm", {"type": "startPlaylist", "playlistId": "PLabc12345"})
+        self.assertEqual(self.app.opener.opened, ["https://music.youtube.com/", "https://music.youtube.com/playlist?list=PLabc12345"])
+
+    def test_bad_ids_open_nothing(self):
+        for body in ({"type": "play", "videoId": "x; rm -rf /"}, {"type": "play", "videoId": "https://evil.example/"},
+                     {"type": "startPlaylist", "playlistId": "../../x"}, {"type": "play", "videoId": 5}):
+            code, r, _ = self.req("POST", "/api/ytm", body)
+            self.assertEqual(r.get("error"), "extension_offline", body)
+        self.assertEqual(self.app.opener.opened, [])
+
+    def test_opener_only_opens_music_youtube(self):
+        o = Opener(dry_run=True)
+        self.assertFalse(o.open("https://evil.example/"))
+        self.assertTrue(o.open("https://music.youtube.com/watch?v=abcde"))
+
+    def test_pause_others_asks_the_player_backend(self):
+        code, r, _ = self.req("POST", "/api/media/pause-others", {})
+        self.assertEqual((code, r), (200, {"paused": ["Other"], "supported": True}))
+        self.assertEqual(self.media.calls, [("pause_others", "", "")])
