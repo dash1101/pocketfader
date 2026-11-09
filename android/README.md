@@ -43,6 +43,17 @@ The YouTube Music features (queue, search, library, lyrics from YouTube Music, l
 Pocketfader browser extension on the computer. Without it the app still shows and controls whatever the
 computer's media player is doing, plus volume, outputs, the equalizer and lyrics from LRCLIB and NetEase.
 
+## Home-screen widgets
+
+Long-press the home screen → Widgets → Pocketfader:
+- **Now playing** (4×2): cover, title, progress and where it's playing, with like, previous / play-pause / next and volume.
+- **Now playing (slim)** (4×1): cover, title and controls in one row.
+- **Cover** (2×2): the album art with play / pause.
+- **Volume** (3×1): the volume of wherever music is playing (computer or phone), with mute.
+- **Quick actions** (2×2): I'm feeling lucky, a 30-minute sleep timer, pause other players, and switch between phone and computer.
+
+They use the cover's colours and follow the app (the computer's state comes in while the app or its notification is running).
+
 ## Playing on the phone
 
 The button at the top switches between playing on the computer and on this phone. On the phone, YouTube Music songs stream

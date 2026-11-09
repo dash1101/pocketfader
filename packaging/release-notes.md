@@ -16,32 +16,19 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.10
+### What's new in alpha.11
 
-- **Play on the phone itself (Android).** The button at the top of the app switches between playing on the computer and on
-  this phone. On the phone:
-  - YouTube Music songs stream straight to the phone: search, play, queue, shuffle, loop and autoplay (which continues with
-    related songs) work with no computer at all.
-  - The **music files already on the phone** play too (Search → On this phone; Android asks for permission once).
-  - **Continue this song on the phone** (and back on the computer) moves what's playing, from where it is.
-  - Lock-screen and notification controls, and headphone buttons, work as in any music app.
-  - With no computer at all, choose **Use Pocketfader on this phone only** on the first screen.
-- **Downloads.** Save songs, whole playlists or the song that's playing (⋮ → Download, the download button in a playlist or
-  the player). Each download keeps the song, its cover and its lyrics, and plays with no connection. Manage them in
-  Search → On this phone and Settings → Downloads.
-- **Search is now your library.** The Library tab is gone; Search has **For you**, **Playlists** and **On this phone** tabs.
-  Without a computer, search uses YouTube Music directly.
-- **Lyrics without a computer** come from LRCLIB; downloaded songs use the lyrics saved with them.
-- **The computer as a backup.** When the phone can't get a song, a connected computer fetches it (with yt-dlp, which
-  `install.sh` now installs and keeps current) and passes it on.
-- **Likes (extension 1.11)**: the like state is now read on every page of YouTube Music, not only the player page.
-  **Reload the extension and refresh the YouTube Music tab.**
-- The in-tab "Refine" panel from alpha.9 has been removed; those ideas will come back built into YouTube Music's own menus.
-- **License:** the Android app now includes NewPipe Extractor to play YouTube Music on the phone, so the Android app is
-  GPL-3.0-or-later. The rest of Pocketfader stays MIT.
+- **Home-screen widgets (Android)**: long-press the home screen → Widgets → Pocketfader.
+  - **Now playing** (wide): the cover over a soft blur of its own colours, the title, a progress bar, where it's playing, and
+    like, previous / play-pause / next and volume buttons.
+  - **Now playing (slim)**, **Cover** (album art with play/pause), **Volume** (computer or phone, with mute) and
+    **Quick actions** (I'm feeling lucky, sleep 30 minutes, pause other players, switch between phone and computer).
+- **A new icon** for the app, the browser extension (now 1.12, which finally has an icon) and the web app: equalizer faders on
+  a dark tile over a soft mint background.
 
 ### Earlier
 
+- alpha.10: play on the phone itself (YouTube Music and local files), downloads with lyrics, Search with Playlists and On this phone tabs.
 - alpha.9: smoother cover glow, artist pages, search recommendations, soft edges, web app restyle.
 - alpha.8: ambient cover glow, Settings in pages, Settings in the navigation, floating pill navigation, scrolling fixes.
 - alpha.7: install/start/update YTM Beacon from the app, effects (cover glow, wavy seek bar, cover shapes, transitions), a sleep timer, sturdier queue reordering.
