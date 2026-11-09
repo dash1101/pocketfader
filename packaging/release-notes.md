@@ -16,32 +16,33 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.9
+### What's new in alpha.10
 
-- **Cover glow, fixed (Android)**: the glow no longer ends in hard lines. It's now a smooth, blurred copy of the cover that fades
-  out evenly on all four sides (not a circle), it fades away as you scroll instead of switching off, and it's much less pixelated.
-- **Artist pages**: tap an artist's name under the song title (or an artist in search or your library) to see who they are, play
-  or shuffle them, start their radio, and browse their top songs, albums, singles and similar artists.
-- **Search shows recommendations** when it's empty (your YouTube Music picks), with an **I'm feeling lucky** button.
-- **Soft fades** where lists scroll off the top and bottom, and the slim now-playing bar now **glides** in and out when the full
-  controls leave or return to the screen.
-- **What's new on the Updates page** is now a short list of the changes, not the whole release page.
-- **Start music with no browser open**: if no YouTube Music tab is connected, a button (Now playing, Search, Library) asks the computer
-  to open YouTube Music in its browser, and tapping a song opens it there. Settings → Controls also has **Pause other players now**
-  and **Pause other players when YouTube Music starts** (Spotify, a video in another tab, and so on).
-- **The web app** has been restyled to match the Android app (rounder shapes, a wavy seek bar, a play button that changes shape,
-  an optional floating pill navigation bar, cover glow and shape options) and caught up on features: artist pages, the sleep timer,
-  I'm feeling lucky, opening YouTube Music on the computer, and pausing other players.
-- **Extension 1.10**:
-  - **Like and autoplay** now work with the newest YouTube Music controls (the like button is read from its new buttons).
-  - **Lighter**: the extension no longer scans the whole page every few seconds. If YouTube Music still freezes or goes grey,
-    tell us: the extension now records how long each of its reads takes.
-  - **Refine panel**: a ✦ button inside music.youtube.com with playback speed, I'm feeling lucky, an experimental colour theme, a
-    **Gemini playlist maker** (bring your own API key), Discord presence controls and a few Pocketfader options. See docs/REFINE.md.
-    **Reload the extension (it asks for two new permissions) and refresh the YouTube Music tab.**
+- **Play on the phone itself (Android).** The button at the top of the app switches between playing on the computer and on
+  this phone. On the phone:
+  - YouTube Music songs stream straight to the phone: search, play, queue, shuffle, loop and autoplay (which continues with
+    related songs) work with no computer at all.
+  - The **music files already on the phone** play too (Search → On this phone; Android asks for permission once).
+  - **Continue this song on the phone** (and back on the computer) moves what's playing, from where it is.
+  - Lock-screen and notification controls, and headphone buttons, work as in any music app.
+  - With no computer at all, choose **Use Pocketfader on this phone only** on the first screen.
+- **Downloads.** Save songs, whole playlists or the song that's playing (⋮ → Download, the download button in a playlist or
+  the player). Each download keeps the song, its cover and its lyrics, and plays with no connection. Manage them in
+  Search → On this phone and Settings → Downloads.
+- **Search is now your library.** The Library tab is gone; Search has **For you**, **Playlists** and **On this phone** tabs.
+  Without a computer, search uses YouTube Music directly.
+- **Lyrics without a computer** come from LRCLIB; downloaded songs use the lyrics saved with them.
+- **The computer as a backup.** When the phone can't get a song, a connected computer fetches it (with yt-dlp, which
+  `install.sh` now installs and keeps current) and passes it on.
+- **Likes (extension 1.11)**: the like state is now read on every page of YouTube Music, not only the player page.
+  **Reload the extension and refresh the YouTube Music tab.**
+- The in-tab "Refine" panel from alpha.9 has been removed; those ideas will come back built into YouTube Music's own menus.
+- **License:** the Android app now includes NewPipe Extractor to play YouTube Music on the phone, so the Android app is
+  GPL-3.0-or-later. The rest of Pocketfader stays MIT.
 
 ### Earlier
 
+- alpha.9: smoother cover glow, artist pages, search recommendations, soft edges, web app restyle.
 - alpha.8: ambient cover glow, Settings in pages, Settings in the navigation, floating pill navigation, scrolling fixes.
 - alpha.7: install/start/update YTM Beacon from the app, effects (cover glow, wavy seek bar, cover shapes, transitions), a sleep timer, sturdier queue reordering.
 - alpha.6: readable colours on every theme, accent colour picker, Discord presence card, safer app updates.
