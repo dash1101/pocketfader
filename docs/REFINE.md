@@ -4,17 +4,11 @@ Pocketfader started as a remote for the music playing on your computer. The exte
 runs inside music.youtube.com, which makes it the natural place for improvements to YouTube Music itself. This is the plan.
 Everything here is built to run on **your** computer and your own account; nothing goes through a Pocketfader server of ours.
 
-## What works today (extension 1.10, the ✦ panel in the tab)
+## Status
 
-| | |
-|---|---|
-| Playback speed | 0.75× to 2×, set on the page's real player. |
-| I'm feeling lucky | A random pick from your home page, or a random mix if there's no song to pick. |
-| Theme (experimental) | One accent colour becomes a tonal dark theme, or AMOLED black. It overrides YouTube Music's colour variables, so it may need small fixes when YouTube changes them. |
-| Playlist from a description | Bring a Gemini API key (kept in the browser). Describe a mood; Gemini suggests songs; each is looked up on YouTube Music; the result is saved as a playlist, and can be played right away. |
-| Discord presence | YTM Beacon's status and switch, inside the tab. |
-| Pocketfader options | Sleep timer, pause other players, from the tab. |
-| Live lyrics | Already in the Pocketfader apps (word-by-word, several sources). Not yet shown inside the tab. |
+Parked for now. A first experiment (a floating panel inside the tab) was removed: the goal is for these features to feel like
+part of YouTube Music itself (its own menus, settings and player controls), not a separate panel. What remains in the extension
+are the building blocks the apps already use: playback speed, "I'm feeling lucky", and artist pages.
 
 ## Next, in this order
 

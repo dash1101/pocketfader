@@ -15,15 +15,6 @@ public-IP posture.
   talk over `window.postMessage`.
 - No background service worker — the always-open YT Music tab is the anchor.
 
-## Refine panel (in the tab)
-`refine.js` adds a small ✦ button on music.youtube.com that opens a panel with things YouTube Music doesn't have:
-- **Playback speed** (0.75× to 2×) and **I'm feeling lucky** (a random pick from your home page).
-- **Theme** (experimental): a Material You-style colour theme built from one accent colour, or AMOLED black.
-- **Playlist from a description (Gemini)**: describe the mood, Gemini suggests the songs, the extension finds them on
-  YouTube Music and saves them as a playlist in your library. You bring your own Gemini API key; it stays in this browser
-  (`chrome.storage`) and is sent only to Google. The panel needs the host permission for `generativelanguage.googleapis.com`.
-- **Discord presence** (YTM Beacon) and a few **Pocketfader** options (sleep timer, pause other players), through the local server.
-
 ## Load it (one time)
 1. In Brave, open **`brave://extensions`** (or `chrome://extensions`).
 2. Turn on **Developer mode** (top-right toggle).

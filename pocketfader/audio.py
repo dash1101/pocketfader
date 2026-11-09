@@ -26,15 +26,22 @@ def _find_ytdlp():
     return str(local) if local.is_file() else shutil.which("yt-dlp")
 
 
+def _is_venv_copy(path):
+    import sys
+    return Path(path).parent == Path(sys.executable).parent
+
+
 def cache_dir():
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
     return Path(base) / "pocketfader" / "audio"
 
 
 class AudioFetcher:
-    def __init__(self, folder=None, ytdlp=None, runner=None, limit_bytes=1 << 30, dry_run=False):
+    def __init__(self, folder=None, ytdlp=None, runner=None, limit_bytes=1 << 30, dry_run=False, js=None):
         self.dir = Path(folder) if folder else cache_dir()
         self.ytdlp = ytdlp if ytdlp is not None else _find_ytdlp()
+        # current yt-dlp needs a JavaScript runtime for YouTube; it only looks for deno unless told about node
+        self.js = js if js is not None else (shutil.which("node") if self.ytdlp and _is_venv_copy(self.ytdlp) else None)
         self._run = runner or self._default_run
         self.limit = limit_bytes
         self.dry_run = dry_run
@@ -71,7 +78,10 @@ class AudioFetcher:
             self.dir.mkdir(parents=True, exist_ok=True)
             out = str(self.dir / (vid + ".%(ext)s"))
             cmd = [self.ytdlp, "--no-playlist", "--no-progress", "--quiet", "--no-warnings",
-                   "-f", "bestaudio[ext=m4a]/bestaudio", "-o", out, "--", f"https://music.youtube.com/watch?v={vid}"]
+                   "-f", "bestaudio[ext=m4a]/bestaudio", "-o", out]
+            if self.js:
+                cmd += ["--js-runtimes", "node:" + self.js]
+            cmd += ["--", f"https://music.youtube.com/watch?v={vid}"]
             code, err = self._run(cmd, 180)
             hit = self._cached(vid)
             if code != 0 or not hit:

@@ -61,6 +61,8 @@ mkdir -p "$APP_DIR" "$BIN_DIR"
 python3 -m venv --system-site-packages "$APP_DIR/venv"   # lets the window use the system GTK
 "$APP_DIR/venv/bin/pip" install --quiet --upgrade pip
 "$APP_DIR/venv/bin/pip" install --quiet "$SRC"
+# a current yt-dlp lets the computer fetch songs for the phone when the phone can't (the distro's copy is often too old)
+"$APP_DIR/venv/bin/pip" install --quiet --upgrade yt-dlp || echo "Note: couldn't install yt-dlp; the phone will get songs on its own only."
 ln -sf "$APP_DIR/venv/bin/pocketfader" "$BIN_DIR/pocketfader"
 [ -e "$APP_DIR/venv/bin/pocketfader-gui" ] && ln -sf "$APP_DIR/venv/bin/pocketfader-gui" "$BIN_DIR/pocketfader-gui"
 

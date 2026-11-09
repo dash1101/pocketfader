@@ -11,8 +11,7 @@ Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows y
 | Tab | What it does |
 |---|---|
 | **Playing** | The player (cover, seek bar, shuffle / previous / play-pause / next / loop, like, volume) with **Up next** and **Lyrics** underneath. |
-| **Search** | Search YouTube Music. The ⋮ menu on any song can play it, put it next, add it to your queue, add it to a playlist or start a radio. |
-| **Library** | Your YouTube Music **Home** shelves and **Playlists**. Open a playlist to play or shuffle it, and edit your own (reorder, remove, rename, delete), or create new ones. |
+| **Search** | Search YouTube Music, and your library in tabs: **For you** (your home shelves), **Playlists** (play, shuffle, download, and edit your own) and **On this phone** (downloads and the phone's music files). The ⋮ menu on any song can play it, put it next, add it to your queue or a playlist, start a radio, or download it. |
 | **Settings** | Split into pages: **Sound & outputs** (master volume, every output device with its **own level**, the built-in equalizer), Lyrics, Controls, Appearance (theme, accent colour, navigation style), Effects, Screen & always-on, Connection, **Discord presence**, Updates, Performance and About. |
 
 **Up next** shows what's already played (collapsed), the current track, what's coming, and YouTube Music's
@@ -43,6 +42,15 @@ change the computer's volume**, even with the screen off.
 The YouTube Music features (queue, search, library, lyrics from YouTube Music, like, shuffle, loop, autoplay) need the
 Pocketfader browser extension on the computer. Without it the app still shows and controls whatever the
 computer's media player is doing, plus volume, outputs, the equalizer and lyrics from LRCLIB and NetEase.
+
+## Playing on the phone
+
+The button at the top switches between playing on the computer and on this phone. On the phone, YouTube Music songs stream
+directly (through [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor)); if that fails, a connected computer
+fetches the song instead. Downloads keep the audio, cover and lyrics in the app's own folder and play offline. Lyrics on the
+phone come from the computer when it's there, else from LRCLIB.
+
+**License:** because it includes NewPipe Extractor, the Android app is GPL-3.0-or-later (see `android/LICENSE`).
 
 ## Install
 

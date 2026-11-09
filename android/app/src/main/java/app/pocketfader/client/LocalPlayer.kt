@@ -55,7 +55,15 @@ object LocalPlayer {
         val resolving = ResolvingDataSource.Factory(DefaultDataSource.Factory(context, http)) { spec ->
             val u = spec.uri
             if (u.scheme == "ytm") {
-                val r = Streams.resolve(u.schemeSpecificPart)          // blocking: we're on the loading thread
+                // blocking is fine: this runs on ExoPlayer's loading thread. Errors become IOExceptions so the player
+                // reports them normally (and skips to the next song).
+                val r = try {
+                    Streams.resolve(u.schemeSpecificPart)
+                } catch (e: java.io.IOException) {
+                    throw e
+                } catch (e: Exception) {
+                    throw java.io.IOException(e.message ?: "Couldn't get this song", e)
+                }
                 var s = spec.withUri(Uri.parse(r.url))
                 if (r.headers.isNotEmpty()) s = s.withAdditionalHeaders(r.headers)
                 s

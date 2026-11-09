@@ -72,6 +72,15 @@ iPhone Safari: Share → *Add to Home Screen*).
 > Tip: with Tailscale you can get real HTTPS (and the full "installed app" experience) via
 > `tailscale serve --bg 8777`; then open the `https://….ts.net` address instead.
 
+## Use it on the phone itself
+
+The Android app isn't only a remote. Tap the speaker/phone button at the top to **play on this phone**: search YouTube Music
+and play songs directly (no computer needed), play the music files already on the phone, and **download** songs with their
+cover and lyrics to listen with no connection. "Continue this song on the phone" (and back) moves what's playing between the two.
+With no computer at all, choose "Use Pocketfader on this phone only" on the first screen. When the phone can't get a song
+itself, a connected computer fetches it with yt-dlp (installed by `install.sh`). Your playlists, likes and recommendations come
+from your YouTube Music account, so they need the computer with the extension.
+
 ## The YouTube Music remote
 
 1. In Brave or Chrome open `brave://extensions` (or `chrome://extensions`), turn on **Developer mode**, click **Load unpacked** and pick the [`extension/`](extension/) folder.
@@ -137,4 +146,5 @@ safely. Settings and the access token live in `~/.config/pocketfader/` (`%APPDAT
 
 [Cloudflare guide](docs/CLOUDFLARE.md) · [Discord presence](docs/BEACON.md) · [Refine: a better YouTube Music](docs/REFINE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
 
-MIT licensed.
+MIT licensed, except the Android app (`android/`), which is **GPL-3.0-or-later** because it includes
+[NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) to play YouTube Music on the phone itself.

@@ -205,7 +205,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     ) { now?.let { n -> Downloads.enqueue(LocalItem(vid, null, n.title, n.artist, n.art, n.duration)) } }
                 }
             }
-            if (s.ytm && videoId != null) {
+            if (s.ytm && isYtId(videoId) && videoId != null) {
                 val liked = now?.liked == true
                 val primary = MaterialTheme.colorScheme.primary
                 PressIconButton(
