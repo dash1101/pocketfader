@@ -124,8 +124,8 @@ object Widgets {
 
     /** The cover in two forms (rounded, and a darkened blur for the background), and its colour; made once per song. */
     private class Art(val url: String?, val cover: Bitmap?, val coverSquare: Bitmap?, val blurWide: Bitmap?, val blurBar: Bitmap?, val accent: Int)
-    @Volatile private var art = Art(null, null, null, null, null, DEFAULT_ACCENT)
     private const val DEFAULT_ACCENT = 0xFF2EC4B6.toInt()
+    @Volatile private var art = Art(null, null, null, null, null, DEFAULT_ACCENT)
 
     /** Redraw whenever what the widgets show changes (only while some widget exists). */
     fun start(ctx: Context) {
@@ -291,7 +291,7 @@ object Widgets {
 
     // ---------------------------------------------------------------- the cover, prepared for a widget
 
-    private fun loadArt(ctx: Context, url: String?): Art {
+    private suspend fun loadArt(ctx: Context, url: String?): Art {
         if (url == null) return Art(null, null, null, null, null, DEFAULT_ACCENT)
         val src = try {
             val r = ctx.imageLoader.execute(ImageRequest.Builder(ctx).data(url).size(320).allowHardware(false).build())

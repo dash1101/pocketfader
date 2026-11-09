@@ -36,7 +36,7 @@ EQ_MIN, EQ_MAX = -12.0, 12.0
 EQ_BANDS = ("bass", "mid", "high")
 # The YT Music extension runs in a music.youtube.com page, so its requests carry that Origin.
 CORS_ORIGINS = {"https://music.youtube.com"}
-PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/api/info"}
+PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png", "/api/info"}
 COOKIE = "pf_token"
 
 
