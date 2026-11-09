@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -101,7 +102,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             }
             Info("Computer", cfg.url.ifBlank { "Not set up" })
             Info("Status", status)
-            Info("YouTube Music extension", if (s.bridge) "Connected" else "Not connected")
+            Info("YouTube Music extension", if (s.ytm) "Connected" else "Not connected")
             FilledTonalButton(onClick = onEditConnection, modifier = Modifier.padding(top = 4.dp)) { Text("Edit connection") }
         }
 
@@ -249,6 +250,25 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             )
         }
 
+        if (page == "downloads") Section("Downloads") {
+            val saved by Downloads.items.collectAsStateWithLifecycle()
+            var confirm by remember { mutableStateOf(false) }
+            Choice(
+                "Play music on", "On this phone, songs from YouTube Music play straight from the internet (or from your downloads); " +
+                    "nothing has to be running on a computer.",
+                listOf("computer" to "The computer", "phone" to "This phone"), p.playOn,
+            ) { v -> Remote.setPlayOn(v, carryOver = false) }
+            Info("Saved on this phone", "${saved.size} songs · ${formatBytes(saved.sumOf { it.size })}")
+            Text(
+                "Downloads keep the song, its cover and its lyrics, and play with no connection. Download from a song's ⋮ menu, " +
+                    "a playlist, the queue or the player. They're stored in the app's own folder and removed if you uninstall it.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(onClick = { confirm = true }, enabled = saved.isNotEmpty()) { Text("Delete all downloads") }
+            if (confirm) ConfirmDialog("Delete all downloads?", "${saved.size} songs will be removed from this phone.", "Delete",
+                onDismiss = { confirm = false }) { confirm = false; Downloads.deleteAll() }
+        }
+
         if (page == "updates") Section("Updates") {
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             val info = UpdateManager.info
@@ -383,7 +403,8 @@ private class Cat(val key: String, val title: String, val icon: androidx.compose
 
 private val groups = listOf(
     "Listening" to listOf(
-        Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("lyrics", "Lyrics", Icons.Filled.MusicNote), Cat("controls", "Controls", Icons.Filled.TouchApp),
+        Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("downloads", "Downloads & playing on this phone", Icons.Filled.DownloadForOffline),
+        Cat("lyrics", "Lyrics", Icons.Filled.MusicNote), Cat("controls", "Controls", Icons.Filled.TouchApp),
     ),
     "Look & feel" to listOf(
         Cat("appearance", "Appearance", Icons.Filled.Palette), Cat("effects", "Effects", Icons.Filled.AutoAwesome),
@@ -400,6 +421,7 @@ private fun themeLabel(t: String) = when (t) { "light" -> "Light"; "dark" -> "Da
 
 private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String = when (key) {
     "sound" -> if (s.volume.available) "${s.volume.percent}%" + (if (s.volume.muted) " (muted)" else "") + s.volume.device.let { if (it.isBlank()) "" else " · $it" } else "No audio output found"
+    "downloads" -> (if (p.playOn == "phone") "Playing on this phone" else "Playing on the computer") + " · " + Downloads.items.value.size + " downloaded"
     "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
     "controls" -> "Notification " + (if (p.notification) "on" else "off") + " · volume keys " + (if (p.volumeKeys) "on" else "off")
     "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")

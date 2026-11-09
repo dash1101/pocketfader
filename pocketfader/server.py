@@ -29,6 +29,7 @@ from .lyrics import LyricsService
 from .updater import Updater
 from .config import DEFAULT_PORT, JsonFile, config_dir
 from .opener import Opener, music_url, valid_id
+from .audio import AudioFetcher, TYPES as AUDIO_TYPES, parse_range
 
 STATIC = Path(__file__).parent / "static"
 EQ_MIN, EQ_MAX = -12.0, 12.0
@@ -42,13 +43,14 @@ COOKIE = "pf_token"
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None, audio_fetcher=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
         self.updater = updater or Updater()
         self.beacon = beacon or Beacon()
         self.opener = opener or Opener()
+        self.fetcher = audio_fetcher or AudioFetcher()
         self._stop_watch = threading.Event()
         self._was_playing = False
         self.prefs = prefs or JsonFile(config_dir() / "prefs.json")
@@ -83,6 +85,7 @@ class App:
             "lyrics": True,
             "beacon": True,
             "sleep": True,
+            "audio": self.fetcher.available,
         }
 
     def state(self):
@@ -395,6 +398,37 @@ class Handler(BaseHTTPRequestHandler):
                                      source=one("source") or None, refresh=one("refresh") == "1")
         return self._json(200, out)
 
+    def _audio(self, vid):
+        """A song's audio for the phone, with Range support so it can start playing before the end arrives."""
+        try:
+            f = self.app.fetcher.get(vid)
+        except ValueError:
+            return self._json(400, {"error": "bad video id"})
+        except RuntimeError as e:
+            return self._json(502, {"error": str(e)})
+        size = f.stat().st_size
+        ctype = AUDIO_TYPES.get(f.suffix, "application/octet-stream")
+        rng = parse_range(self.headers.get("Range"), size)
+        start, end = rng if rng else (0, size - 1)
+        self.send_response(206 if rng else 200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        if rng:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        with open(f, "rb") as fh:
+            fh.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = fh.read(min(65536, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
     # ---- GET ----
     def _get(self, path):
         app = self.app
@@ -409,6 +443,8 @@ class Handler(BaseHTTPRequestHandler):
             info = dict(app.updater.latest(refresh=(q.get("refresh") or [""])[0] == "1"))
             info["self_update"] = app.updater.can_update_self()
             return self._json(200, info)
+        if path.startswith("/api/media/audio/"):
+            return self._audio(path.rsplit("/", 1)[-1])
         if path == "/api/update/apk":
             try:
                 f = app.updater.apk()

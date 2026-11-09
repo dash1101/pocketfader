@@ -11,6 +11,8 @@ class PocketfaderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Settings.init(this)
+        Downloads.init(this)
+        LocalPlayer.init(this)
     }
 }
 
@@ -22,7 +24,9 @@ data class Prefs(
     val accent: Int = 0,                     // chosen accent colour (ARGB); 0 = automatic
     val coverWash: Boolean = true,           // tint the background with the cover's colour
     val coverHighlight: Boolean = false,     // lyric highlight takes the cover's colour instead of the accent
-    val queueArt: Boolean = true,            // little cover pictures in the queue (off helps very old tablets)
+    val queueArt: Boolean = true,
+    val playOn: String = "computer",         // computer | phone: where music plays
+    val standalone: Boolean = false,         // used without a computer (set up from the first screen)            // little cover pictures in the queue (off helps very old tablets)
     val navStyle: String = "bar",            // bar | pill: how the bottom navigation looks
     val coverGlow: String = "strong",        // off | soft | strong | extreme: halo around the cover
     val glowUi: Boolean = false,             // glow around text, icons and buttons
@@ -78,7 +82,7 @@ object Settings {
         if (::sp.isInitialized) write(next)
     }
 
-    fun reset() = update { Prefs() }
+    fun reset() = update { Prefs(playOn = it.playOn, standalone = it.standalone) }
 
     private fun read(): Prefs {
         val d = Prefs()
@@ -89,6 +93,7 @@ object Settings {
             theme = s("theme", d.theme), dynamicColor = b("dynamicColor", d.dynamicColor),
             accent = i("accent", d.accent), coverWash = b("coverWash", d.coverWash),
             coverHighlight = b("coverHighlight", d.coverHighlight), navStyle = s("navStyle", d.navStyle), queueArt = b("queueArt", d.queueArt),
+            playOn = s("playOn", d.playOn), standalone = b("standalone", d.standalone),
             coverGlow = s("coverGlow", d.coverGlow), glowUi = b("glowUi", d.glowUi), wavyBar = b("wavyBar", d.wavyBar),
             coverShape = s("coverShape", d.coverShape), transitions = b("transitions", d.transitions),
             keepAwake = s("keepAwake", d.keepAwake), dimAfterMin = i("dimAfterMin", d.dimAfterMin),
@@ -111,6 +116,7 @@ object Settings {
             .putString("theme", p.theme).putBoolean("dynamicColor", p.dynamicColor)
             .putInt("accent", p.accent).putBoolean("coverWash", p.coverWash)
             .putBoolean("coverHighlight", p.coverHighlight).putString("navStyle", p.navStyle).putBoolean("queueArt", p.queueArt)
+            .putString("playOn", p.playOn).putBoolean("standalone", p.standalone)
             .putString("coverGlow", p.coverGlow).putBoolean("glowUi", p.glowUi).putBoolean("wavyBar", p.wavyBar)
             .putString("coverShape", p.coverShape).putBoolean("transitions", p.transitions)
             .putString("keepAwake", p.keepAwake).putInt("dimAfterMin", p.dimAfterMin)

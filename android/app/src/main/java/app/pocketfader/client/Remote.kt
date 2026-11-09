@@ -32,6 +32,8 @@ data class RemoteState(
     val canOutputs: Boolean = false,
     val canLyrics: Boolean = false,
     val canBeacon: Boolean = false,
+    val ytm: Boolean = false,             // the computer's YouTube Music extension is connected (account: library, likes, artists)
+    val canAudio: Boolean = false,        // the computer can fetch songs for the phone (yt-dlp)
     val canSleep: Boolean = false,
     val sleepLeft: Int = 0,               // seconds until playback is paused by the sleep timer (0 = none)
     val sleepAt: Long = 0L,               // SystemClock.elapsedRealtime() when sleepLeft was read
@@ -85,10 +87,69 @@ object Remote {
 
     fun notify(text: String) { _messages.tryEmit(text) }
 
+    // ------------------------------------------------------------------ playing on the phone itself
+
+    /** True when music plays on this phone (not the computer): the controls and the queue are the phone's own. */
+    val local: Boolean get() = Settings.prefs.value.playOn == "phone"
+
+    /** The computer's API, when one is set up (for the phone's player to fall back on). */
+    fun computerApi(): PfApi? = api
+
+    /** The phone's player reports what it's doing (only shown while playing on the phone). */
+    fun applyLocal(now: Now?, queue: List<Track>, prog: Progress) {
+        if (!local) return
+        _progress.value = prog
+        _state.update { it.copy(now = now, queue = queue, source = "phone", bridge = true, canLyrics = true) }
+    }
+
+    fun applyProgress(prog: Progress) { if (local) _progress.value = prog }
+
+    /**
+     * Switch where music plays. [carryOver] moves what's playing along: the song (from where it is), the rest of the queue,
+     * and pauses the place it came from.
+     */
+    fun setPlayOn(mode: String, carryOver: Boolean) {
+        if (Settings.prefs.value.playOn == mode) return
+        val before = _state.value
+        val pos = _progress.value
+        if (mode == "phone") {
+            val songs = before.queue.filter { it.section == "queue" }
+            val cur = songs.indexOfFirst { it.selected }
+            val list = songs.drop(cur.coerceAtLeast(0)).mapNotNull { it.toLocal() }
+            Settings.update { it.copy(playOn = "phone") }
+            if (carryOver && before.now?.videoId != null && list.isNotEmpty()) {
+                if (before.now.playing) transportComputer("playpause")
+                LocalPlayer.playItems(list, 0)
+                LocalPlayer.seek(pos.position + if (before.now.playing) (SystemClock.elapsedRealtime() - pos.at) / 1000.0 else 0.0)
+            } else {
+                LocalPlayer.publish()
+            }
+        } else {
+            val cur = LocalPlayer.current()
+            val at = LocalPlayer.position()
+            LocalPlayer.pause()
+            Settings.update { it.copy(playOn = "computer") }
+            _state.update { it.copy(now = null, queue = emptyList(), source = null, bridge = false) }
+            boost()
+            val vid = cur?.videoId
+            if (carryOver && isYtId(vid) && vid != null) {
+                play(vid)
+                scope.launch { delay(2500); transportComputer("seek", at) }
+            }
+        }
+    }
+
+    private fun transportComputer(action: String, position: Double? = null) {
+        val b = JSONObject().put("type", "transport").put("action", action)
+        if (position != null) b.put("position", position)
+        command(b)
+    }
+
     fun configure(cfg: ServerConfig) {
         api = if (cfg.isSet) PfApi(cfg) else null
         _state.value = RemoteState(configured = cfg.isSet)
         _progress.value = Progress()
+        if (local) LocalPlayer.publish()
         fastUntil = SystemClock.elapsedRealtime() + 3000
     }
 
@@ -159,7 +220,8 @@ object Remote {
         val settling = SystemClock.elapsedRealtime() < settleUntil
         val nowJson = ytm.optJSONObject("now")
         val now = parseNow(nowJson)
-        _progress.value = Progress(parsePosition(nowJson), sampled)
+        val loc = local
+        if (!loc) _progress.value = Progress(parsePosition(nowJson), sampled)
         val queue = parseQueue(ytm)
         val source = ytm.str("source")
         val bridge = ytm.optBoolean("connected", false) && source == "ytm"
@@ -168,14 +230,16 @@ object Remote {
                 configured = true,
                 online = true,
                 error = null,
-                now = withHeld(now, cur.now),
-                queue = queue,
-                source = source,
-                bridge = bridge,
+                now = if (loc) cur.now else withHeld(now, cur.now),
+                queue = if (loc) cur.queue else queue,
+                source = if (loc) "phone" else source,
+                bridge = if (loc) true else bridge,
+                ytm = bridge,
+                canAudio = st?.optJSONObject("capabilities")?.optBoolean("audio", false) ?: cur.canAudio,
                 volume = if (st == null || settling) cur.volume else parseVolume(st),
                 eq = if (st == null) cur.eq else parseEq(st),
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
-                canLyrics = st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
+                canLyrics = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
                 canSleep = st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
                 sleepLeft = sleepFrom(st, cur).first,
@@ -285,6 +349,15 @@ object Remote {
     }
 
     fun transport(action: String, position: Double? = null) {
+        if (local) {
+            when (action) {
+                "playpause" -> LocalPlayer.toggle()
+                "next" -> LocalPlayer.next()
+                "prev" -> LocalPlayer.prev()
+                "seek" -> if (position != null) { _progress.value = Progress(position, SystemClock.elapsedRealtime()); LocalPlayer.seek(position) }
+            }
+            return
+        }
         val b = JSONObject().put("type", "transport").put("action", action)
         if (position != null) b.put("position", position)
         if (action == "playpause") hold("playing")
@@ -294,24 +367,28 @@ object Remote {
     }
 
     fun like(videoId: String, on: Boolean) {
+        if (!_state.value.ytm) { notify("Likes go through YouTube Music on the computer, which isn't connected."); return }
         hold("liked")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(liked = on) }) }
         command(JSONObject().put("type", "like").put("videoId", videoId).put("action", if (on) "like" else "remove"))
     }
 
     fun setRepeat(mode: String) {
+        if (local) { LocalPlayer.setRepeat(mode); return }
         hold("repeat")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(repeat = mode) }) }
         command(JSONObject().put("type", "setRepeat").put("mode", mode))
     }
 
     fun setShuffle(on: Boolean) {
+        if (local) { LocalPlayer.setShuffle(on); return }
         hold("shuffle")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(shuffle = on) }) }
         command(JSONObject().put("type", "setShuffle").put("on", on))
     }
 
     fun setAutoplay(on: Boolean) {
+        if (local) { LocalPlayer.setAutoplay(on); return }
         hold("autoplay")
         _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(autoplay = on) }) }
         command(JSONObject().put("type", "setAutoplay").put("on", on))
@@ -321,33 +398,64 @@ object Remote {
         .put("section", t.section).put("index", t.index)
         .put("videoId", t.videoId ?: "").put("setVideoId", t.setVideoId ?: JSONObject.NULL)
 
-    fun queuePlayAt(t: Track) = command(ref(t).put("type", "queuePlayAt"))
-    fun queueRemove(t: Track) = command(ref(t).put("type", "queueRemove"))
-    fun queueMove(t: Track, to: Int) = command(ref(t).put("type", "queueMove").put("to", to))
+    fun queuePlayAt(t: Track) { if (local) LocalPlayer.playAt(t.index) else command(ref(t).put("type", "queuePlayAt")) }
+    fun queueRemove(t: Track) { if (local) LocalPlayer.remove(t.index) else command(ref(t).put("type", "queueRemove")) }
+    fun queueMove(t: Track, to: Int) { if (local) LocalPlayer.move(t.index, to) else command(ref(t).put("type", "queueMove").put("to", to)) }
 
     fun queueMoveNext(t: Track) {
-        command(ref(t).put("type", "queueMoveNext"))
+        if (local) {
+            val cur = _state.value.queue.indexOfFirst { it.selected }
+            LocalPlayer.move(t.index, if (t.index > cur) cur + 1 else cur)
+        } else command(ref(t).put("type", "queueMoveNext"))
         notify("Playing next: ${t.title}")
     }
 
     /** Copies a track (typically an autoplay suggestion) onto the end of the real queue. */
     fun queueAddEnd(t: Track) {
-        command(ref(t).put("type", "queueAddEnd"))
+        if (local) t.toLocal()?.let { LocalPlayer.addEnd(it) } else command(ref(t).put("type", "queueAddEnd"))
         notify("Added to your queue: ${t.title}")
     }
 
+    /**
+     * Play a song from a list (search results, a playlist, an album...). On the phone the rest of the list follows it;
+     * on the computer YouTube Music decides (its own radio, or the playlist).
+     */
+    fun playItem(item: SearchItem, context: List<SearchItem> = emptyList(), playlistId: String? = null) {
+        val vid = item.videoId ?: return
+        if (local) {
+            val list = context.mapNotNull { it.toLocal() }
+            val at = list.indexOfFirst { it.videoId == vid }
+            if (at >= 0) LocalPlayer.playItems(list, at) else item.toLocal()?.let { LocalPlayer.playItems(listOf(it)) }
+        } else play(vid, playlistId ?: item.playlistId.takeIf { item.kind != "song" })
+    }
+
     fun play(videoId: String, playlistId: String? = null) {
+        if (local) { LocalPlayer.playVideo(videoId); return }
         val b = JSONObject().put("type", "play").put("videoId", videoId)
         if (playlistId != null) b.put("playlistId", playlistId)
         command(b)
     }
 
     fun startPlaylist(playlistId: String, shuffle: Boolean) {
+        if (local) {
+            scope.launch {
+                // your own playlists (and liked music) need the account on the computer; public ones load on the phone
+                val list = runCatching {
+                    if (_state.value.ytm) playlistItems(SearchItem("", "", null, null, playlistId, "playlist")).mapNotNull { it.toLocal() }
+                    else Streams.playlist(playlistId)
+                }.recoverCatching { Streams.playlist(playlistId) }.getOrNull().orEmpty()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (list.isEmpty()) notify("Couldn't load that playlist on the phone.") else LocalPlayer.playItems(list, 0, shuffle)
+                }
+            }
+            return
+        }
         command(JSONObject().put("type", "startPlaylist").put("playlistId", playlistId).put("shuffle", shuffle))
         notify(if (shuffle) "Shuffling playlist" else "Starting playlist")
     }
 
     fun startMix(videoId: String) {
+        if (local) { LocalPlayer.setAutoplay(true); LocalPlayer.playVideo(videoId); return }
         command(JSONObject().put("type", "startMix").put("videoId", videoId))
         notify("Starting radio")
     }
@@ -355,6 +463,11 @@ object Remote {
     /** Add a song from search / a playlist / a shelf to the current queue, next or at the end. */
     fun queueAdd(item: SearchItem, next: Boolean) {
         val vid = item.videoId ?: return
+        if (local) {
+            item.toLocal()?.let { if (next) LocalPlayer.addNext(it) else LocalPlayer.addEnd(it) }
+            notify(if (next) "Playing next: ${item.title}" else "Added to your queue: ${item.title}")
+            return
+        }
         command(
             JSONObject().put("type", "queueAdd").put("videoId", vid)
                 .put("query", item.title + " " + item.subtitle).put("mode", if (next) "next" else "end")
@@ -404,6 +517,28 @@ object Remote {
     fun playlistOp(body: JSONObject): JSONObject = ytmCall(body)
 
     fun lyrics(now: Now, source: String?, refresh: Boolean): LyricsResult {
+        val vid = now.videoId
+        if (!refresh && (source == null || source == "auto") && vid != null) Downloads.lyricsFor(vid)?.let { return it }
+        val a = api
+        if (a == null || !_state.value.online) {
+            val j = Lrclib.lookup(now.title, now.artist, now.duration) ?: return LyricsResult()
+            return parseLyrics(j)
+        }
+        return lyricsFromComputer(now, source, refresh)
+    }
+
+    /** The computer's lyrics reply as JSON (for saving with a download); null without a computer. */
+    fun lyricsJson(title: String, artist: String, durationSec: Double, videoId: String?): JSONObject? {
+        if (api == null || !_state.value.online) return null
+        fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+        val q = StringBuilder("/api/lyrics?title=").append(enc(title)).append("&artist=").append(enc(artist))
+        if (durationSec > 0) q.append("&duration=").append(durationSec.toInt())
+        videoId?.let { q.append("&videoId=").append(enc(it)) }
+        val j = need().get(q.toString(), 25000)
+        return if (j.optBoolean("found")) j else null
+    }
+
+    private fun lyricsFromComputer(now: Now, source: String?, refresh: Boolean): LyricsResult {
         fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
         val q = StringBuilder("/api/lyrics?title=").append(enc(now.title)).append("&artist=").append(enc(now.artist))
         if (now.duration > 0) q.append("&duration=").append(now.duration.toInt())
@@ -453,6 +588,7 @@ object Remote {
     /** [final] sends immediately; otherwise drags are throttled to about 10 updates per second. */
     fun setVolume(percent: Int, final: Boolean = true) {
         val p = percent.coerceIn(0, 100)
+        if (local) { LocalPlayer.setPhoneVolume(p); return }
         settleUntil = SystemClock.elapsedRealtime() + 1500
         _state.update { it.copy(volume = it.volume.copy(percent = p)) }
         if (!final && throttled(100)) return

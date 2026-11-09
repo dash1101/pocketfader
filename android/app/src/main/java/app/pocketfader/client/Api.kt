@@ -15,6 +15,19 @@ class PfApi(private val cfg: ServerConfig) {
 
     fun get(path: String, timeoutMs: Int = 4000): JSONObject = call("GET", path, null, timeoutMs)
 
+    /** The full address of a path on this computer, and the headers a request to it needs (token, Cloudflare Access). */
+    fun urlFor(path: String): String = cfg.url.trimEnd('/') + path
+
+    fun authHeaders(): Map<String, String> {
+        val h = HashMap<String, String>()
+        if (cfg.token.isNotBlank()) h["Authorization"] = "Bearer ${cfg.token}"
+        if (cfg.hasCloudflareToken) {
+            h["CF-Access-Client-Id"] = cfg.cfClientId
+            h["CF-Access-Client-Secret"] = cfg.cfClientSecret
+        }
+        return h
+    }
+
     fun post(path: String, body: JSONObject, timeoutMs: Int = 15000): JSONObject =
         call("POST", path, body, timeoutMs)
 

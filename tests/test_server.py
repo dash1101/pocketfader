@@ -7,6 +7,7 @@ import threading
 
 from pocketfader.beacon import Beacon
 from pocketfader.opener import Opener
+from pocketfader.audio import AudioFetcher
 from pocketfader.config import JsonFile
 from pocketfader.server import App, Handler
 
@@ -26,7 +27,8 @@ class Base(unittest.TestCase):
         self.audio, self.media, self.engine = FakeAudio(), FakeMedia(self.media_avail), self.engine_cls()
         self.app = App(self.audio, self.engine, self.media,
                        prefs=JsonFile(Path(self.tmp.name) / "prefs.json"), token=self.token,
-                       beacon=Beacon(ports=(), dry_run=True), opener=Opener(dry_run=True))
+                       beacon=Beacon(ports=(), dry_run=True), opener=Opener(dry_run=True),
+                       audio_fetcher=AudioFetcher(folder=Path(self.tmp.name) / 'audio', ytdlp=''))
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.app = self.app
         threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.02), daemon=True).start()

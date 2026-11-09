@@ -50,13 +50,22 @@ android {
         }
     }
     compileOptions {
+        // NewPipe Extractor uses newer Java library APIs (java.time, java.nio) that old Android versions lack
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
-    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+    packaging {
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}", "/META-INF/DEPENDENCIES", "/META-INF/LICENSE*", "/META-INF/NOTICE*",
+                "/META-INF/*.md", "/META-INF/INDEX.LIST", "/META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+            )
+        }
+    }
 }
 
 dependencies {
@@ -71,4 +80,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.palette:palette:1.0.0")
+    // Playing on the phone itself: ExoPlayer with a media session (notification, lock screen, headset buttons)
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-session:1.4.1")
+    // YouTube Music search and audio streams on the phone (GPL-3.0; this is why the Android app is GPL-3.0)
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.0.4")
 }

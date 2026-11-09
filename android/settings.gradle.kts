@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // NewPipe Extractor is published on JitPack
+        maven { url = uri("https://jitpack.io") }
     }
 }
 rootProject.name = "pocketfader-android"

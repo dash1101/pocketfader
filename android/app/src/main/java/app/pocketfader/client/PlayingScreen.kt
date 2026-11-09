@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -181,7 +182,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                             Text(
                                 artist,
                                 // tap the artist to see their page: about, top songs, albums
-                                modifier = Modifier.then(if (s.bridge && artist.isNotBlank()) Modifier.clickable { Detail.openArtist(videoId, artist) } else Modifier),
+                                modifier = Modifier.then(if (s.ytm && artist.isNotBlank()) Modifier.clickable { Detail.openArtist(videoId, artist) } else Modifier),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -191,8 +192,20 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            if (s.canSleep) SleepButton(s)
-            if (s.bridge && videoId != null) {
+            if (s.canSleep && s.source != "phone") SleepButton(s)
+            // save the song that's playing to this phone
+            if (isYtId(videoId)) {
+                val saved by Downloads.items.collectAsStateWithLifecycle()
+                val busy by Downloads.active.collectAsStateWithLifecycle()
+                val vid = videoId
+                if (vid != null && saved.none { it.videoId == vid }) {
+                    PressIconButton(
+                        Icons.Filled.Download, if (vid in busy) "Downloading" else "Download to this phone", 48, 24,
+                        MaterialTheme.colorScheme.onSurfaceVariant, false, vid !in busy,
+                    ) { now?.let { n -> Downloads.enqueue(LocalItem(vid, null, n.title, n.artist, n.art, n.duration)) } }
+                }
+            }
+            if (s.ytm && videoId != null) {
                 val liked = now?.liked == true
                 val primary = MaterialTheme.colorScheme.primary
                 PressIconButton(
@@ -204,8 +217,11 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
 
         if (!hasTrack) {
             Text(
-                if (s.online) "Start something on the computer. Open YouTube Music with the Pocketfader extension, or any player."
-                else "Waiting for the computer…",
+                when {
+                    s.source == "phone" -> "Nothing is playing on this phone. Search for a song, or play something you downloaded (Search → On this phone)."
+                    s.online -> "Start something on the computer. Open YouTube Music with the Pocketfader extension, or any player."
+                    else -> "Waiting for the computer…"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -218,7 +234,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         SeekBar(now?.duration ?: 0.0, playing, prefs.wavyBar)
         Transport(now, s.bridge, hasTrack)
         Spacer(Modifier.height(4.dp))
-        VolumeRow(s.volume)
+        if (s.source == "phone") PhoneVolumeRow() else VolumeRow(s.volume)
     }
 }
 
@@ -360,6 +376,28 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
                 Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play", Modifier.size(42.dp))
             }
         }
+    }
+}
+
+/** The phone's own volume (while music plays on the phone). */
+@Composable
+fun PhoneVolumeRow(modifier: Modifier = Modifier) {
+    var percent by remember { mutableIntStateOf(LocalPlayer.phoneVolume()) }
+    // follow the phone's volume buttons too
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            percent = LocalPlayer.phoneVolume()
+        }
+    }
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(if (percent == 0) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, null, Modifier.padding(12.dp))
+        Slider(
+            value = percent / 100f,
+            onValueChange = { percent = (it * 100).roundToInt(); LocalPlayer.setPhoneVolume(percent) },
+            modifier = Modifier.weight(1f),
+        )
+        Text("$percent%", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp).widthIn(min = 40.dp), textAlign = TextAlign.End)
     }
 }
 

@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
@@ -88,9 +90,10 @@ class MainActivity : ComponentActivity() {
             val s by Remote.state.collectAsStateWithLifecycle()
             val playing = s.now?.playing == true
             LaunchedEffect(prefs.keepAwake, prefs.dimAfterMin, prefs.immersive, playing) { applyWindow(prefs, playing) }
-            LaunchedEffect(prefs.notification, cfg.isSet) {
-                if (!cfg.isSet) return@LaunchedEffect
-                if (prefs.notification) startPlayback() else stopService(Intent(this@MainActivity, PlaybackService::class.java))
+            LaunchedEffect(prefs.notification, cfg.isSet, prefs.playOn) {
+                // on the phone, the phone's own player shows its notification; the computer's would be a duplicate
+                if (cfg.isSet && prefs.notification && prefs.playOn != "phone") startPlayback()
+                else stopService(Intent(this@MainActivity, PlaybackService::class.java))
             }
             PocketfaderTheme(prefs) {
                 PixelShift(prefs.pixelShift, prefs.pixelShiftMin, prefs.pixelShiftDp) {
@@ -153,7 +156,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         Remote.acquire()
         Remote.setVisible(true)
-        if (cfg.isSet && Settings.prefs.value.notification) startPlayback()
+        if (cfg.isSet && Settings.prefs.value.notification && !Remote.local) startPlayback()
     }
 
     override fun onStop() {
@@ -167,7 +170,7 @@ class MainActivity : ComponentActivity() {
     /** While the app is open the phone's volume keys control the computer. */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         val p = Settings.prefs.value
-        if (p.volumeKeys && cfg.isSet && Remote.state.value.volume.available) {
+        if (p.volumeKeys && cfg.isSet && !Remote.local && Remote.state.value.volume.available) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> { Remote.adjustVolume(p.volumeStep); return true }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> { Remote.adjustVolume(-p.volumeStep); return true }
@@ -182,12 +185,51 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Where music plays: the computer or this phone. Switching offers to bring the current song along. */
+@Composable
+private fun PlayOnButton(prefs: Prefs, hasComputer: Boolean) {
+    var open by remember { mutableStateOf(false) }
+    val phone = prefs.playOn == "phone"
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(
+                if (phone) Icons.Filled.PhoneAndroid else Icons.Filled.Computer,
+                if (phone) "Playing on this phone" else "Playing on the computer",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Play on this phone" + if (phone) "  ✓" else "") },
+                leadingIcon = { Icon(Icons.Filled.PhoneAndroid, null) },
+                onClick = { open = false; Remote.setPlayOn("phone", carryOver = false) },
+            )
+            if (!phone && hasComputer) androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Continue this song on the phone") },
+                leadingIcon = { Icon(Icons.Filled.PhoneAndroid, null) },
+                onClick = { open = false; Remote.setPlayOn("phone", carryOver = true) },
+            )
+            if (hasComputer) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Play on the computer" + if (!phone) "  ✓" else "") },
+                    leadingIcon = { Icon(Icons.Filled.Computer, null) },
+                    onClick = { open = false; Remote.setPlayOn("computer", carryOver = false) },
+                )
+                if (phone) androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Continue this song on the computer") },
+                    leadingIcon = { Icon(Icons.Filled.Computer, null) },
+                    onClick = { open = false; Remote.setPlayOn("computer", carryOver = true) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, onEditConnection: () -> Unit) {
     when (d) {
         Dest.Playing -> PlayingPage(s, Modifier.fillMaxSize())
         Dest.Search -> SearchScreen(s, Modifier.fillMaxSize())
-        Dest.Library -> LibraryScreen(s, Modifier.fillMaxSize())
         Dest.Settings -> SettingsScreen(cfg, s, onEditConnection = onEditConnection, modifier = Modifier.fillMaxSize())
     }
 }
@@ -195,29 +237,37 @@ private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, onEditConnec
 private enum class Dest(val key: String, val label: String, val icon: ImageVector) {
     Playing("playing", "Playing", Icons.Filled.PlayCircle),
     Search("search", "Search", Icons.Filled.Search),
-    Library("library", "Library", Icons.Filled.LibraryMusic),
     Settings("settings", "Settings", Icons.Filled.Settings),
 }
 
 // On wide screens the player is always visible on the left, so the right pane gets its own tabs.
-private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Search("Search"), Library("Library") }
+private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Search("Search") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (ServerConfig) -> Unit, onForget: () -> Unit) {
-    if (!cfg.isSet) {
+    if (!cfg.isSet && !prefs.standalone) {
         Scaffold { inner ->
-            ConnectForm(initial = cfg, onSave = onSave, modifier = Modifier.padding(inner).fillMaxSize())
+            Column(Modifier.padding(inner).fillMaxSize()) {
+                ConnectForm(initial = cfg, onSave = onSave, modifier = Modifier.weight(1f).fillMaxWidth())
+                // no computer? the app works on its own too: YouTube Music, downloads and the phone's own music
+                androidx.compose.material3.TextButton(
+                    onClick = { Settings.update { it.copy(standalone = true, playOn = "phone") }; Remote.configure(cfg) },
+                    modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 12.dp),
+                ) { Text("No computer? Use Pocketfader on this phone only") }
+            }
         }
         return
     }
 
     var showConnect by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    var dest by rememberSaveable { mutableStateOf(Dest.values().firstOrNull { it.key == prefs.startTab } ?: Dest.Playing) }
+    var dest by rememberSaveable {
+        mutableStateOf(Dest.values().firstOrNull { it.key == prefs.startTab } ?: if (prefs.startTab == "library") Dest.Search else Dest.Playing)
+    }
     var pane by rememberSaveable {
         mutableStateOf(
-            when (prefs.startTab) { "search" -> Pane.Search; "library" -> Pane.Library; else -> Pane.Queue }
+            when (prefs.startTab) { "search", "library" -> Pane.Search; else -> Pane.Queue }
         )
     }
     val wide = LocalConfiguration.current.screenWidthDp >= 840
@@ -259,6 +309,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
                 actions = {
+                    if (!showSettings) PlayOnButton(prefs, cfg.isSet)
                     if (wide && !showSettings) IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, "Settings") }
                 },
             )
@@ -295,7 +346,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     }
                 }
             }
-            if (!s.online && !showSettings) {
+            if (!s.online && !showSettings && cfg.isSet && !Remote.local) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                     Text(
                         "Can't reach the computer. ${s.error ?: "Trying again…"}",
@@ -319,7 +370,6 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                                 Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
                                 Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
                                 Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
-                                Pane.Library -> LibraryScreen(s, Modifier.fillMaxSize())
                             }
                         }
                     }

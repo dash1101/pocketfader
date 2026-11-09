@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -265,6 +266,9 @@ fun TrackActionsDialog(t: Track, queueSize: Int, onDone: () -> Unit) {
                 if (canMove && t.index > 0) Action(Icons.Filled.KeyboardArrowUp, "Move up") { Remote.queueMove(t, t.index - 1) }
                 if (canMove && t.index < last) Action(Icons.Filled.KeyboardArrowDown, "Move down") { Remote.queueMove(t, t.index + 1) }
                 if (canMove) Action(Icons.Filled.Delete, "Remove") { Remote.queueRemove(t) }
+                if (isYtId(t.videoId) && !Downloads.isDownloaded(t.videoId)) Action(Icons.Filled.Download, "Download to this phone") {
+                    t.toLocal()?.let { Downloads.enqueue(it) }
+                }
             }
         },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onDone) { Text("Close") } },

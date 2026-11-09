@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -206,7 +207,7 @@ internal fun HomeTab(onOpen: (SearchItem) -> Unit) {
 }
 
 @Composable
-private fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
+internal fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
     val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { LibraryStore.ensurePlaylists() }
@@ -332,11 +333,16 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                         Thumb(item.thumb, 200, 20)
                         Text("${list.size} tracks", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(onClick = { pid?.let { Remote.startPlaylist(it, false) } }, enabled = pid != null) {
+                            // on the phone, the songs already shown here are played; on the computer, YouTube Music plays the playlist
+                            val songs = list.mapNotNull { it.toLocal() }
+                            Button(onClick = { if (Remote.local) LocalPlayer.playItems(songs, 0) else pid?.let { Remote.startPlaylist(it, false) } }, enabled = pid != null || (Remote.local && songs.isNotEmpty())) {
                                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text("Play", Modifier.padding(start = 6.dp))
                             }
-                            FilledTonalButton(onClick = { pid?.let { Remote.startPlaylist(it, true) } }, enabled = pid != null) {
+                            FilledTonalButton(onClick = { if (Remote.local) LocalPlayer.playItems(songs, 0, shuffle = true) else pid?.let { Remote.startPlaylist(it, true) } }, enabled = pid != null || (Remote.local && songs.isNotEmpty())) {
                                 Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text("Shuffle", Modifier.padding(start = 6.dp))
+                            }
+                            IconButton(onClick = { Downloads.enqueue(songs) }, enabled = songs.isNotEmpty()) {
+                                Icon(Icons.Filled.Download, "Download all to this phone")
                             }
                             if (editable) {
                                 FilledTonalButton(onClick = { editing = !editing }) {
@@ -350,7 +356,7 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                 itemsIndexed(list, key = { i, t -> "${t.setVideoId ?: t.videoId}-$i" }) { i, t ->
                     Row(
                         Modifier.fillMaxWidth()
-                            .clickable(enabled = !editing && t.videoId != null) { t.videoId?.let { Remote.play(it, pid) } }
+                            .clickable(enabled = !editing && t.videoId != null) { Remote.playItem(t, list, pid) }
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),

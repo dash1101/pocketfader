@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -52,7 +54,7 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("Play now") }, leadingIcon = { Icon(Icons.Filled.PlayArrow, null) },
-                onClick = { open = false; Remote.play(vid, item.playlistId.takeIf { item.kind != "song" }) },
+                onClick = { open = false; Remote.playItem(item) },
             )
             DropdownMenuItem(
                 text = { Text("Play next") }, leadingIcon = { Icon(Icons.Filled.SkipNext, null) },
@@ -62,9 +64,16 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
                 text = { Text("Add to queue") }, leadingIcon = { Icon(Icons.Filled.Add, null) },
                 onClick = { open = false; Remote.queueAdd(item, next = false) },
             )
-            DropdownMenuItem(
+            if (Remote.state.value.ytm) DropdownMenuItem(
                 text = { Text("Add to playlist…") }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) },
                 onClick = { open = false; addToPlaylist = true },
+            )
+            if (Downloads.isDownloaded(vid)) DropdownMenuItem(
+                text = { Text("Remove download") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                onClick = { open = false; Downloads.delete(vid); Remote.notify("Removed from this phone") },
+            ) else DropdownMenuItem(
+                text = { Text("Download") }, leadingIcon = { Icon(Icons.Filled.Download, null) },
+                onClick = { open = false; item.toLocal()?.let { Downloads.enqueue(it) } },
             )
             DropdownMenuItem(
                 text = { Text("Start radio") }, leadingIcon = { Icon(Icons.Filled.Radio, null) },
