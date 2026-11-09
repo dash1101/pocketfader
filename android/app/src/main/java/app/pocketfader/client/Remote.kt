@@ -206,6 +206,12 @@ object Remote {
         }
     }
 
+    /** One poll right now (blocking; for the widgets, which may run while nothing else keeps the app polling). */
+    fun pollNow() {
+        val a = api ?: return
+        runCatching { pollOnce(a) }
+    }
+
     private fun pollOnce(a: PfApi) {
         val t0 = SystemClock.elapsedRealtime()
         val ytmStart = SystemClock.elapsedRealtime()

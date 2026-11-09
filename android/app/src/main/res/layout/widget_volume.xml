@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="8dp">
+        <ImageView android:id="@+id/mute" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
+                android:src="@drawable/ic_w_vol_up" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Mute" />
+        <ImageView android:id="@+id/vol_down" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
+                android:src="@drawable/ic_w_vol_down" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume down" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="6dp" android:layout_marginEnd="6dp" android:orientation="vertical">
+            <TextView android:id="@+id/label" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#B3FFFFFF" android:textSize="11sp" android:textStyle="bold" android:singleLine="true" android:text="Computer volume" />
+            <TextView android:id="@+id/percent" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="20sp" android:textStyle="bold" android:singleLine="true" android:text="–" />
+            <ProgressBar android:id="@+id/level" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="4dp" android:max="100" android:progressDrawable="@drawable/widget_progress" />
+        </LinearLayout>
+        <ImageView android:id="@+id/vol_up" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
+                android:src="@drawable/ic_w_vol_up" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume up" />
+    </LinearLayout>
+</FrameLayout>

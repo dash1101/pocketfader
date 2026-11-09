@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Pocketfader</string>
+    <string name="widget_desc_now_wide">What\'s playing: cover, title, progress, controls and volume</string>
+    <string name="widget_desc_now_bar">A slim now-playing bar with controls</string>
+    <string name="widget_desc_cover">The cover of what\'s playing, with play and pause</string>
+    <string name="widget_desc_volume">The volume of where music is playing</string>
+    <string name="widget_desc_actions">Quick actions: feeling lucky, sleep timer, pause other players, switch between phone and computer</string>
+    <string name="widget_name_now_wide">Now playing</string>
+    <string name="widget_name_now_bar">Now playing (slim)</string>
+    <string name="widget_name_cover">Cover</string>
+    <string name="widget_name_volume">Volume</string>
+    <string name="widget_name_actions">Quick actions</string>
 </resources>

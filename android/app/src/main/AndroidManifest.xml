@@ -56,5 +56,27 @@
             android:name=".PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <receiver android:name=".NowWideWidget" android:exported="false" android:label="@string/widget_name_now_wide">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_now_wide" />
+        </receiver>
+        <receiver android:name=".NowBarWidget" android:exported="false" android:label="@string/widget_name_now_bar">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_now_bar" />
+        </receiver>
+        <receiver android:name=".CoverWidget" android:exported="false" android:label="@string/widget_name_cover">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_cover" />
+        </receiver>
+        <receiver android:name=".VolumeWidget" android:exported="false" android:label="@string/widget_name_volume">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_volume" />
+        </receiver>
+        <receiver android:name=".ActionsWidget" android:exported="false" android:label="@string/widget_name_actions">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_actions" />
+        </receiver>
+        <receiver android:name=".WidgetActions" android:exported="false" />
     </application>
 </manifest>

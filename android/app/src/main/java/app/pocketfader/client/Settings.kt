@@ -13,6 +13,7 @@ class PocketfaderApp : Application() {
         Settings.init(this)
         Downloads.init(this)
         LocalPlayer.init(this)
+        Widgets.start(this)
     }
 }
 

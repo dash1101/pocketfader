@@ -1,0 +1,334 @@
+package app.pocketfader.client
+
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import android.os.SystemClock
+import android.widget.RemoteViews
+import androidx.core.graphics.drawable.toBitmap
+import androidx.palette.graphics.Palette
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+// Home-screen widgets. They're drawn with RemoteViews (what every launcher understands, back to Android 5), from the same state
+// the app shows; buttons send broadcasts to WidgetActions, which acts through Remote (computer or phone, whichever is playing).
+
+class NowWideWidget : WidgetBase() { override val kind = WidgetKind.Wide }
+class NowBarWidget : WidgetBase() { override val kind = WidgetKind.Bar }
+class CoverWidget : WidgetBase() { override val kind = WidgetKind.Cover }
+class VolumeWidget : WidgetBase() { override val kind = WidgetKind.Volume }
+class ActionsWidget : WidgetBase() { override val kind = WidgetKind.Actions }
+
+enum class WidgetKind(val layout: Int) {
+    Wide(R.layout.widget_now_wide), Bar(R.layout.widget_now_bar), Cover(R.layout.widget_cover),
+    Volume(R.layout.widget_volume), Actions(R.layout.widget_actions),
+}
+
+abstract class WidgetBase : AppWidgetProvider() {
+    abstract val kind: WidgetKind
+
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        Widgets.render(context)
+        Widgets.refreshSoon(context)
+    }
+
+    override fun onEnabled(context: Context) { Widgets.render(context) }
+}
+
+/** Taps on widget buttons. */
+class WidgetActions : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        Settings.init(context)
+        Remote.ensureConfigured(ConfigStore(context))
+        val s = Remote.state.value
+        val step = Settings.prefs.value.volumeStep
+        when (intent.action) {
+            A_PLAY -> Remote.transport("playpause")
+            A_NEXT -> Remote.transport("next")
+            A_PREV -> Remote.transport("prev")
+            A_LIKE -> {
+                val n = s.now
+                val vid = n?.videoId
+                if (n != null && vid != null && isYtId(vid)) Remote.like(vid, !n.liked)
+            }
+            A_VOL_UP, A_VOL_DOWN -> {
+                val d = if (intent.action == A_VOL_UP) step else -step
+                if (Remote.local) LocalPlayer.setPhoneVolume(LocalPlayer.phoneVolume() + d) else Remote.adjustVolume(d)
+            }
+            A_MUTE -> if (Remote.local) LocalPlayer.setPhoneVolume(0) else Remote.setMuted(!s.volume.muted)
+            A_LUCKY -> if (s.ytm) Remote.command(org.json.JSONObject().put("type", "lucky")) else open(context)
+            A_SLEEP -> Remote.setSleep(30)
+            A_PAUSE_OTHERS -> Remote.pauseOthers()
+            A_SWITCH -> if (ConfigStore(context).load().isSet) Remote.setPlayOn(if (Remote.local) "computer" else "phone", carryOver = true)
+        }
+        // keep the process alive for a moment: the command goes out, the state comes back, the widgets redraw
+        val pending = goAsync()
+        Widgets.scope.launch {
+            try {
+                withContext(Dispatchers.IO) { Remote.pollNow() }
+                Widgets.render(context)
+                delay(1500)
+                withContext(Dispatchers.IO) { Remote.pollNow() }
+                Widgets.render(context)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    private fun open(c: Context) {
+        c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    companion object {
+        const val A_PLAY = "app.pocketfader.widget.PLAY"
+        const val A_NEXT = "app.pocketfader.widget.NEXT"
+        const val A_PREV = "app.pocketfader.widget.PREV"
+        const val A_LIKE = "app.pocketfader.widget.LIKE"
+        const val A_VOL_UP = "app.pocketfader.widget.VOL_UP"
+        const val A_VOL_DOWN = "app.pocketfader.widget.VOL_DOWN"
+        const val A_MUTE = "app.pocketfader.widget.MUTE"
+        const val A_LUCKY = "app.pocketfader.widget.LUCKY"
+        const val A_SLEEP = "app.pocketfader.widget.SLEEP"
+        const val A_PAUSE_OTHERS = "app.pocketfader.widget.PAUSE_OTHERS"
+        const val A_SWITCH = "app.pocketfader.widget.SWITCH"
+    }
+}
+
+object Widgets {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var started = false
+
+    /** The cover in two forms (rounded, and a darkened blur for the background), and its colour; made once per song. */
+    private class Art(val url: String?, val cover: Bitmap?, val coverSquare: Bitmap?, val blurWide: Bitmap?, val blurBar: Bitmap?, val accent: Int)
+    @Volatile private var art = Art(null, null, null, null, null, DEFAULT_ACCENT)
+    private const val DEFAULT_ACCENT = 0xFF2EC4B6.toInt()
+
+    /** Redraw whenever what the widgets show changes (only while some widget exists). */
+    fun start(ctx: Context) {
+        if (started) return
+        started = true
+        val app = ctx.applicationContext
+        scope.launch {
+            Remote.state
+                .map { s -> listOf(s.now?.title, s.now?.artist, s.now?.art, s.now?.playing, s.now?.liked, s.volume.percent, s.volume.muted, s.source, s.online, s.ytm, Remote.local) }
+                .distinctUntilChanged()
+                .collect { if (any(app)) render(app) }
+        }
+        // the progress bar moves on its own, gently (every 10 s is enough for a home screen)
+        scope.launch {
+            while (true) {
+                delay(10_000)
+                if (Remote.state.value.now?.playing == true && any(app)) render(app)
+            }
+        }
+    }
+
+    fun refreshSoon(ctx: Context) {
+        val app = ctx.applicationContext
+        scope.launch {
+            withContext(Dispatchers.IO) { Remote.pollNow() }
+            render(app)
+        }
+    }
+
+    private val providers = mapOf(
+        WidgetKind.Wide to NowWideWidget::class.java, WidgetKind.Bar to NowBarWidget::class.java,
+        WidgetKind.Cover to CoverWidget::class.java, WidgetKind.Volume to VolumeWidget::class.java,
+        WidgetKind.Actions to ActionsWidget::class.java,
+    )
+
+    private fun ids(ctx: Context, kind: WidgetKind): IntArray =
+        AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, providers.getValue(kind)))
+
+    private fun any(ctx: Context) = WidgetKind.values().any { ids(ctx, it).isNotEmpty() }
+
+    /** Draw every widget now (fetching the cover first if the song changed). Main thread. */
+    fun render(ctx: Context) {
+        val s = Remote.state.value
+        val url = s.now?.art
+        if (url != art.url) {
+            scope.launch {
+                art = withContext(Dispatchers.IO) { loadArt(ctx, url) }
+                draw(ctx, Remote.state.value)
+            }
+        }
+        draw(ctx, s)
+    }
+
+    private fun draw(ctx: Context, s: RemoteState) {
+        val m = AppWidgetManager.getInstance(ctx)
+        for (kind in WidgetKind.values()) {
+            val ids = ids(ctx, kind)
+            if (ids.isEmpty()) continue
+            val v = RemoteViews(ctx.packageName, kind.layout)
+            when (kind) {
+                WidgetKind.Wide, WidgetKind.Bar, WidgetKind.Cover -> nowPlaying(ctx, v, kind, s)
+                WidgetKind.Volume -> volume(ctx, v, s)
+                WidgetKind.Actions -> actions(ctx, v, s)
+            }
+            for (id in ids) runCatching { m.updateAppWidget(id, v) }
+        }
+    }
+
+    private fun pi(ctx: Context, action: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            ctx, action.hashCode(), Intent(ctx, WidgetActions::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private fun openApp(ctx: Context): PendingIntent =
+        PendingIntent.getActivity(
+            ctx, 1, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** Black or white, whichever reads better on [c]. */
+    private fun onColor(c: Int): Int {
+        val l = (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255
+        return if (l > 0.6) 0xFF111318.toInt() else Color.WHITE
+    }
+
+    private fun nowPlaying(ctx: Context, v: RemoteViews, kind: WidgetKind, s: RemoteState) {
+        val now = s.now
+        val has = now != null && now.title.isNotBlank()
+        v.setTextViewText(R.id.title, if (has) now!!.title else "Nothing playing")
+        v.setTextViewText(
+            R.id.artist,
+            when {
+                has -> now!!.artist
+                !s.configured && !Remote.local -> "Open Pocketfader to connect"
+                else -> "Tap to open Pocketfader"
+            },
+        )
+        val a = art
+        if (kind == WidgetKind.Cover) {
+            if (a.coverSquare != null) v.setImageViewBitmap(R.id.cover, a.coverSquare) else v.setImageViewResource(R.id.cover, R.drawable.ic_w_music)
+        } else {
+            if (a.cover != null) v.setImageViewBitmap(R.id.cover, a.cover) else v.setImageViewResource(R.id.cover, R.drawable.ic_w_music)
+            val bg = if (kind == WidgetKind.Wide) a.blurWide else a.blurBar
+            if (bg != null) v.setImageViewBitmap(R.id.bg, bg) else v.setImageViewBitmap(R.id.bg, null)
+        }
+        // play/pause in the cover's colour
+        v.setInt(R.id.play_bg, "setColorFilter", a.accent)
+        v.setInt(R.id.play, "setColorFilter", onColor(a.accent))
+        v.setImageViewResource(R.id.play, if (now?.playing == true) R.drawable.ic_w_pause else R.drawable.ic_w_play)
+        v.setOnClickPendingIntent(R.id.play_box, pi(ctx, WidgetActions.A_PLAY))
+        v.setOnClickPendingIntent(R.id.root, openApp(ctx))
+        if (kind != WidgetKind.Cover) {
+            v.setOnClickPendingIntent(R.id.prev, pi(ctx, WidgetActions.A_PREV))
+            v.setOnClickPendingIntent(R.id.next, pi(ctx, WidgetActions.A_NEXT))
+        }
+        if (kind == WidgetKind.Wide) {
+            v.setTextViewText(
+                R.id.source,
+                when {
+                    Remote.local -> "PLAYING ON THIS PHONE"
+                    !s.online -> "POCKETFADER · NOT CONNECTED"
+                    else -> "PLAYING ON THE COMPUTER"
+                },
+            )
+            val p = Remote.progress.value
+            val dur = now?.duration ?: 0.0
+            val pos = p.position + if (now?.playing == true) (SystemClock.elapsedRealtime() - p.at) / 1000.0 else 0.0
+            v.setProgressBar(R.id.progress, 1000, if (dur > 0) ((pos / dur) * 1000).toInt().coerceIn(0, 1000) else 0, false)
+            val canLike = s.ytm && isYtId(now?.videoId)
+            v.setViewVisibility(R.id.like, if (canLike) android.view.View.VISIBLE else android.view.View.INVISIBLE)
+            v.setImageViewResource(R.id.like, if (now?.liked == true) R.drawable.ic_w_like else R.drawable.ic_w_like_off)
+            v.setOnClickPendingIntent(R.id.like, pi(ctx, WidgetActions.A_LIKE))
+            v.setOnClickPendingIntent(R.id.vol_up, pi(ctx, WidgetActions.A_VOL_UP))
+            v.setOnClickPendingIntent(R.id.vol_down, pi(ctx, WidgetActions.A_VOL_DOWN))
+        }
+    }
+
+    private fun volume(ctx: Context, v: RemoteViews, s: RemoteState) {
+        val phone = Remote.local
+        val pct = if (phone) LocalPlayer.phoneVolume() else s.volume.percent
+        val muted = !phone && s.volume.muted
+        v.setTextViewText(R.id.label, if (phone) "Phone volume" else if (s.volume.device.isNotBlank()) s.volume.device else "Computer volume")
+        v.setTextViewText(R.id.percent, if (!phone && !s.volume.available) "–" else if (muted) "Muted" else "$pct%")
+        v.setProgressBar(R.id.level, 100, if (muted) 0 else pct, false)
+        v.setImageViewResource(R.id.mute, if (muted || pct == 0) R.drawable.ic_w_mute else R.drawable.ic_w_vol_up)
+        v.setOnClickPendingIntent(R.id.mute, pi(ctx, WidgetActions.A_MUTE))
+        v.setOnClickPendingIntent(R.id.vol_up, pi(ctx, WidgetActions.A_VOL_UP))
+        v.setOnClickPendingIntent(R.id.vol_down, pi(ctx, WidgetActions.A_VOL_DOWN))
+    }
+
+    private fun actions(ctx: Context, v: RemoteViews, s: RemoteState) {
+        val phone = Remote.local
+        v.setOnClickPendingIntent(R.id.act_lucky, pi(ctx, WidgetActions.A_LUCKY))
+        v.setOnClickPendingIntent(R.id.act_sleep, pi(ctx, WidgetActions.A_SLEEP))
+        v.setOnClickPendingIntent(R.id.act_pauseall, pi(ctx, WidgetActions.A_PAUSE_OTHERS))
+        v.setOnClickPendingIntent(R.id.act_switch, pi(ctx, WidgetActions.A_SWITCH))
+        v.setImageViewResource(R.id.act_switch_icon, if (phone) R.drawable.ic_w_computer else R.drawable.ic_w_phone)
+        v.setTextViewText(R.id.act_switch_label, if (phone) "Play on computer" else "Play on phone")
+        val left = s.sleepLeft
+        v.setTextViewText(R.id.act_sleep_label, if (left > 0) "Sleep ${(left + 59) / 60} min" else "Sleep 30 min")
+    }
+
+    // ---------------------------------------------------------------- the cover, prepared for a widget
+
+    private fun loadArt(ctx: Context, url: String?): Art {
+        if (url == null) return Art(null, null, null, null, null, DEFAULT_ACCENT)
+        val src = try {
+            val r = ctx.imageLoader.execute(ImageRequest.Builder(ctx).data(url).size(320).allowHardware(false).build())
+            (r as? SuccessResult)?.drawable?.toBitmap()
+        } catch (e: Exception) { null } ?: return Art(url, null, null, null, null, DEFAULT_ACCENT)
+        val sq = Bitmap.createScaledBitmap(src, 300, 300, true)
+        val p = Palette.from(sq).maximumColorCount(12).generate()
+        val accent = p.vibrantSwatch?.rgb ?: p.lightVibrantSwatch?.rgb ?: p.dominantSwatch?.rgb ?: DEFAULT_ACCENT
+        return Art(url, rounded(sq, 44f), rounded(sq, 56f), blurredBg(sq, 560, 250, 64f), blurredBg(sq, 600, 120, 60f), accent)
+    }
+
+    private fun rounded(src: Bitmap, r: Float): Bitmap {
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
+        Canvas(out).drawRoundRect(RectF(0f, 0f, src.width.toFloat(), src.height.toFloat()), r, r, paint)
+        return out
+    }
+
+    /** A soft, darkened blur of the cover in the widget's own shape (corners included, so it needs no clipping). */
+    private fun blurredBg(src: Bitmap, w: Int, h: Int, r: Float): Bitmap {
+        val small = Bitmap.createScaledBitmap(src, 24, 24, true)
+        val soft = Bitmap.createScaledBitmap(small, w, h, true)       // scaling a tiny copy up is a cheap, smooth blur
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val dim = ColorMatrix().apply { setScale(0.55f, 0.55f, 0.55f, 1f) }
+        val sat = ColorMatrix().apply { setSaturation(1.35f) }
+        dim.postConcat(sat)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = BitmapShader(soft, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            colorFilter = ColorMatrixColorFilter(dim)
+        }
+        val rect = RectF(0f, 0f, w.toFloat(), h.toFloat())
+        c.drawRoundRect(rect, r, r, paint)
+        val shade = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(0f, 0f, w.toFloat(), 0f, 0x22000000, 0x88000000.toInt(), Shader.TileMode.CLAMP)
+        }
+        c.drawRoundRect(rect, r, r, shade)
+        return out
+    }
+}
