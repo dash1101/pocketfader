@@ -3172,8 +3172,15 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
       const list = el('div', 'list'); for (const it of (sh.items || []).slice(0, 12)) list.appendChild(listItem(it)); wrap.appendChild(list); box.appendChild(wrap);
     }
   }
+  function luckyBtn() {
+    if (view !== 'search' || $('#luckybtn')) return;
+    const res = $('#searchres'); if (!res) return;
+    const b = el('button', 'pill ghost'); b.id = 'luckybtn'; b.textContent = "🎲 I'm feeling lucky"; b.style.margin = '0 0 12px';
+    b.addEventListener('click', async () => { const r = await ytm({ type: 'lucky' }, true); toast(r && r.ok ? 'Playing: ' + (r.picked || '') : "Couldn't pick a song"); });
+    res.parentElement.insertBefore(b, res);
+  }
   const _render = render;
-  render = function () { if (view === 'artist') return renderArtist($('#main')); const out = _render.apply(this, arguments); setTimeout(openBanner, 80); return out; };
+  render = function () { if (view === 'artist') return renderArtist($('#main')); const out = _render.apply(this, arguments); setTimeout(openBanner, 80); setTimeout(luckyBtn, 120); return out; };
   const _activate = activate;
   activate = function (item) {
     if (item && item.kind === 'artist' && item.browseId) { openArtist(item.browseId, item.title); return; }

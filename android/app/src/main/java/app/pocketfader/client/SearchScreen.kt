@@ -99,7 +99,13 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
             }
             searched && results.isEmpty() -> Note("No results.")
             // nothing typed yet: what YouTube Music recommends (the same picks as your home page)
-            !searched && query.isBlank() -> HomeTab(onOpen = { Detail.open(it) })
+            !searched && query.isBlank() -> Column(Modifier.fillMaxSize()) {
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { Remote.command(org.json.JSONObject().put("type", "lucky")) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                ) { Text("🎲  I'm feeling lucky") }
+                HomeTab(onOpen = { Detail.open(it) })
+            }
             else -> LazyColumn(Modifier.fillMaxSize().edgeFade(resultsState), state = resultsState) {
                 items(results, key = { (it.videoId ?: it.playlistId ?: it.title) + it.kind }) { item -> ResultRow(item) }
             }

@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.9.0";
+  const EXT_VERSION = "1.10.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -220,6 +220,7 @@
       shuffle: shuffleOn(),
       autoplay: autoplayOn(),                       // true | false | null (unknown)
       playlistId: (p.getPlaylistId && p.getPlaylistId()) || null,
+      speed: (p.getPlaybackRate && p.getPlaybackRate()) || 1,   // playback speed (1 = normal)
       ext: EXT_VERSION,                             // which version of this script the page is running
       tickMs: Math.round(performance.now() - t0),   // how long reading this state took
     };
@@ -413,6 +414,43 @@
       radio: re ? { playlistId: re.playlistId || null } : null,
       shelves,
     };
+  }
+  /* --- refinements: playback speed, a random song, and turning a list of "title - artist" into a playlist --- */
+  function setSpeed(rate) {
+    const p = mp();
+    const r = Math.max(0.25, Math.min(2, Number(rate) || 1));
+    if (!p || !p.setPlaybackRate) return { ok: false, error: "no_player" };
+    p.setPlaybackRate(r);
+    return { ok: true, speed: p.getPlaybackRate ? p.getPlaybackRate() : r };
+  }
+  // Something you might like, picked at random from your home page (or, failing that, from a search).
+  async function lucky() {
+    let songs = [];
+    try {
+      const secs = await home();
+      songs = secs.flatMap((s) => s.items || []).filter((i) => i.kind === "song" && i.videoId);
+      if (!songs.length) {
+        const albums = secs.flatMap((s) => s.items || []).filter((i) => i.playlistId);
+        if (albums.length) { const a = albums[Math.floor(Math.random() * albums.length)]; return { ...(await startPlaylist(a.playlistId, true)), picked: a.title }; }
+      }
+    } catch (e) {}
+    if (!songs.length) songs = (await search("music mix").catch(() => [])).filter((i) => i.kind === "song" && i.videoId);
+    if (!songs.length) return { ok: false, error: "nothing_to_pick" };
+    const pick = songs[Math.floor(Math.random() * songs.length)];
+    const r = await play(pick.videoId, null);
+    return { ...r, picked: pick.title + (pick.subtitle ? " · " + pick.subtitle : "") };
+  }
+  // "Title - Artist" lines -> the best matching song for each (one search each, kept gentle)
+  async function resolveSongs(queries) {
+    const out = [];
+    for (const q of (queries || []).slice(0, 40)) {
+      try {
+        const hit = (await search(String(q).slice(0, 120))).find((i) => i.kind === "song" && i.videoId);
+        out.push(hit ? { query: q, videoId: hit.videoId, title: hit.title, subtitle: hit.subtitle } : { query: q, videoId: null });
+      } catch (e) { out.push({ query: q, videoId: null }); }
+      await sleep(120);
+    }
+    return { results: out };
   }
   async function playlistItems(browseIdOrPl) {
     let browseId = browseIdOrPl;
@@ -991,6 +1029,9 @@
         case "playlistDelete": return await playlistDelete(cmd);
         case "queueClear": return { ok: await dismissQueue() };
         case "search": return { items: await search(cmd.query) };
+        case "speed": return setSpeed(cmd.rate);
+        case "lucky": return await lucky();
+        case "resolveSongs": return await resolveSongs(cmd.queries);
         case "artist": {
           let id = cmd.browseId;
           if (!id && cmd.videoId) { const a = await artistFor(cmd.videoId).catch(() => null); id = a && a.id; }
@@ -1072,6 +1113,15 @@
     if (!d || d.__vmr !== "cmd") return;
     const data = await handle(d.command);
     window.postMessage({ __vmr: "result", id: d.command.id, data }, "*");
+  });
+
+  // The in-tab Refine panel (refine.js) asks for things here, on its own message channel (results don't go to the server).
+  window.addEventListener("message", async (ev) => {
+    if (ev.source !== window) return;
+    const d = ev.data;
+    if (!d || d.__vmr !== "ui" || !d.command) return;
+    const data = await handle(d.command);
+    window.postMessage({ __vmr: "ui-result", id: d.id, data }, "*");
   });
 
   // Push now-playing + queue on a heartbeat so connected clients stay live.

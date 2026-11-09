@@ -66,7 +66,9 @@ third-party and best-effort. `capabilities.lyrics` is `true` on servers that hav
 |---|---|---|
 | `POST /api/volume` | `{"percent": 0-100}` and/or `{"delta": ±n}` and/or `{"muted": bool}` | `503` if no output; `400` on bad values. |
 | `POST /api/ytm` | `{"type": "transport", "action": "playpause\|next\|prev\|seek", "position"?: s}` | Goes to the extension if connected, else the host media player. |
-| `POST /api/ytm` | `{"type": "search"\|"play"\|"queueAdd"\|"home"\|"playlists"\|"startPlaylist"\|…, …}` | Extension only (`{"error":"extension_offline"}` otherwise). See `extension/ytm_main.js`. |
+| `POST /api/ytm` | `{"type": "search"\|"play"\|"queueAdd"\|"home"\|"playlists"\|"startPlaylist"\|"artist"\|"speed"\|"lucky"\|…, …}` | Extension only (`{"error":"extension_offline"}` otherwise). See `extension/ytm_main.js`. `artist` takes `browseId`, `videoId` (the artist of that song) or `name` and returns `{name, subscribers, description, thumb, play, radio, shelves}`; `speed` takes `rate` (0.25–2); `lucky` plays a random pick from your home page. |
+| `POST /api/ytm` | `{"type": "play", "videoId", "playlistId"?}`, `{"type": "startPlaylist", "playlistId"}` or `{"type": "open"}` **with no YouTube Music tab connected** | The computer opens music.youtube.com in its browser (the song, the playlist or the home page) and replies `{"ok": true, "opened": true}`. Only valid ids are accepted and only music.youtube.com is ever opened. |
+| `POST /api/media/pause-others` | `{}` | Pauses every other media player that is playing on the computer (not the YouTube Music song playing); replies `{paused: [names], supported}`. The shared preference `pauseOthers` (set through `POST /api/prefs`) makes the computer do this by itself whenever YouTube Music starts playing. |
 | `POST /api/media` | `{"action": "playpause\|next\|prev"}` or `{"action":"seek","position":s}` | Host media player directly. |
 | `POST /api/session` | `{"app": "<id>"\|null}` | Pin which player the server controls (`null` = auto). |
 | `POST /api/eq` | `{"band": "bass\|mid\|high", "db": -12..12}` | `501` unless `capabilities.eq`. |

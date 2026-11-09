@@ -16,27 +16,33 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.8
+### What's new in alpha.9
 
-- **Ambient cover glow (Android)**: the glow is no longer one flat colour. It's a soft blur of the cover's own edges carried
-  outward, so each side of the album art lights up in the colours that are actually there. It's drawn behind the list, so it
-  spreads under the top bar instead of being cut off in a hard line.
-- **Smoother seek wave**: drawn from many short steps and eased flat at both ends, so there are no rough edges.
-- **Settings in pages**: Settings opens as an overview of categories (Sound & outputs, Lyrics, Controls, Appearance, Effects,
-  Screen & always-on, Connection, Discord presence, Updates, Performance, About). The old **Mixer** (volume, output devices,
-  equalizer) is now **Sound & outputs**, and Discord presence has its own page.
-- **Settings in the bottom navigation** replaces Mixer. In Settings → Appearance you can also choose a **floating pill**
-  navigation bar instead of the classic bar.
-- **Scrolling on old tablets**: fixed a slowdown from alpha.7 where the whole screen was redrawn on every update (the sleep timer's
-  clock changed each time). There's also a new **Pictures in the queue** switch (Settings → Performance) to turn the little
-  cover pictures off if the queue is still slow on an old device. Not measured on a device, so tell us how it feels.
-- **Like and autoplay (extension 1.7)**: newer YouTube Music builds use different player controls; the extension now looks for the
-  like button there. Autoplay can't be changed while loop is on (YouTube Music hides and ignores it), so the app says so
-  instead of silently failing. **Reload the extension and refresh the YouTube Music tab.**
-- Friendlier messages in the app for a queue move, like or autoplay that didn't go through.
+- **Cover glow, fixed (Android)**: the glow no longer ends in hard lines. It's now a smooth, blurred copy of the cover that fades
+  out evenly on all four sides (not a circle), it fades away as you scroll instead of switching off, and it's much less pixelated.
+- **Artist pages**: tap an artist's name under the song title (or an artist in search or your library) to see who they are, play
+  or shuffle them, start their radio, and browse their top songs, albums, singles and similar artists.
+- **Search shows recommendations** when it's empty (your YouTube Music picks), with an **I'm feeling lucky** button.
+- **Soft fades** where lists scroll off the top and bottom, and the slim now-playing bar now **glides** in and out when the full
+  controls leave or return to the screen.
+- **What's new on the Updates page** is now a short list of the changes, not the whole release page.
+- **Start music with no browser open**: if no YouTube Music tab is connected, a button (Now playing, Search, Library) asks the computer
+  to open YouTube Music in its browser, and tapping a song opens it there. Settings → Controls also has **Pause other players now**
+  and **Pause other players when YouTube Music starts** (Spotify, a video in another tab, and so on).
+- **The web app** has been restyled to match the Android app (rounder shapes, a wavy seek bar, a play button that changes shape,
+  an optional floating pill navigation bar, cover glow and shape options) and caught up on features: artist pages, the sleep timer,
+  I'm feeling lucky, opening YouTube Music on the computer, and pausing other players.
+- **Extension 1.10**:
+  - **Like and autoplay** now work with the newest YouTube Music controls (the like button is read from its new buttons).
+  - **Lighter**: the extension no longer scans the whole page every few seconds. If YouTube Music still freezes or goes grey,
+    tell us: the extension now records how long each of its reads takes.
+  - **Refine panel**: a ✦ button inside music.youtube.com with playback speed, I'm feeling lucky, an experimental colour theme, a
+    **Gemini playlist maker** (bring your own API key), Discord presence controls and a few Pocketfader options. See docs/REFINE.md.
+    **Reload the extension (it asks for two new permissions) and refresh the YouTube Music tab.**
 
 ### Earlier
 
+- alpha.8: ambient cover glow, Settings in pages, Settings in the navigation, floating pill navigation, scrolling fixes.
 - alpha.7: install/start/update YTM Beacon from the app, effects (cover glow, wavy seek bar, cover shapes, transitions), a sleep timer, sturdier queue reordering.
 - alpha.6: readable colours on every theme, accent colour picker, Discord presence card, safer app updates.
 - alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons.
