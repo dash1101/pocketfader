@@ -41,10 +41,13 @@ class NowBarWidget : WidgetBase() { override val kind = WidgetKind.Bar }
 class CoverWidget : WidgetBase() { override val kind = WidgetKind.Cover }
 class VolumeWidget : WidgetBase() { override val kind = WidgetKind.Volume }
 class ActionsWidget : WidgetBase() { override val kind = WidgetKind.Actions }
+class BeaconWidget : WidgetBase() { override val kind = WidgetKind.Beacon }
+class UpNextWidget : WidgetBase() { override val kind = WidgetKind.UpNext }
 
 enum class WidgetKind(val layout: Int) {
     Wide(R.layout.widget_now_wide), Bar(R.layout.widget_now_bar), Cover(R.layout.widget_cover),
     Volume(R.layout.widget_volume), Actions(R.layout.widget_actions),
+    Beacon(R.layout.widget_beacon), UpNext(R.layout.widget_upnext),
 }
 
 abstract class WidgetBase : AppWidgetProvider() {
@@ -53,6 +56,7 @@ abstract class WidgetBase : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         Widgets.render(context)
         Widgets.refreshSoon(context)
+        Widgets.refreshBeacon(context)
     }
 
     override fun onEnabled(context: Context) { Widgets.render(context) }
@@ -82,12 +86,27 @@ class WidgetActions : BroadcastReceiver() {
             A_LUCKY -> if (s.ytm) Remote.command(org.json.JSONObject().put("type", "lucky")) else open(context)
             A_SLEEP -> Remote.setSleep(30)
             A_PAUSE_OTHERS -> Remote.pauseOthers()
+            A_PLAY_AT -> {
+                val i = intent.getIntExtra("index", -1)
+                s.queue.firstOrNull { it.section == "queue" && it.index == i }?.let { Remote.queuePlayAt(it) }
+            }
             A_SWITCH -> if (ConfigStore(context).load().isSet) Remote.setPlayOn(if (Remote.local) "computer" else "phone", carryOver = true)
         }
         // keep the process alive for a moment: the command goes out, the state comes back, the widgets redraw
         val pending = goAsync()
+        val action = intent.action
         Widgets.scope.launch {
             try {
+                if (action == A_BEACON_TOGGLE || action == A_BEACON_HIDE) {
+                    val b = Widgets.beacon
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            if (action == A_BEACON_HIDE) Remote.beaconVisibility(false, 60)
+                            else if (b != null && b.reachable) Remote.beaconVisibility(!b.visible)
+                        }
+                    }
+                    Widgets.refreshBeacon(context)
+                }
                 withContext(Dispatchers.IO) { Remote.pollNow() }
                 Widgets.render(context)
                 delay(1500)
@@ -115,6 +134,9 @@ class WidgetActions : BroadcastReceiver() {
         const val A_SLEEP = "app.pocketfader.widget.SLEEP"
         const val A_PAUSE_OTHERS = "app.pocketfader.widget.PAUSE_OTHERS"
         const val A_SWITCH = "app.pocketfader.widget.SWITCH"
+        const val A_PLAY_AT = "app.pocketfader.widget.PLAY_AT"
+        const val A_BEACON_TOGGLE = "app.pocketfader.widget.BEACON_TOGGLE"
+        const val A_BEACON_HIDE = "app.pocketfader.widget.BEACON_HIDE"
     }
 }
 
@@ -134,7 +156,7 @@ object Widgets {
         val app = ctx.applicationContext
         scope.launch {
             Remote.state
-                .map { s -> listOf(s.now?.title, s.now?.artist, s.now?.art, s.now?.playing, s.now?.liked, s.volume.percent, s.volume.muted, s.source, s.online, s.ytm, Remote.local) }
+                .map { s -> listOf(s.now?.title, s.now?.artist, s.now?.art, s.now?.playing, s.now?.liked, s.volume.percent, s.volume.muted, s.source, s.online, s.ytm, Remote.local, s.queue) }
                 .distinctUntilChanged()
                 .collect { if (any(app)) render(app) }
         }
@@ -142,7 +164,10 @@ object Widgets {
         scope.launch {
             while (true) {
                 delay(10_000)
-                if (Remote.state.value.now?.playing == true && any(app)) render(app)
+                if (any(app)) {
+                    if (WidgetKind.Beacon.let { ids(app, it).isNotEmpty() }) refreshBeacon(app)
+                    if (Remote.state.value.now?.playing == true) render(app)
+                }
             }
         }
     }
@@ -158,8 +183,21 @@ object Widgets {
     private val providers = mapOf(
         WidgetKind.Wide to NowWideWidget::class.java, WidgetKind.Bar to NowBarWidget::class.java,
         WidgetKind.Cover to CoverWidget::class.java, WidgetKind.Volume to VolumeWidget::class.java,
-        WidgetKind.Actions to ActionsWidget::class.java,
+        WidgetKind.Actions to ActionsWidget::class.java, WidgetKind.Beacon to BeaconWidget::class.java,
+        WidgetKind.UpNext to UpNextWidget::class.java,
     )
+
+    /** YTM Beacon's status as the computer reports it (null: not reachable or not asked yet). */
+    @Volatile var beacon: BeaconStatus? = null
+
+    fun refreshBeacon(ctx: Context) {
+        val app = ctx.applicationContext
+        if (ids(app, WidgetKind.Beacon).isEmpty()) return
+        scope.launch {
+            beacon = withContext(Dispatchers.IO) { runCatching { Remote.beaconStatus() }.getOrNull() }
+            draw(app, Remote.state.value)
+        }
+    }
 
     private fun ids(ctx: Context, kind: WidgetKind): IntArray =
         AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, providers.getValue(kind)))
@@ -189,6 +227,8 @@ object Widgets {
                 WidgetKind.Wide, WidgetKind.Bar, WidgetKind.Cover -> nowPlaying(ctx, v, kind, s)
                 WidgetKind.Volume -> volume(ctx, v, s)
                 WidgetKind.Actions -> actions(ctx, v, s)
+                WidgetKind.Beacon -> beaconView(ctx, v)
+                WidgetKind.UpNext -> upNext(ctx, v, s)
             }
             for (id in ids) runCatching { m.updateAppWidget(id, v) }
         }
@@ -254,6 +294,57 @@ object Widgets {
             if (now?.liked == true) v.setInt(R.id.like, "setColorFilter", acc) else v.setInt(R.id.like, "setColorFilter", 0xFFA9ACB6.toInt())
             v.setOnClickPendingIntent(R.id.like, pi(ctx, WidgetActions.A_LIKE))
         }
+    }
+
+    private fun beaconView(ctx: Context, v: RemoteViews) {
+        val b = beacon
+        val acc = accent()
+        val tone = when {
+            b == null || !b.reachable -> 0xFF8A8D98.toInt()
+            b.headline in setOf("showing", "waiting", "idle") -> 0xFF3DDC97.toInt()
+            b.headline == "off" -> 0xFF8A8D98.toInt()
+            b.headline in setOf("discord-down", "extension-missing", "unsupported") -> 0xFFFF6B6B.toInt()
+            else -> 0xFFFFB84D.toInt()
+        }
+        v.setInt(R.id.b_dot_bg, "setColorFilter", tone)
+        v.setTextViewText(R.id.b_status, if (b == null) "Checking…" else beaconSummary(b))
+        v.setTextViewText(R.id.b_song, b?.song?.let { (if (it.playing) "▶ " else "⏸ ") + it.title + if (it.artist.isNotBlank()) " · " + it.artist else "" } ?: "")
+        val usable = b != null && b.reachable && b.headline != "unsupported"
+        v.setInt(R.id.b_toggle_bg, "setColorFilter", if (usable) acc else 0xFF45474F.toInt())
+        v.setInt(R.id.b_toggle_icon, "setColorFilter", if (usable) onColor(acc) else 0xFFA9ACB6.toInt())
+        v.setImageViewResource(R.id.b_toggle_icon, if (b != null && b.visible) R.drawable.ic_w_eye else R.drawable.ic_w_eye_off)
+        v.setOnClickPendingIntent(R.id.b_toggle, pi(ctx, WidgetActions.A_BEACON_TOGGLE))
+        v.setOnClickPendingIntent(R.id.b_hide, pi(ctx, WidgetActions.A_BEACON_HIDE))
+        v.setOnClickPendingIntent(R.id.root, openApp(ctx))
+    }
+
+    private val rowIds = listOf(
+        listOf(R.id.u0, R.id.u0_n, R.id.u0_t, R.id.u0_a, R.id.u0_d), listOf(R.id.u1, R.id.u1_n, R.id.u1_t, R.id.u1_a, R.id.u1_d),
+        listOf(R.id.u2, R.id.u2_n, R.id.u2_t, R.id.u2_a, R.id.u2_d), listOf(R.id.u3, R.id.u3_n, R.id.u3_t, R.id.u3_a, R.id.u3_d),
+    )
+
+    private fun upNext(ctx: Context, v: RemoteViews, s: RemoteState) {
+        val songs = s.queue.filter { it.section == "queue" }
+        val cur = songs.indexOfFirst { it.selected }
+        val next = songs.drop(if (cur >= 0) cur + 1 else 0)
+        v.setTextViewText(R.id.u_count, if (next.isEmpty()) "" else "${next.size} songs")
+        v.setViewVisibility(R.id.u_empty, if (next.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE)
+        for ((i, ids) in rowIds.withIndex()) {
+            val t = next.getOrNull(i)
+            v.setViewVisibility(ids[0], if (t == null) android.view.View.GONE else android.view.View.VISIBLE)
+            if (t == null) continue
+            v.setTextViewText(ids[2], t.title)
+            v.setTextViewText(ids[3], t.artist)
+            v.setTextViewText(ids[4], t.duration)
+            v.setOnClickPendingIntent(
+                ids[0],
+                PendingIntent.getBroadcast(
+                    ctx, 1000 + i, Intent(ctx, WidgetActions::class.java).setAction(WidgetActions.A_PLAY_AT).putExtra("index", t.index),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
+            )
+        }
+        v.setOnClickPendingIntent(R.id.root, openApp(ctx))
     }
 
     private fun volume(ctx: Context, v: RemoteViews, s: RemoteState) {

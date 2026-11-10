@@ -78,6 +78,15 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_actions" />
         </receiver>
+
+        <receiver android:name=".BeaconWidget" android:exported="false" android:label="@string/widget_name_beacon">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_beacon" />
+        </receiver>
+        <receiver android:name=".UpNextWidget" android:exported="false" android:label="@string/widget_name_upnext">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_upnext" />
+        </receiver>
         <receiver android:name=".WidgetActions" android:exported="false" />
     </application>
 </manifest>

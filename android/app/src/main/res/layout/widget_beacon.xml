@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="10dp" android:paddingEnd="10dp">
+    <FrameLayout android:layout_width="46dp" android:layout_height="46dp">
+        <ImageView android:id="@+id/b_dot_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_w_discord" android:contentDescription="Discord presence" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="11.5sp" android:singleLine="true" android:text="Discord presence" />
+        <TextView android:id="@+id/b_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFF2F3F7" android:textSize="15sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="end" android:text="Checking…" />
+        <TextView android:id="@+id/b_song" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="12sp" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+    <FrameLayout android:id="@+id/b_hide" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="6dp">
+        <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+        <ImageView android:id="@+id/b_hide_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_moon" android:contentDescription="Hide for an hour" />
+    </FrameLayout>
+    <FrameLayout android:id="@+id/b_toggle" android:layout_width="46dp" android:layout_height="46dp" android:layout_marginStart="8dp">
+        <ImageView android:id="@+id/b_toggle_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+        <ImageView android:id="@+id/b_toggle_icon" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_w_eye" android:contentDescription="Show or hide on Discord" />
+    </FrameLayout>
+</LinearLayout>

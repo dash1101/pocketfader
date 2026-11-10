@@ -10,4 +10,8 @@
     <string name="widget_name_cover">Cover</string>
     <string name="widget_name_volume">Volume</string>
     <string name="widget_name_actions">Quick actions</string>
+    <string name="widget_desc_beacon">Whether YTM Beacon is showing your music on Discord, with a switch and hide for an hour</string>
+    <string name="widget_desc_upnext">The next songs in the queue; tap one to play it</string>
+    <string name="widget_name_beacon">Discord presence</string>
+    <string name="widget_name_upnext">Up next</string>
 </resources>
