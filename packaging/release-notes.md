@@ -16,15 +16,38 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.14
+### What's new in alpha.15
 
-- **The Android app has a new application ID: `app.novalabs.pocketfader`.** Android treats it as a different app, so this version
-  does **not** update the old one: **uninstall the old Pocketfader, then install this APK**. Your settings and downloads are in
-  the old app's storage and don't carry over, so you'll set up the connection again. From here on, updates install over each
-  other as before (same signing key).
+**Your library, without the computer.** The Android app now keeps a copy of your YouTube Music library and makes its own
+recommendations, so playing on the phone feels the same whether or not YouTube Music is open on your computer.
+
+- **Library sync:** your playlists (all their songs), liked songs and YouTube Music home page are copied to the phone whenever
+  YouTube Music is open on the computer (Settings → Library & offline). Without it, Search → Playlists shows the synced copy and
+  every playlist opens and plays from it. Likes and songs you add to your own playlists in the meantime are sent to your account
+  at the next sync.
+- **For you, made on the phone:** Quick picks, Listen again, Mixed for you (a radio per favourite artist), Forgotten favorites and
+  Discover, worked out from what you play (on the phone and on the computer), skip and like, using YouTube Music's own song
+  radios. "I'm feeling lucky" uses them too. Your listening history stays on the phone.
+- **Better autoplay on the phone:** it continues with YouTube Music's radio for the song, not with YouTube's related videos (which
+  could add hour-long compilations), and leaves out songs you just heard or keep skipping.
+- **Automatic downloads:** keep your liked songs downloaded, keep any playlist on the phone ("Keep on this phone" on the
+  playlist), and smart downloads (your most played songs and current quick picks). A space limit and a Wi-Fi only option;
+  songs you downloaded yourself are never removed automatically.
+- **Faster, sturdier downloads,** fetched in pieces at full speed, with a progress notification and a Stop button.
+- **Playing on the phone:** shuffle keeps "Play next" working and shows the real order; a sleep timer (including "when this
+  song ends"); the queue and position are kept when the app is closed; a song that won't load is retried once, and playback stops
+  instead of racing through the queue when nothing loads (no connection).
+- **Search:** suggestions as you type, recent searches, and results that stay when you switch screens. Song names found
+  without the computer are tidied ("Bohemian Rhapsody" by Queen, not "Queen – Bohemian Rhapsody (Official Video)").
+- **Fixes:** the widgets' lucky, sleep and mute buttons act on the phone when music plays there; likes work while playing on the
+  phone; moving playback to the phone starts from the right song.
+- **Computer and extension (1.14):** with several YouTube Music tabs open, Pocketfader follows the one that's playing instead of
+  mixing them up; commands sent while the tab was reloading no longer run late (three taps on Next don't skip three songs a
+  minute later). Reload the extension in your browser to get 1.14.
 
 ### Earlier
 
+- alpha.14: new Android application ID `app.novalabs.pocketfader` (uninstall the old app once).
 - alpha.13: widgets without a background, plus Discord presence and Up next widgets.
 - alpha.12: widgets redesigned (clean card, rounded cover, live elapsed time); extension 1.13 quieter in the background.
 - alpha.11: home-screen widgets and a new icon.

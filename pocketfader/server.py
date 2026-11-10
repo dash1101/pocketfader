@@ -213,10 +213,16 @@ class App:
             except Exception:
                 pass
 
+    # Commands that page through YouTube Music (a whole playlist, the home page) take longer than a button press.
+    # (each a little under what the app itself waits, so the app gets the answer, or this server's "timed out")
+    SLOW = {"home": 38.0, "lucky": 30.0, "artist": 28.0, "resolveSongs": 60.0, "search": 18.0, "playlists": 22.0}
+
     def ytm_command(self, body):
         """Extension first (full YT Music control). Transport-only fallback to the host player."""
         if self.bridge.connected:
-            return self.bridge.request(body)
+            t = body.get("type")
+            timeout = 115.0 if t == "playlistItems" and body.get("limit") else self.SLOW.get(t, 10.0)
+            return self.bridge.request(body, timeout=timeout)
         # No YouTube Music tab: opening the song (or the home page) in the browser starts one.
         t = body.get("type")
         try:

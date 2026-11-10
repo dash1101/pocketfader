@@ -81,12 +81,15 @@ object Library {
 
     private val pending = ArrayList<JSONObject>()     // changes waiting for the account
     @Volatile private var syncing = false
+    /** True once what's saved on the phone has been read (nothing may be judged missing before that). */
+    @Volatile var loaded = false
+        private set
     @Volatile private var lastAttempt = 0L
 
     fun init(ctx: Context) {
         if (::dir.isInitialized) return
         dir = File(ctx.filesDir, "library").apply { mkdirs() }
-        scope.launch { load() }
+        scope.launch { runCatching { load() }; loaded = true }
     }
 
     private fun file(name: String) = File(dir, name)
@@ -296,7 +299,9 @@ object Library {
                 flushPending()
                 _status.value = "Syncing your liked songs…"
                 runCatching { Remote.playlistItems(SearchItem("Liked music", "", null, null, "LM", "playlist"), limit = 5000) }
-                    .getOrNull()?.mapNotNull { it.toLocal() }?.let { list ->
+                    .getOrNull()?.mapNotNull { it.toLocal() }
+                    // an empty answer when there were likes is more likely a hiccup than every like removed: keep what we have
+                    ?.takeIf { it.isNotEmpty() || _liked.value.isEmpty() }?.let { list ->
                         // likes made here since that list was read stay in it
                         val pendingLikes = synchronized(lock) { pending.filter { it.optString("type") == "like" } }
                         var merged = list
@@ -314,6 +319,7 @@ object Library {
                     id != null && id != "LM" && id != "SE"
                 }
                 val old = _playlists.value.associateBy { it.id }
+                if (lists.isEmpty() && old.isNotEmpty()) throw ApiException(0, "YouTube Music returned no playlists; kept the ones already here")
                 val out = ArrayList<SyncedList>()
                 for ((i, p) in lists.withIndex()) {
                     val id = p.playlistId ?: p.browseId?.removePrefix("VL") ?: continue

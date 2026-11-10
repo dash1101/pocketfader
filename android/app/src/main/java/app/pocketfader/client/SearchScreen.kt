@@ -180,7 +180,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         ) { Text("🎲  I'm feeling lucky") }
                         // your account's home page through the computer; otherwise the phone's own picks
-                        if (s.ytm && !Remote.local) HomeTab(onOpen = { Detail.open(it) }) else ForYouTab(s, onOpen = { Detail.open(it) })
+                        if (s.ytm) HomeTab(onOpen = { Detail.open(it) }) else ForYouTab(s, onOpen = { Detail.open(it) })
                     }
                     1 -> if (s.ytm) PlaylistsTab(onOpen = { Detail.open(it) }) else SyncedPlaylistsTab(s, onOpen = { Detail.open(it) })
                     else -> DeviceTab()

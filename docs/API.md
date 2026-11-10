@@ -78,7 +78,9 @@ third-party and best-effort. `capabilities.lyrics` is `true` on servers that hav
 
 ## Extension channel (loopback)
 
-`GET /ext/poll` (long-poll, ≤25 s), `POST /ext/state`, `POST /ext/result` — used only by the browser extension.
+`GET /ext/poll?i=<tab>` (long-poll, ≤25 s), `POST /ext/state`, `POST /ext/result` — used only by the browser extension. Each
+YouTube Music tab names itself (`i` on the poll, `instance` in its state); with several tabs open the server follows one (the one
+playing) and only that tab receives commands. A command that times out is dropped, not run later.
 
 ## Planned for the native app (not implemented)
 

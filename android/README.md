@@ -11,8 +11,8 @@ Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows y
 | Tab | What it does |
 |---|---|
 | **Playing** | The player (cover, seek bar, shuffle / previous / play-pause / next / loop, like, volume) with **Up next** and **Lyrics** underneath. |
-| **Search** | Search YouTube Music, and your library in tabs: **For you** (your home shelves), **Playlists** (play, shuffle, download, and edit your own) and **On this phone** (downloads and the phone's music files). The ⋮ menu on any song can play it, put it next, add it to your queue or a playlist, start a radio, or download it. |
-| **Settings** | Split into pages: **Sound & outputs** (master volume, every output device with its **own level**, the built-in equalizer), Lyrics, Controls, Appearance (theme, accent colour, navigation style), Effects, Screen & always-on, Connection, **Discord presence**, Updates, Performance and About. |
+| **Search** | Search YouTube Music (suggestions as you type, recent searches), and your library in tabs: **For you** (your home shelves, or recommendations made on the phone), **Playlists** (play, shuffle, download, keep on the phone, and edit your own) and **On this phone** (downloads and the phone's music files). The ⋮ menu on any song can play it, put it next, add it to your queue or a playlist, start a radio, or download it. |
+| **Settings** | Split into pages: **Sound & outputs** (master volume, every output device with its **own level**, the built-in equalizer), Downloads & playing on this phone, **Library & offline** (sync, automatic downloads, listening history), Lyrics, Controls, Appearance (theme, accent colour, navigation style), Effects, Screen & always-on, Connection, **Discord presence**, Updates, Performance and About. |
 
 **Up next** shows what's already played (collapsed), the current track, what's coming, and YouTube Music's
 autoplay suggestions. Suggestions that won't play (because the queue is looping or autoplay is off) are dimmed
@@ -22,7 +22,7 @@ shuffle / loop / autoplay chips spells out what is being shuffled or looped.
 **Lyrics** follow the song line by line (tap a line to jump to it). Pick a source (LRCLIB, NetEase, YouTube
 Music), look again with ↻, and switch **Romanize** or **Translation** on when a source has them.
 
-On tablets and in landscape the player stays on the left; Queue, Lyrics, Search and Library are tabs on the right (Settings is the gear in the top bar).
+On tablets and in landscape the player stays on the left; Queue, Lyrics and Search are tabs on the right.
 
 Outside the app, a **media notification** shows what's playing with previous / play-pause / next and works on
 the lock screen and with Bluetooth headsets. While something is playing, the phone's **hardware volume keys
@@ -62,6 +62,24 @@ The button at the top switches between playing on the computer and on this phone
 directly (through [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor)); if that fails, a connected computer
 fetches the song instead. Downloads keep the audio, cover and lyrics in the app's own folder and play offline. Lyrics on the
 phone come from the computer when it's there, else from LRCLIB.
+
+### Your library without the computer
+
+While YouTube Music is open on the computer, the app copies your **playlists** (every song), **liked songs** and your
+YouTube Music **home page** to the phone (Settings → Library & offline; automatically every few hours, or **Sync now**).
+When the computer isn't there, Search → Playlists shows that copy, and playlists open and play from it. Likes, and songs
+added to your own playlists, are kept and sent to your account at the next sync.
+
+**For you** is then worked out on the phone: songs you play a lot, played lately or liked are used as seeds, YouTube
+Music's radio for each seed is fetched, and everything they suggest is ranked (songs several seeds lead to, and songs by
+artists you listen to, rank higher; songs you just heard or keep skipping drop). The shelves are Quick picks, Listen again,
+Your playlists, Mixed for you (a radio per favourite artist), Forgotten favorites and Discover. Autoplay on the phone
+continues with the song's YouTube Music radio, filtered the same way. What you listen to (on the phone, and on the computer
+while the app is connected) is remembered on the phone only; you can clear it in Settings.
+
+**Automatic downloads** (Settings → Library & offline): liked songs, playlists you mark "Keep on this phone", and smart
+downloads (your most played songs plus the current quick picks), within a space limit you choose, on Wi-Fi only if you like.
+Songs you download yourself are never removed automatically. Downloads show progress in a notification.
 
 **License:** because it includes NewPipe Extractor, the Android app is GPL-3.0-or-later (see `android/LICENSE`).
 

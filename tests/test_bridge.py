@@ -89,5 +89,29 @@ class BridgeTabsTests(unittest.TestCase):
         self.assertEqual(got["r"], "done")
 
 
+class SlowCommandTests(unittest.TestCase):
+    def test_paging_commands_get_more_time_than_a_button_press(self):
+        from pocketfader.server import App
+        seen = []
+
+        class B:
+            connected = True
+            def request(self, body, timeout=10.0):
+                seen.append((body["type"], timeout))
+                return {"ok": True}
+
+        app = App.__new__(App)
+        app.bridge = B()
+        app.ytm_command({"type": "transport", "action": "next"})
+        app.ytm_command({"type": "playlistItems", "playlistId": "PLx"})
+        app.ytm_command({"type": "playlistItems", "playlistId": "PLx", "limit": 3000})
+        app.ytm_command({"type": "home"})
+        d = dict(seen[:2])
+        self.assertEqual(d["transport"], 10.0)
+        self.assertEqual(seen[1][1], 10.0)              # the first page only: quick
+        self.assertGreater(seen[2][1], 60.0)            # a whole playlist: long
+        self.assertGreater(seen[3][1], 30.0)
+
+
 if __name__ == "__main__":
     unittest.main()

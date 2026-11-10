@@ -165,7 +165,9 @@ object AutoDownload {
         return kept to complete
     }
 
-    private fun run() {
+    private suspend fun run() {
+        // the library is read from storage when the app starts; until then, nothing may be judged unwanted
+        while (!Library.loaded) delay(500)
         val autos = Downloads.items.value.filter { it.auto }
         val p = Settings.prefs.value
         val anyRule = p.autoDlLiked || p.smartDownloads > 0 || Library.keepOffline.value.isNotEmpty()
