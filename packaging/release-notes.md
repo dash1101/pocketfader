@@ -16,17 +16,17 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.12
+### What's new in alpha.13
 
-- **Widgets redesigned**: a clean dark card instead of the blurred background, with a large rounded cover, the title and artist,
-  a progress bar with the elapsed time (it counts by itself) and the length, and round previous / play-pause / next buttons.
-  The slim, cover, volume and quick-action widgets follow the same style. The play button uses your accent colour
-  (Settings → Appearance), or a soft periwinkle by default.
-- **Extension 1.13**: while the YouTube Music tab is in the background it now reports only every few seconds and does no other
-  work, and it records how long the page stalls, so freezes can be traced. **Reload the extension and refresh the tab.**
+- **Widgets have no background of their own** any more, so they sit on whatever card your launcher draws for widgets.
+- **Two new widgets**:
+  - **Discord presence** (4×1): whether YTM Beacon is showing your music on Discord (a coloured dot and a one-line status, plus the
+    song), a button to switch it on or off, and one to hide it for an hour.
+  - **Up next** (4×2): the next four songs in the queue, with their length. Tap one to play it.
 
 ### Earlier
 
+- alpha.12: widgets redesigned (clean card, rounded cover, live elapsed time); extension 1.13 quieter in the background.
 - alpha.11: home-screen widgets and a new icon.
 - alpha.10: play on the phone itself (YouTube Music and local files), downloads with lyrics, Search with Playlists and On this phone tabs.
 - alpha.9: smoother cover glow, artist pages, search recommendations, soft edges, web app restyle.

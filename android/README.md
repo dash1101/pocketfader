@@ -50,9 +50,11 @@ Long-press the home screen → Widgets → Pocketfader:
 - **Now playing (slim)** (4×1): cover, title and controls in one row.
 - **Cover** (2×2): the album art with play / pause.
 - **Volume** (3×1): the volume of wherever music is playing (computer or phone), with mute.
+- **Discord presence** (4×1): YTM Beacon's status, a switch to show or hide it, and hide for an hour.
+- **Up next** (4×2): the next four songs; tap one to play it.
 - **Quick actions** (2×2): I'm feeling lucky, a 30-minute sleep timer, pause other players, and switch between phone and computer.
 
-They use the cover's colours and follow the app (the computer's state comes in while the app or its notification is running).
+They have no background of their own (your launcher draws one) and follow the app (the computer's state comes in while the app or its notification is running).
 
 ## Playing on the phone
 
