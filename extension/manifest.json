@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pocketfader \u2014 YT Music Bridge",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Lets the Pocketfader app control YouTube Music playing in this browser.",
   "host_permissions": [
     "http://127.0.0.1:8777/*",
@@ -13,7 +13,8 @@
         "https://music.youtube.com/*"
       ],
       "js": [
-        "ytm_main.js"
+        "ytm_main.js",
+        "refine.js"
       ],
       "world": "MAIN",
       "run_at": "document_idle"

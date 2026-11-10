@@ -15,6 +15,14 @@ public-IP posture.
   talk over `window.postMessage`.
 - No background service worker — the always-open YT Music tab is the anchor.
 
+## Refine (improvements to YouTube Music itself)
+`refine.js` adds a ✦ button to YouTube Music's top bar. From there you can switch each part on or off:
+a Material 3 Expressive look (rounder shapes, colours from the album art, expressive player controls, a wavy progress bar,
+a glow behind the cover), a richer speed menu on the player's own speed button (any speed, pitch on/off, remembered per song
+or playlist), a "play something you might like" button in the player, and a playlist maker. Settings stay in this browser.
+If the page ever looks wrong, open `https://music.youtube.com/?pf-refine=off` to load it without Refine, then switch off the
+part that misbehaves. See `docs/REFINE.md`.
+
 ## Load it (one time)
 1. In Brave, open **`brave://extensions`** (or `chrome://extensions`).
 2. Turn on **Developer mode** (top-right toggle).

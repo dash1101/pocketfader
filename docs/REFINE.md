@@ -6,9 +6,27 @@ Everything here is built to run on **your** computer and your own account; nothi
 
 ## Status
 
-Parked for now. A first experiment (a floating panel inside the tab) was removed: the goal is for these features to feel like
-part of YouTube Music itself (its own menus, settings and player controls), not a separate panel. What remains in the extension
-are the building blocks the apps already use: playback speed, "I'm feeling lucky", and artist pages.
+The first part is built (extension 1.15, `extension/refine.js`). It lives in YouTube Music's own page rather than in a
+separate panel: a ✦ button in the top bar opens its settings, the speed menu opens from the player's own speed button, and the
+"something you might like" button sits among the player controls.
+
+| Done | Where | Switch |
+|---|---|---|
+| Rounder shapes (covers, list rows, queue, menus, dialogs, search box, chips) | style layer | Rounder shapes |
+| Colours from the album art: tonal surfaces and an accent from the cover's most vivid colour | style layer + cover sampling | Colours from the album art |
+| Expressive player controls: bigger play button that morphs circle ↔ rounded square, tinted hover and pressed buttons | style layer | Expressive player controls |
+| Wavy progress bar: drawn over YouTube Music's own (which stays underneath, invisible, so seeking and dragging are unchanged) | canvas | Wavy progress bar |
+| Glow behind the cover | style layer | Glow behind the cover |
+| Speed menu: 0.25×–3×, presets, pitch on/off, remember per song or per playlist | YouTube Music's speed button | Richer speed menu, Keep the pitch |
+| Random-song button in the player controls | player controls | Something-you-might-like button |
+| Playlist maker (item 3 below) | ✦ menu → Make a playlist | — |
+
+`?pf-refine=off` on music.youtube.com starts a page with all of it off (the saved choices are kept). The extension's layout
+snapshot (`~/.config/pocketfader/ytm-layout.json`, written a few seconds after each page load) now also records the progress
+slider, the docked player, the top bar, the page's colour variable names and what Refine found (`refine`), so selectors can be
+corrected from real data when YouTube Music changes.
+
+Tested on a silent stand-in page with the same element names as the real one; not yet against the real YouTube Music.
 
 ## Next, in this order
 
@@ -18,10 +36,9 @@ are the building blocks the apps already use: playback speed, "I'm feeling lucky
    look dated: the player bar and page (rounded shapes, tonal surfaces, the wavy seek bar and cover glow from the apps), and a
    dynamic accent taken from the album art. This is the biggest piece of work, and the most fragile: it depends on YouTube
    Music's markup, so it will be done as small, separate style layers that can each be switched off.
-3. **Smarter playlist generation.** Seeds from what you are listening to now, from a liked playlist, or from "more like this
-   queue"; regenerate; add to an existing playlist; a clearer review step before saving.
-4. **Playback speed per song or per playlist**, remembered, and pitch correction on/off.
-5. **A random-song button inside the page's own controls**, not only in the panel.
+3. ~~Smarter playlist generation~~ (done: the playlist maker).
+4. ~~Playback speed per song or per playlist, and pitch on/off~~ (done).
+5. ~~A random-song button inside the page's own controls~~ (done).
 6. **Pocketfader options and Beacon, fully in the tab.** A settings page (not only the compact panel) mirroring the app:
    outputs, equalizer, update status.
 7. **Packaging.** Right now it's an unpacked extension. A store listing, a packaged build and automatic updates come after the

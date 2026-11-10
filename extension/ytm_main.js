@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.14.0";
+  const EXT_VERSION = "1.15.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1017,6 +1017,23 @@
     const vmx = likeVm();
     out.likeVm = vmx ? { like: vmButton(vmx.like) ? describe(vmButton(vmx.like)) : null, dislike: vmButton(vmx.dislike) ? describe(vmButton(vmx.dislike)) : null,
       chain: chain(vmx.like).slice(0, 6).join(" < ") } : null;
+    // For Refine's restyling: the progress slider, the docked player, the top bar and the page's colour variables.
+    const box = (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]; };
+    const kids = (el) => [...el.children].slice(0, 10).map((c) => c.tagName.toLowerCase() + (c.id ? "#" + c.id : "") +
+      (c.classList && c.classList.length ? "." + [...c.classList].slice(0, 2).join(".") : ""));
+    out.sliders = deepAll(document, (el) => /^(SLIDER-SHAPE|TP-YT-PAPER-SLIDER)$/.test(el.tagName) || el.getAttribute("role") === "slider")
+      .slice(0, 8).map((el) => ({ tag: el.tagName.toLowerCase(), attrs: attrs(el), box: box(el), kids: kids(el), shadow: !!el.shadowRoot,
+        in: chain(el).slice(1, 6).join(" < ") }));
+    const mini = document.querySelector("ytmusic-miniplayer");
+    out.miniplayer = mini ? { attrs: attrs(mini), box: box(mini), kids: kids(mini), z: getComputedStyle(mini).zIndex } : null;
+    const nav = document.querySelector("ytmusic-nav-bar");
+    out.navBar = nav ? { kids: kids(nav), right: (nav.querySelector("#right-content, .right-content") ? kids(nav.querySelector("#right-content, .right-content")) : null) } : null;
+    try {
+      const cs = getComputedStyle(document.documentElement), vars = [];
+      for (let i = 0; i < cs.length && vars.length < 300; i++) if (/^--(ytmusic|yt-spec)/.test(cs[i])) vars.push(cs[i]);
+      out.cssVars = vars;
+    } catch (e) { out.cssVars = "err"; }
+    try { const rf = window[Symbol.for("pocketfader.refine")]; out.refine = rf ? rf.report() : null; } catch (e) { out.refine = "err"; }
     return out;
   }
 
@@ -1204,6 +1221,14 @@
   // once, a few seconds after load, and only while the tab is actually in front (a hidden tab shouldn't do page-wide work)
   const layoutSoon = () => setTimeout(() => { if (document.hidden) document.addEventListener("visibilitychange", layoutSoon, { once: true }); else sendLayout(); }, 12000);
   layoutSoon();
+
+  // The page helpers Refine (refine.js, the same page world) builds on. Read-only; nothing here is new power for the page,
+  // which can already reach the same endpoints with its own login.
+  try {
+    Object.defineProperty(window, Symbol.for("pocketfader.api"), { configurable: true, value: Object.freeze({
+      innertube, deepFind, deepAll, runText, pickThumb, bigArt, extractItem, nowPlaying, readQueue, playlists, playlistItems,
+      play, startPlaylist, playlistCreate, playlistEdit, lucky, mp, curVideo, curPlaylist, version: EXT_VERSION }) });
+  } catch (e) {}
 
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");

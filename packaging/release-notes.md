@@ -16,6 +16,25 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
+### What's new in alpha.16
+
+**Refine: a better YouTube Music, inside YouTube Music.** With the Pocketfader extension (1.15) loaded, music.youtube.com gets a
+✦ button in its top bar. Everything below has its own switch there, and opening `music.youtube.com/?pf-refine=off` starts a page
+without any of it. These changes depend on how YouTube Music's page is built, so treat them as experimental.
+
+- **A Material 3 Expressive look**, in layers you can switch separately: rounder shapes (covers, lists, menus, search), colours
+  taken from the album art, expressive player controls (a bigger play button that turns from a circle into a rounded square while
+  playing, tinted pressed buttons), a **wavy progress bar** that ripples while a song plays and flattens when you pause, and a
+  glow behind the cover.
+- **A richer speed menu** on YouTube Music's own speed button: any speed from 0.25× to 3×, quick presets, keep or drop the
+  pitch, and remember a speed for one song or a whole playlist (it comes back when that song or playlist plays, and doesn't spill
+  over onto others).
+- **A "play something you might like" button** among the player controls.
+- **A playlist maker:** start from the song playing, your queue, one of your playlists or your liked songs. It asks YouTube Music
+  for the radio of each starting song, ranks what they have in common, keeps any one artist from taking over, and shows the
+  result to review: untick songs, rename it, try again for a different mix, then save it as a new private playlist or add it to
+  one of yours, and play it.
+
 ### What's new in alpha.15
 
 **Your library, without the computer.** The Android app now keeps a copy of your YouTube Music library and makes its own
