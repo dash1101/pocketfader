@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="8dp">
-        <ImageView android:id="@+id/mute" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
-                android:src="@drawable/ic_w_vol_up" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Mute" />
-        <ImageView android:id="@+id/vol_down" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
-                android:src="@drawable/ic_w_vol_down" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume down" />
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="6dp" android:layout_marginEnd="6dp" android:orientation="vertical">
-            <TextView android:id="@+id/label" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#B3FFFFFF" android:textSize="11sp" android:textStyle="bold" android:singleLine="true" android:text="Computer volume" />
-            <TextView android:id="@+id/percent" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="20sp" android:textStyle="bold" android:singleLine="true" android:text="–" />
-            <ProgressBar android:id="@+id/level" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="4dp" android:max="100" android:progressDrawable="@drawable/widget_progress" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_card" android:paddingStart="10dp" android:paddingEnd="10dp">
+    <FrameLayout android:id="@+id/mute" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+                <ImageView android:id="@+id/mute_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_vol_up" android:contentDescription="Mute" />
+            </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="6dp" android:layout_marginEnd="6dp" android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <TextView android:id="@+id/label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FFA9ACB6" android:textSize="12.5sp" android:singleLine="true" android:ellipsize="end" android:text="Computer volume" />
+            <TextView android:id="@+id/percent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFF2F3F7" android:textSize="14sp" android:textStyle="bold" android:text="–" />
         </LinearLayout>
-        <ImageView android:id="@+id/vol_up" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp"
-                android:src="@drawable/ic_w_vol_up" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume up" />
+        <ProgressBar android:id="@+id/level" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:layout_marginTop="8dp" android:max="100" android:progressDrawable="@drawable/widget_progress" />
     </LinearLayout>
-</FrameLayout>
+    <FrameLayout android:id="@+id/vol_down" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+                <ImageView android:id="@+id/vol_down_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_vol_down" android:contentDescription="Volume down" />
+            </FrameLayout>
+    <FrameLayout android:id="@+id/vol_up" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+                <ImageView android:id="@+id/vol_up_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_vol_up" android:contentDescription="Volume up" />
+            </FrameLayout>
+</LinearLayout>

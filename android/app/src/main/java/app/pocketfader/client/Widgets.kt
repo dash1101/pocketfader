@@ -122,10 +122,10 @@ object Widgets {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var started = false
 
-    /** The cover in two forms (rounded, and a darkened blur for the background), and its colour; made once per song. */
-    private class Art(val url: String?, val cover: Bitmap?, val coverSquare: Bitmap?, val blurWide: Bitmap?, val blurBar: Bitmap?, val accent: Int)
-    private const val DEFAULT_ACCENT = 0xFF2EC4B6.toInt()
-    @Volatile private var art = Art(null, null, null, null, null, DEFAULT_ACCENT)
+    /** The cover, rounded, for the current song (made once per song). */
+    private class Art(val url: String?, val cover: Bitmap?)
+    private const val DEFAULT_ACCENT = 0xFF7D8FF5.toInt()
+    @Volatile private var art = Art(null, null)
 
     /** Redraw whenever what the widgets show changes (only while some widget exists). */
     fun start(ctx: Context) {
@@ -212,6 +212,9 @@ object Widgets {
         return if (l > 0.6) 0xFF111318.toInt() else Color.WHITE
     }
 
+    /** The widgets' accent: the one chosen in Settings → Appearance, else a soft periwinkle. */
+    private fun accent(): Int = Settings.prefs.value.accent.takeIf { it != 0 } ?: DEFAULT_ACCENT
+
     private fun nowPlaying(ctx: Context, v: RemoteViews, kind: WidgetKind, s: RemoteState) {
         val now = s.now
         val has = now != null && now.title.isNotBlank()
@@ -224,17 +227,11 @@ object Widgets {
                 else -> "Tap to open Pocketfader"
             },
         )
-        val a = art
-        if (kind == WidgetKind.Cover) {
-            if (a.coverSquare != null) v.setImageViewBitmap(R.id.cover, a.coverSquare) else v.setImageViewResource(R.id.cover, R.drawable.ic_w_music)
-        } else {
-            if (a.cover != null) v.setImageViewBitmap(R.id.cover, a.cover) else v.setImageViewResource(R.id.cover, R.drawable.ic_w_music)
-            val bg = if (kind == WidgetKind.Wide) a.blurWide else a.blurBar
-            if (bg != null) v.setImageViewBitmap(R.id.bg, bg) else v.setImageViewBitmap(R.id.bg, null)
-        }
-        // play/pause in the cover's colour
-        v.setInt(R.id.play_bg, "setColorFilter", a.accent)
-        v.setInt(R.id.play, "setColorFilter", onColor(a.accent))
+        val c = art.cover
+        if (c != null) v.setImageViewBitmap(R.id.cover, c) else v.setImageViewResource(R.id.cover, R.drawable.ic_w_music)
+        val acc = accent()
+        v.setInt(R.id.play_bg, "setColorFilter", acc)
+        v.setInt(R.id.play, "setColorFilter", onColor(acc))
         v.setImageViewResource(R.id.play, if (now?.playing == true) R.drawable.ic_w_pause else R.drawable.ic_w_play)
         v.setOnClickPendingIntent(R.id.play_box, pi(ctx, WidgetActions.A_PLAY))
         v.setOnClickPendingIntent(R.id.root, openApp(ctx))
@@ -243,24 +240,19 @@ object Widgets {
             v.setOnClickPendingIntent(R.id.next, pi(ctx, WidgetActions.A_NEXT))
         }
         if (kind == WidgetKind.Wide) {
-            v.setTextViewText(
-                R.id.source,
-                when {
-                    Remote.local -> "PLAYING ON THIS PHONE"
-                    !s.online -> "POCKETFADER · NOT CONNECTED"
-                    else -> "PLAYING ON THE COMPUTER"
-                },
-            )
             val p = Remote.progress.value
+            val playing = now?.playing == true
             val dur = now?.duration ?: 0.0
-            val pos = p.position + if (now?.playing == true) (SystemClock.elapsedRealtime() - p.at) / 1000.0 else 0.0
+            val pos = (p.position + if (playing) (SystemClock.elapsedRealtime() - p.at) / 1000.0 else 0.0).coerceIn(0.0, if (dur > 0) dur else 0.0)
             v.setProgressBar(R.id.progress, 1000, if (dur > 0) ((pos / dur) * 1000).toInt().coerceIn(0, 1000) else 0, false)
+            // the elapsed time counts by itself on the home screen; the bar follows every few seconds
+            v.setChronometer(R.id.pos, SystemClock.elapsedRealtime() - (pos * 1000).toLong(), null, playing)
+            v.setTextViewText(R.id.dur, if (dur > 0) formatTime(dur) else "0:00")
             val canLike = s.ytm && isYtId(now?.videoId)
-            v.setViewVisibility(R.id.like, if (canLike) android.view.View.VISIBLE else android.view.View.INVISIBLE)
+            v.setViewVisibility(R.id.like, if (canLike) android.view.View.VISIBLE else android.view.View.GONE)
             v.setImageViewResource(R.id.like, if (now?.liked == true) R.drawable.ic_w_like else R.drawable.ic_w_like_off)
+            if (now?.liked == true) v.setInt(R.id.like, "setColorFilter", acc) else v.setInt(R.id.like, "setColorFilter", 0xFFA9ACB6.toInt())
             v.setOnClickPendingIntent(R.id.like, pi(ctx, WidgetActions.A_LIKE))
-            v.setOnClickPendingIntent(R.id.vol_up, pi(ctx, WidgetActions.A_VOL_UP))
-            v.setOnClickPendingIntent(R.id.vol_down, pi(ctx, WidgetActions.A_VOL_DOWN))
         }
     }
 
@@ -271,7 +263,7 @@ object Widgets {
         v.setTextViewText(R.id.label, if (phone) "Phone volume" else if (s.volume.device.isNotBlank()) s.volume.device else "Computer volume")
         v.setTextViewText(R.id.percent, if (!phone && !s.volume.available) "–" else if (muted) "Muted" else "$pct%")
         v.setProgressBar(R.id.level, 100, if (muted) 0 else pct, false)
-        v.setImageViewResource(R.id.mute, if (muted || pct == 0) R.drawable.ic_w_mute else R.drawable.ic_w_vol_up)
+        v.setImageViewResource(R.id.mute_icon, if (muted || pct == 0) R.drawable.ic_w_mute else R.drawable.ic_w_vol_up)
         v.setOnClickPendingIntent(R.id.mute, pi(ctx, WidgetActions.A_MUTE))
         v.setOnClickPendingIntent(R.id.vol_up, pi(ctx, WidgetActions.A_VOL_UP))
         v.setOnClickPendingIntent(R.id.vol_down, pi(ctx, WidgetActions.A_VOL_DOWN))
@@ -279,6 +271,14 @@ object Widgets {
 
     private fun actions(ctx: Context, v: RemoteViews, s: RemoteState) {
         val phone = Remote.local
+        val acc = accent()
+        for ((bg, icon) in listOf(
+            R.id.act_lucky_bg to R.id.act_lucky_icon, R.id.act_sleep_bg to R.id.act_sleep_icon,
+            R.id.act_pauseall_bg to R.id.act_pauseall_icon, R.id.act_switch_bg to R.id.act_switch_icon,
+        )) {
+            v.setInt(bg, "setColorFilter", acc)
+            v.setInt(icon, "setColorFilter", onColor(acc))
+        }
         v.setOnClickPendingIntent(R.id.act_lucky, pi(ctx, WidgetActions.A_LUCKY))
         v.setOnClickPendingIntent(R.id.act_sleep, pi(ctx, WidgetActions.A_SLEEP))
         v.setOnClickPendingIntent(R.id.act_pauseall, pi(ctx, WidgetActions.A_PAUSE_OTHERS))
@@ -292,43 +292,19 @@ object Widgets {
     // ---------------------------------------------------------------- the cover, prepared for a widget
 
     private suspend fun loadArt(ctx: Context, url: String?): Art {
-        if (url == null) return Art(null, null, null, null, null, DEFAULT_ACCENT)
+        if (url == null) return Art(null, null)
         val src = try {
             val r = ctx.imageLoader.execute(ImageRequest.Builder(ctx).data(url).size(320).allowHardware(false).build())
             (r as? SuccessResult)?.drawable?.toBitmap()
-        } catch (e: Exception) { null } ?: return Art(url, null, null, null, null, DEFAULT_ACCENT)
+        } catch (e: Exception) { null } ?: return Art(url, null)
         val sq = Bitmap.createScaledBitmap(src, 300, 300, true)
-        val p = Palette.from(sq).maximumColorCount(12).generate()
-        val accent = p.vibrantSwatch?.rgb ?: p.lightVibrantSwatch?.rgb ?: p.dominantSwatch?.rgb ?: DEFAULT_ACCENT
-        return Art(url, rounded(sq, 44f), rounded(sq, 56f), blurredBg(sq, 560, 250, 64f), blurredBg(sq, 600, 120, 60f), accent)
+        return Art(url, rounded(sq, 40f))
     }
 
     private fun rounded(src: Bitmap, r: Float): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
         Canvas(out).drawRoundRect(RectF(0f, 0f, src.width.toFloat(), src.height.toFloat()), r, r, paint)
-        return out
-    }
-
-    /** A soft, darkened blur of the cover in the widget's own shape (corners included, so it needs no clipping). */
-    private fun blurredBg(src: Bitmap, w: Int, h: Int, r: Float): Bitmap {
-        val small = Bitmap.createScaledBitmap(src, 24, 24, true)
-        val soft = Bitmap.createScaledBitmap(small, w, h, true)       // scaling a tiny copy up is a cheap, smooth blur
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(out)
-        val dim = ColorMatrix().apply { setScale(0.55f, 0.55f, 0.55f, 1f) }
-        val sat = ColorMatrix().apply { setSaturation(1.35f) }
-        dim.postConcat(sat)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = BitmapShader(soft, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-            colorFilter = ColorMatrixColorFilter(dim)
-        }
-        val rect = RectF(0f, 0f, w.toFloat(), h.toFloat())
-        c.drawRoundRect(rect, r, r, paint)
-        val shade = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(0f, 0f, w.toFloat(), 0f, 0x22000000, 0x88000000.toInt(), Shader.TileMode.CLAMP)
-        }
-        c.drawRoundRect(rect, r, r, shade)
         return out
     }
 }

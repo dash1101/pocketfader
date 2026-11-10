@@ -1,27 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/widget_bg" android:padding="8dp">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/widget_card" android:padding="9dp">
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-        <LinearLayout android:id="@+id/act_lucky" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="4dp"
+        <LinearLayout android:id="@+id/act_lucky" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="5dp"
             android:background="@drawable/widget_tile" android:orientation="vertical" android:gravity="center" android:padding="6dp">
-            <ImageView android:id="@+id/act_lucky_icon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_dice" android:contentDescription="@null" />
-            <TextView android:id="@+id/act_lucky_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="#FFFFFFFF" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Feeling lucky" />
+            <FrameLayout android:layout_width="38dp" android:layout_height="38dp">
+                <ImageView android:id="@+id/act_lucky_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+                <ImageView android:id="@+id/act_lucky_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_dice" android:contentDescription="@null" />
+            </FrameLayout>
+            <TextView android:id="@+id/act_lucky_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFF2F3F7" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Feeling lucky" />
         </LinearLayout>
-        <LinearLayout android:id="@+id/act_sleep" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="4dp"
+        <LinearLayout android:id="@+id/act_sleep" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="5dp"
             android:background="@drawable/widget_tile" android:orientation="vertical" android:gravity="center" android:padding="6dp">
-            <ImageView android:id="@+id/act_sleep_icon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_moon" android:contentDescription="@null" />
-            <TextView android:id="@+id/act_sleep_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="#FFFFFFFF" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Sleep 30 min" />
+            <FrameLayout android:layout_width="38dp" android:layout_height="38dp">
+                <ImageView android:id="@+id/act_sleep_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+                <ImageView android:id="@+id/act_sleep_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_moon" android:contentDescription="@null" />
+            </FrameLayout>
+            <TextView android:id="@+id/act_sleep_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFF2F3F7" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Sleep 30 min" />
         </LinearLayout>
     </LinearLayout>
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-        <LinearLayout android:id="@+id/act_pauseall" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="4dp"
+        <LinearLayout android:id="@+id/act_pauseall" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="5dp"
             android:background="@drawable/widget_tile" android:orientation="vertical" android:gravity="center" android:padding="6dp">
-            <ImageView android:id="@+id/act_pauseall_icon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_pause_all" android:contentDescription="@null" />
-            <TextView android:id="@+id/act_pauseall_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="#FFFFFFFF" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Pause others" />
+            <FrameLayout android:layout_width="38dp" android:layout_height="38dp">
+                <ImageView android:id="@+id/act_pauseall_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+                <ImageView android:id="@+id/act_pauseall_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_pause_all" android:contentDescription="@null" />
+            </FrameLayout>
+            <TextView android:id="@+id/act_pauseall_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFF2F3F7" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Pause others" />
         </LinearLayout>
-        <LinearLayout android:id="@+id/act_switch" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="4dp"
+        <LinearLayout android:id="@+id/act_switch" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_margin="5dp"
             android:background="@drawable/widget_tile" android:orientation="vertical" android:gravity="center" android:padding="6dp">
-            <ImageView android:id="@+id/act_switch_icon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_w_phone" android:contentDescription="@null" />
-            <TextView android:id="@+id/act_switch_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="#FFFFFFFF" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Play on phone" />
+            <FrameLayout android:layout_width="38dp" android:layout_height="38dp">
+                <ImageView android:id="@+id/act_switch_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+                <ImageView android:id="@+id/act_switch_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_phone" android:contentDescription="@null" />
+            </FrameLayout>
+            <TextView android:id="@+id/act_switch_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#FFF2F3F7" android:textSize="11.5sp" android:singleLine="true" android:ellipsize="end" android:text="Play on phone" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

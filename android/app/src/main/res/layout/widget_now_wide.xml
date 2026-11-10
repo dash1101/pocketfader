@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
-    <ImageView android:id="@+id/bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:contentDescription="@null" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:padding="14dp">
-        <ImageView android:id="@+id/cover" android:layout_width="100dp" android:layout_height="100dp" android:scaleType="fitXY" android:src="@drawable/ic_w_music" android:contentDescription="Cover" />
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" android:orientation="vertical">
-            <TextView android:id="@+id/source" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#B3FFFFFF" android:textSize="10.5sp" android:textStyle="bold" android:letterSpacing="0.08" android:singleLine="true" android:text="POCKETFADER" />
-            <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="17sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="end" android:text="Nothing playing" />
-            <TextView android:id="@+id/artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#DDFFFFFF" android:textSize="13sp" android:singleLine="true" android:ellipsize="end" />
-            <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="9dp" android:max="1000" android:progressDrawable="@drawable/widget_progress" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal" android:gravity="center_vertical">
-                <ImageView android:id="@+id/like" android:layout_width="36dp" android:layout_height="36dp" android:padding="8dp"
-                android:src="@drawable/ic_w_like_off" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Like" />
-                <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                <ImageView android:id="@+id/prev" android:layout_width="42dp" android:layout_height="42dp" android:padding="8dp"
-                android:src="@drawable/ic_w_prev" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Previous" />
-                <FrameLayout android:id="@+id/play_box" android:layout_width="50dp" android:layout_height="50dp" android:layout_marginStart="4dp" android:layout_marginEnd="4dp">
-                <ImageView android:id="@+id/play_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
-                <ImageView android:id="@+id/play" android:layout_width="26dp" android:layout_height="26dp" android:layout_gravity="center" android:src="@drawable/ic_w_play" android:contentDescription="Play or pause" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/widget_card" android:padding="14dp">
+    <ImageView android:id="@+id/cover" android:layout_width="124dp" android:layout_height="124dp" android:scaleType="fitXY" android:src="@drawable/ic_w_music" android:contentDescription="Cover" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp" android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FFF2F3F7" android:textSize="18sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="end" android:text="Nothing playing" />
+            <ImageView android:id="@+id/like" android:layout_width="30dp" android:layout_height="30dp" android:padding="5dp" android:src="@drawable/ic_w_like_off" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Like" />
+        </LinearLayout>
+        <TextView android:id="@+id/artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="14sp" android:singleLine="true" android:ellipsize="end" />
+        <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:layout_marginTop="14dp" android:max="1000" android:progressDrawable="@drawable/widget_progress" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
+            <Chronometer android:id="@+id/pos" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="12.5sp" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+            <TextView android:id="@+id/dur" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="12.5sp" android:text="0:00" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal" android:gravity="center">
+            <FrameLayout android:id="@+id/prev" android:layout_width="44dp" android:layout_height="44dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+                <ImageView android:id="@+id/prev_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_prev" android:contentDescription="Previous" />
             </FrameLayout>
-                <ImageView android:id="@+id/next" android:layout_width="42dp" android:layout_height="42dp" android:padding="8dp"
-                android:src="@drawable/ic_w_next" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Next" />
-                <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                <ImageView android:id="@+id/vol_down" android:layout_width="36dp" android:layout_height="36dp" android:padding="8dp"
-                android:src="@drawable/ic_w_vol_down" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume down" />
-                <ImageView android:id="@+id/vol_up" android:layout_width="36dp" android:layout_height="36dp" android:padding="8dp"
-                android:src="@drawable/ic_w_vol_up" android:background="?android:attr/selectableItemBackgroundBorderless" android:contentDescription="Volume up" />
-            </LinearLayout>
+            <FrameLayout android:id="@+id/play_box" android:layout_width="56dp" android:layout_height="56dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:id="@+id/play_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
+                <ImageView android:id="@+id/play" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@drawable/ic_w_play" android:contentDescription="Play or pause" />
+            </FrameLayout>
+            <FrameLayout android:id="@+id/next" android:layout_width="44dp" android:layout_height="44dp" android:layout_marginStart="6dp" android:layout_marginEnd="6dp">
+                <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle_dark" android:contentDescription="@null" />
+                <ImageView android:id="@+id/next_icon" android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/ic_w_next" android:contentDescription="Next" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
-</FrameLayout>
+</LinearLayout>
