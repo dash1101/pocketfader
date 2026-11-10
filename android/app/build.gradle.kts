@@ -8,7 +8,8 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "app.pocketfader.client"
+        // the app's identity on the phone; the code keeps its own package name (namespace above), so nothing else changes
+        applicationId = "app.novalabs.pocketfader"
         // Android 5.0 (Lollipop): the oldest release Jetpack Compose supports.
         minSdk = 21
         targetSdk = 34

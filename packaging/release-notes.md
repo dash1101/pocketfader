@@ -16,16 +16,16 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.13
+### What's new in alpha.14
 
-- **Widgets have no background of their own** any more, so they sit on whatever card your launcher draws for widgets.
-- **Two new widgets**:
-  - **Discord presence** (4×1): whether YTM Beacon is showing your music on Discord (a coloured dot and a one-line status, plus the
-    song), a button to switch it on or off, and one to hide it for an hour.
-  - **Up next** (4×2): the next four songs in the queue, with their length. Tap one to play it.
+- **The Android app has a new application ID: `app.novalabs.pocketfader`.** Android treats it as a different app, so this version
+  does **not** update the old one: **uninstall the old Pocketfader, then install this APK**. Your settings and downloads are in
+  the old app's storage and don't carry over, so you'll set up the connection again. From here on, updates install over each
+  other as before (same signing key).
 
 ### Earlier
 
+- alpha.13: widgets without a background, plus Discord presence and Up next widgets.
 - alpha.12: widgets redesigned (clean card, rounded cover, live elapsed time); extension 1.13 quieter in the background.
 - alpha.11: home-screen widgets and a new icon.
 - alpha.10: play on the phone itself (YouTube Music and local files), downloads with lyrics, Search with Playlists and On this phone tabs.
