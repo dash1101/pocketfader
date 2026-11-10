@@ -82,9 +82,9 @@ class WidgetActions : BroadcastReceiver() {
                 val d = if (intent.action == A_VOL_UP) step else -step
                 if (Remote.local) LocalPlayer.setPhoneVolume(LocalPlayer.phoneVolume() + d) else Remote.adjustVolume(d)
             }
-            A_MUTE -> if (Remote.local) LocalPlayer.setPhoneVolume(0) else Remote.setMuted(!s.volume.muted)
-            A_LUCKY -> if (s.ytm) Remote.command(org.json.JSONObject().put("type", "lucky")) else open(context)
-            A_SLEEP -> Remote.setSleep(30)
+            A_MUTE -> if (Remote.local) LocalPlayer.togglePhoneMute() else Remote.setMuted(!s.volume.muted)
+            A_LUCKY -> Remote.lucky()
+            A_SLEEP -> Remote.setSleep(if (s.sleepLeft > 0) 0 else 30)     // on, or off again
             A_PAUSE_OTHERS -> Remote.pauseOthers()
             A_PLAY_AT -> {
                 val i = intent.getIntExtra("index", -1)
@@ -116,10 +116,6 @@ class WidgetActions : BroadcastReceiver() {
                 pending.finish()
             }
         }
-    }
-
-    private fun open(c: Context) {
-        c.startActivity(Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     companion object {

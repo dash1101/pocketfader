@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
@@ -123,7 +124,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             ) { v -> Settings.update { it.copy(navStyle = v) } }
             Choice(
                 "Open on", "The screen shown when the app starts.",
-                listOf("playing" to "Playing", "search" to "Search", "library" to "Library"), p.startTab,
+                listOf("playing" to "Playing", "search" to "Search", "settings" to "Settings"), p.startTab,
             ) { v -> Settings.update { it.copy(startTab = v) } }
         }
 
@@ -140,7 +141,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Settings.update { it.copy(glowUi = v) }
             }
             Toggle("Wavy seek bar", "The played part of the bar ripples while music plays.", p.wavyBar) { v -> Settings.update { it.copy(wavyBar = v) } }
-            Toggle("Screen transitions", "A short fade and slide between Playing, Search, Library and Settings.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
+            Toggle("Screen transitions", "A short fade and slide between Playing, Search and Settings.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
             Text(
                 "These are light drawing effects. “Reduce animations” (under Performance) stops all motion and keeps the rest.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -267,6 +268,73 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             OutlinedButton(onClick = { confirm = true }, enabled = saved.isNotEmpty()) { Text("Delete all downloads") }
             if (confirm) ConfirmDialog("Delete all downloads?", "${saved.size} songs will be removed from this phone.", "Delete",
                 onDismiss = { confirm = false }) { confirm = false; Downloads.deleteAll() }
+        }
+
+        if (page == "library") {
+            val lists by Library.playlists.collectAsStateWithLifecycle()
+            val liked by Library.liked.collectAsStateWithLifecycle()
+            val at by Library.syncedAt.collectAsStateWithLifecycle()
+            val status by Library.status.collectAsStateWithLifecycle()
+            val keep by Library.keepOffline.collectAsStateWithLifecycle()
+            val history by Library.history.collectAsStateWithLifecycle()
+            val saved by Downloads.items.collectAsStateWithLifecycle()
+            var confirmHistory by remember { mutableStateOf(false) }
+            Section("Your library") {
+                Info("Synced from your account", if (at == 0L) "Not yet" else "${ago(at).replaceFirstChar { it.uppercase() }} · ${lists.size} playlists · ${liked.size} liked songs")
+                val waiting = Library.pendingCount
+                if (waiting > 0) Info("Waiting to be sent", "$waiting change" + (if (waiting == 1) "" else "s") + " made without the account (likes, songs added to playlists)")
+                status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                FilledTonalButton(onClick = { Library.sync() }, enabled = s.ytm && status == null) {
+                    Text(if (status != null) "Syncing…" else "Sync now")
+                }
+                Text(
+                    "Your playlists, liked songs and YouTube Music home page are copied to this phone while YouTube Music is open on " +
+                        "the computer, so they're here when it isn't: on the go, with no computer at all, or with no connection " +
+                        "(for downloaded songs). Likes and playlist additions made in the meantime are sent at the next sync." +
+                        if (!s.ytm) " Open YouTube Music on the computer to sync." else "",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Toggle("Sync automatically", "Whenever YouTube Music on the computer is connected (at most every few hours).", p.autoSync) { v ->
+                    Settings.update { it.copy(autoSync = v) }
+                }
+            }
+            Section("Automatic downloads") {
+                Toggle("Liked songs", "Keep the songs you like downloaded, new likes included.", p.autoDlLiked) { v ->
+                    Settings.update { it.copy(autoDlLiked = v) }; AutoDownload.soon()
+                }
+                Choice(
+                    "Smart downloads", "Keep your most played songs and today's quick picks on the phone, refreshed as your taste changes.",
+                    listOf("0" to "Off", "25" to "25 songs", "50" to "50 songs", "100" to "100 songs"), p.smartDownloads.toString(),
+                ) { v -> Settings.update { it.copy(smartDownloads = v.toInt()) }; Recommend.refreshIfStale(); AutoDownload.soon() }
+                Info("Playlists kept on this phone", if (keep.isEmpty()) "None. Open a playlist and turn on “Keep on this phone”." else "${keep.size}: " +
+                    keep.mapNotNull { k -> if (k == "LM") "Liked music" else lists.firstOrNull { it.id == k }?.title }.joinToString(", "))
+                Choice(
+                    "Space for automatic downloads", "Songs you download yourself don't count, and are never removed automatically.",
+                    listOf("1024" to "1 GB", "2048" to "2 GB", "5120" to "5 GB", "10240" to "10 GB", "0" to "No limit"), p.autoDlLimitMb.toString(),
+                ) { v -> Settings.update { it.copy(autoDlLimitMb = v.toInt()) }; AutoDownload.soon() }
+                Toggle("Only on Wi-Fi", "Automatic downloads wait for Wi-Fi (or another connection that isn't metered).", p.dlWifiOnly) { v ->
+                    Settings.update { it.copy(dlWifiOnly = v) }; AutoDownload.soon()
+                }
+                val plan = remember(p, keep, liked, lists, saved) { AutoDownload.plan() }
+                val autoNow = saved.filter { it.auto }
+                Info(
+                    "Downloaded automatically",
+                    "${autoNow.size} songs · ${formatBytes(autoNow.sumOf { it.size })}" + if (plan.first > 0) " (the rules want ${plan.first}, about ${formatBytes(plan.second)})" else "",
+                )
+                OutlinedButton(onClick = { AutoDownload.soon(); Remote.notify("Checking for songs to download…") }) { Text("Download now") }
+            }
+            Section("Recommendations") {
+                Info("Listening history", "${history.size} plays remembered on this phone")
+                Text(
+                    "When YouTube Music on the computer isn't connected, “For you”, autoplay and “I'm feeling lucky” are worked out on " +
+                        "this phone from what you play (here and on the computer), skip and like, using YouTube Music's own song radios. " +
+                        "The history never leaves the phone.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = { confirmHistory = true }, enabled = history.isNotEmpty()) { Text("Clear listening history") }
+            }
+            if (confirmHistory) ConfirmDialog("Clear listening history?", "The recommendations start over from your likes and playlists.", "Clear",
+                onDismiss = { confirmHistory = false }) { confirmHistory = false; Library.clearHistory() }
         }
 
         if (page == "updates") Section("Updates") {
@@ -404,6 +472,7 @@ private class Cat(val key: String, val title: String, val icon: androidx.compose
 private val groups = listOf(
     "Listening" to listOf(
         Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("downloads", "Downloads & playing on this phone", Icons.Filled.DownloadForOffline),
+        Cat("library", "Library & offline", Icons.Filled.LibraryMusic),
         Cat("lyrics", "Lyrics", Icons.Filled.MusicNote), Cat("controls", "Controls", Icons.Filled.TouchApp),
     ),
     "Look & feel" to listOf(
@@ -422,6 +491,8 @@ private fun themeLabel(t: String) = when (t) { "light" -> "Light"; "dark" -> "Da
 private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String = when (key) {
     "sound" -> if (s.volume.available) "${s.volume.percent}%" + (if (s.volume.muted) " (muted)" else "") + s.volume.device.let { if (it.isBlank()) "" else " · $it" } else "No audio output found"
     "downloads" -> (if (p.playOn == "phone") "Playing on this phone" else "Playing on the computer") + " · " + Downloads.items.value.size + " downloaded"
+    "library" -> Library.syncedAt.value.let { at -> if (at == 0L) "Sync your playlists and likes to this phone" else "Synced " + ago(at) } +
+        (if (p.autoDlLiked || p.smartDownloads > 0 || Library.keepOffline.value.isNotEmpty()) " · automatic downloads on" else "")
     "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
     "controls" -> "Notification " + (if (p.notification) "on" else "off") + " · volume keys " + (if (p.volumeKeys) "on" else "off")
     "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")

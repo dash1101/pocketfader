@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -116,44 +118,10 @@ internal fun activate(item: SearchItem, onOpen: (SearchItem) -> Unit) {
     val vid = item.videoId
     when {
         item.kind == "artist" -> Detail.open(item)
-        item.kind == "song" && vid != null -> Remote.play(vid)
+        item.kind == "radio" && vid != null -> Remote.startMix(vid)
+        item.kind == "song" && vid != null -> Remote.playItem(item)
         item.playlistId != null || item.browseId != null -> onOpen(item)
-        vid != null -> Remote.play(vid)
-    }
-}
-
-@Composable
-fun LibraryScreen(s: RemoteState, modifier: Modifier = Modifier) {
-    var opened by remember { mutableStateOf<SearchItem?>(null) }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    BackHandler(enabled = opened != null) { opened = null }
-
-    val item = opened
-    if (item != null) {
-        PlaylistDetail(item, onBack = { opened = null }, modifier = modifier)
-        return
-    }
-    Column(modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TabRow(selectedTabIndex = tab, modifier = Modifier.weight(1f)) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Home") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Playlists") })
-            }
-            IconButton(onClick = {
-                scope.launch { if (tab == 0) LibraryStore.refreshHome() else LibraryStore.refreshPlaylists() }
-            }) { Icon(Icons.Filled.Refresh, "Refresh") }
-        }
-        if (!s.bridge && (if (tab == 0) LibraryStore.home else LibraryStore.playlists) == null) {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Message("Your library comes from YouTube Music, so it needs the Pocketfader extension connected on the computer.")
-                if (s.online) OpenYtmButton()
-            }
-        } else if (tab == 0) {
-            HomeTab(onOpen = { opened = it })
-        } else {
-            PlaylistsTab(onOpen = { opened = it })
-        }
+        vid != null -> Remote.playItem(item)
     }
 }
 
@@ -176,23 +144,37 @@ private fun Loading() {
 @Composable
 internal fun HomeTab(onOpen: (SearchItem) -> Unit) {
     LaunchedEffect(Unit) { LibraryStore.ensureHome() }
-    val homeState = androidx.compose.foundation.lazy.rememberLazyListState()
     val shelves = LibraryStore.home
     val err = LibraryStore.homeError
     when {
         shelves == null && err != null -> Message(err)
         shelves == null -> Loading()
         shelves.isEmpty() -> Message("Nothing on your home page yet.")
-        else -> LazyColumn(Modifier.fillMaxSize().edgeFade(homeState), state = homeState) {
-            items(shelves, key = { it.title }) { shelf ->
+        else -> ShelvesList(shelves, onOpen)
+    }
+}
+
+/** Rows of cards, one row per shelf (a home page). */
+@Composable
+internal fun ShelvesList(shelves: List<Shelf>, onOpen: (SearchItem) -> Unit) {
+    val homeState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LazyColumn(Modifier.fillMaxSize().edgeFade(homeState), state = homeState) {
+            itemsIndexed(shelves, key = { i, it -> "$i-${it.title}" }) { _, shelf ->
                 Text(
                     shelf.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
                 )
                 LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
-                    items(shelf.items, key = { (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind }) { card ->
+                    itemsIndexed(shelf.items, key = { i, it -> (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind + i }) { _, card ->
                         Column(Modifier.width(144.dp).padding(horizontal = 4.dp).clickable { activate(card, onOpen) }) {
-                            Thumb(card.thumb, 136, 14)
+                            Box {
+                                Thumb(card.thumb, 136, 14)
+                                if (card.kind == "radio") Icon(
+                                    Icons.Filled.Radio, null,
+                                    Modifier.align(Alignment.BottomEnd).padding(8.dp).size(22.dp),
+                                    tint = androidx.compose.ui.graphics.Color.White,
+                                )
+                            }
                             Text(card.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (card.subtitle.isNotBlank()) {
                                 Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -202,7 +184,6 @@ internal fun HomeTab(onOpen: (SearchItem) -> Unit) {
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
-        }
     }
 }
 
@@ -266,15 +247,34 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
     var menu by remember { mutableStateOf(false) }
     val pid = item.playlistId ?: item.browseId?.removePrefix("VL")
 
+    // the copy synced to this phone (your liked songs, or one of your playlists)
+    fun syncedCopy(): List<LocalItem>? = when {
+        pid == null -> null
+        pid == "LM" -> Library.liked.value.takeIf { it.isNotEmpty() }
+        else -> Library.playlist(pid)?.tracks
+    }
     LaunchedEffect(item) {
         try {
-            tracks = withContext(Dispatchers.IO) { Remote.playlistItems(item) }
+            tracks = withContext(Dispatchers.IO) {
+                val copy = syncedCopy()
+                when {
+                    // the account, through the computer: the playlist as it is now
+                    Remote.state.value.ytm -> Remote.playlistItems(item, limit = 1000)
+                    copy != null -> copy.map { it.toSearchItem() }
+                    // a public playlist works without the account
+                    pid != null && !pid.startsWith("MPRE") -> Streams.playlist(pid).map { it.toSearchItem() }
+                    else -> throw ApiException(0, "Albums open through YouTube Music on the computer, which isn't connected.")
+                }
+            }
         } catch (e: Exception) {
-            error = e.friendly()
+            val copy = syncedCopy()
+            if (copy != null) tracks = copy.map { it.toSearchItem() } else error = e.friendly()
         }
     }
-    // Only playlists you own return a setVideoId on their tracks, which is what editing needs.
-    val editable = pid != null && tracks.orEmpty().any { it.setVideoId != null }
+    // Only playlists you own return a setVideoId on their tracks, which is what editing needs (and the account must be there).
+    val editable = pid != null && Remote.state.value.ytm && tracks.orEmpty().any { it.setVideoId != null }
+    val keep by Library.keepOffline.collectAsStateWithLifecycle()
+    val canKeep = pid != null && (pid == "LM" || Library.playlist(pid) != null)
 
     fun move(i: Int, dir: Int) {
         val list = tracks ?: return
@@ -335,10 +335,12 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             // on the phone, the songs already shown here are played; on the computer, YouTube Music plays the playlist
                             val songs = list.mapNotNull { it.toLocal() }
-                            Button(onClick = { if (Remote.local) LocalPlayer.playItems(songs, 0) else pid?.let { Remote.startPlaylist(it, false) } }, enabled = pid != null || (Remote.local && songs.isNotEmpty())) {
+                            // played on the phone when playing there, or when the computer's YouTube Music can't play it
+                            val here = Remote.local || !Remote.state.value.ytm
+                            Button(onClick = { if (here) playOnPhone(songs, 0) else pid?.let { Remote.startPlaylist(it, false) } }, enabled = songs.isNotEmpty() || (!here && pid != null)) {
                                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text("Play", Modifier.padding(start = 6.dp))
                             }
-                            FilledTonalButton(onClick = { if (Remote.local) LocalPlayer.playItems(songs, 0, shuffle = true) else pid?.let { Remote.startPlaylist(it, true) } }, enabled = pid != null || (Remote.local && songs.isNotEmpty())) {
+                            FilledTonalButton(onClick = { if (here) playOnPhone(songs, songs.indices.random(), shuffle = true) else pid?.let { Remote.startPlaylist(it, true) } }, enabled = songs.isNotEmpty() || (!here && pid != null)) {
                                 Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text("Shuffle", Modifier.padding(start = 6.dp))
                             }
                             IconButton(onClick = { Downloads.enqueue(songs) }, enabled = songs.isNotEmpty()) {
@@ -349,6 +351,19 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                                     Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, null, Modifier.size(18.dp))
                                     Text(if (editing) "Done" else "Edit", Modifier.padding(start = 6.dp))
                                 }
+                            }
+                        }
+                        if (canKeep && pid != null) {
+                            // like YouTube Music's download toggle: the whole playlist stays on the phone, new songs included
+                            Row(
+                                Modifier.padding(top = 10.dp).clickable { Library.setKeepOffline(pid, pid !in keep) },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Keep on this phone", Modifier.padding(end = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                                androidx.compose.material3.Switch(checked = pid in keep, onCheckedChange = { Library.setKeepOffline(pid, it) })
+                            }
+                            if (pid in keep && Settings.prefs.value.dlWifiOnly && Downloads.metered()) {
+                                Text("Downloads start on Wi-Fi.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }

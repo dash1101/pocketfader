@@ -433,7 +433,8 @@ class Handler(BaseHTTPRequestHandler):
     def _get(self, path):
         app = self.app
         if path == "/ext/poll":  # extension long-poll: blocks until a command (or ~25s idle)
-            return self._json(200, app.bridge.poll() or {})
+            inst = (parse_qs(urlsplit(self.path).query).get("i") or [None])[0]
+            return self._json(200, app.bridge.poll(instance=inst[:64] if inst else None) or {})
         if path == "/api/ytm/state":
             return self._json(200, app.ytm_state())
         if path == "/api/lyrics":

@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.13.0";
+  const EXT_VERSION = "1.14.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -458,12 +458,35 @@
     }
     return { results: out };
   }
-  async function playlistItems(browseIdOrPl) {
+  // A playlist's songs. Long playlists arrive in pages of about 100; `limit` says how many to gather (the first page only
+  // when it isn't given). Pages are fetched one after another with a short pause, so a big library sync stays gentle.
+  async function playlistItems(browseIdOrPl, limit) {
     let browseId = browseIdOrPl;
     if (!browseId.startsWith("VL") && !browseId.startsWith("MPRE")) browseId = "VL" + browseId;
-    const j = await innertube("browse", { browseId }, true);
-    const rows = deepFind(j, "musicResponsiveListItemRenderer", []);
-    return rows.map(extractItem).filter((it) => it && it.videoId);
+    const want = Math.max(1, Math.min(5000, Number(limit) || 0));
+    let j = await innertube("browse", { browseId }, true);
+    const out = [], seen = new Set();
+    const take = (resp) => {
+      for (const it of deepFind(resp, "musicResponsiveListItemRenderer", []).map(extractItem)) {
+        if (!it || !it.videoId) continue;
+        const k = it.setVideoId || it.videoId;
+        if (seen.has(k)) continue;
+        seen.add(k); out.push(it);
+      }
+    };
+    take(j);
+    let hops = 0;
+    while (limit && out.length < want && hops < 60) {
+      const token = contToken(j);
+      if (!token) break;
+      await sleep(150);
+      j = await innertube("browse", { continuation: token }, true);
+      const before = out.length;
+      take(j);
+      if (out.length === before) break;
+      hops++;
+    }
+    return limit ? out.slice(0, want) : out;
   }
 
   // ------------------------------------------------------------------ actions
@@ -1065,7 +1088,7 @@
             return { ok: cur2() === want, liked: cur2(), via: "view-model" };
           }
           const lb = likeRenderer();
-          if (!lb) {
+          if (!lb || (cmd.videoId && cmd.videoId !== cur)) {
             const vid = cmd.videoId || cur;
             if (!vid) return { ok: false, error: "no_like_button" };
             const ep = cmd.action === "dislike" ? "like/dislike" : cmd.action === "remove" ? "like/removelike" : "like/like";
@@ -1101,7 +1124,7 @@
         }
         case "home": return { sections: await home() };
         case "playlists": return { playlists: await playlists() };
-        case "playlistItems": return { items: await playlistItems(cmd.playlistId || cmd.browseId) };
+        case "playlistItems": return { items: await playlistItems(cmd.playlistId || cmd.browseId, cmd.limit) };
         case "lyrics": return await lyrics(cmd.videoId);
         case "nowplaying": return { now: nowPlaying(), queue: readQueue() };
         case "probe": return probe();
@@ -1119,15 +1142,6 @@
     if (!d || d.__vmr !== "cmd") return;
     const data = await handle(d.command);
     window.postMessage({ __vmr: "result", id: d.command.id, data }, "*");
-  });
-
-  // The in-tab Refine panel (refine.js) asks for things here, on its own message channel (results don't go to the server).
-  window.addEventListener("message", async (ev) => {
-    if (ev.source !== window) return;
-    const d = ev.data;
-    if (!d || d.__vmr !== "ui" || !d.command) return;
-    const data = await handle(d.command);
-    window.postMessage({ __vmr: "ui-result", id: d.id, data }, "*");
   });
 
   // How hard the page is working: long main-thread stalls (any script, YouTube's own included) and the longest of ours.

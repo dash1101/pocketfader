@@ -123,7 +123,7 @@ data class LyricsResult(
 fun JSONObject.str(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() && it != "null" }
 
-private inline fun <T> JSONArray?.mapObjects(f: (JSONObject) -> T): List<T> {
+internal inline fun <T> JSONArray?.mapObjects(f: (JSONObject) -> T): List<T> {
     if (this == null) return emptyList()
     val out = ArrayList<T>(length())
     for (i in 0 until length()) optJSONObject(i)?.let { out.add(f(it)) }

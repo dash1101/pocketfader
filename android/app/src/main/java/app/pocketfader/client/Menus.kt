@@ -64,7 +64,7 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
                 text = { Text("Add to queue") }, leadingIcon = { Icon(Icons.Filled.Add, null) },
                 onClick = { open = false; Remote.queueAdd(item, next = false) },
             )
-            if (Remote.state.value.ytm) DropdownMenuItem(
+            if (Remote.state.value.ytm || Library.playlists.value.any { it.owned }) DropdownMenuItem(
                 text = { Text("Add to playlist…") }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) },
                 onClick = { open = false; addToPlaylist = true },
             )
@@ -89,11 +89,13 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
 fun AddToPlaylistDialog(item: SearchItem, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { LibraryStore.ensurePlaylists() }
-    val lists = LibraryStore.playlists.orEmpty().filter {
+    // without the account at hand, your own synced playlists take it, and the account gets it at the next sync
+    val online = remember { Remote.state.value.ytm }
+    LaunchedEffect(Unit) { if (online) LibraryStore.ensurePlaylists() }
+    val lists = if (online) LibraryStore.playlists.orEmpty().filter {
         val id = it.playlistId ?: it.browseId?.removePrefix("VL")
         id != null && id != "LM" && id != "SE"
-    }
+    } else Library.playlists.value.filter { it.owned }.map { it.toSearchItem() }
     if (creating) {
         TextPrompt(
             title = "New playlist", initial = "", label = "Playlist name", confirm = "Create",
@@ -120,11 +122,11 @@ fun AddToPlaylistDialog(item: SearchItem, onDone: () -> Unit) {
         text = {
             Column {
                 Text(item.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                Row(Modifier.fillMaxWidth().clickable { creating = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (online) Row(Modifier.fillMaxWidth().clickable { creating = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Add, null, Modifier.size(20.dp))
                     Text("New playlist…", Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyLarge)
                 }
-                if (LibraryStore.playlists == null) {
+                if (online && LibraryStore.playlists == null) {
                     Text("Loading your playlists…", style = MaterialTheme.typography.bodySmall)
                 }
                 LazyColumn(Modifier.heightIn(max = 320.dp)) {
@@ -133,6 +135,12 @@ fun AddToPlaylistDialog(item: SearchItem, onDone: () -> Unit) {
                             p.title,
                             Modifier.fillMaxWidth().clickable {
                                 onDone()
+                                if (!online) {
+                                    val id = p.playlistId ?: return@clickable
+                                    item.toLocal()?.let { Library.addToPlaylistLater(id, it) }
+                                    Remote.notify("Added to ${p.title}. YouTube Music gets it at the next sync.")
+                                    return@clickable
+                                }
                                 scope.launch {
                                     val id = p.playlistId ?: p.browseId?.removePrefix("VL") ?: return@launch
                                     val ok = LibraryStore.attempt {

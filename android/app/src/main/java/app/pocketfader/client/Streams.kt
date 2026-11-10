@@ -38,12 +38,54 @@ private val YT_ID = Regex("^[A-Za-z0-9_-]{11}$")
 /** True for a YouTube video id (not a file or content address). */
 fun isYtId(s: String?): Boolean = s != null && YT_ID.matches(s)
 
+private val TIME = Regex("^(\\d+:)?\\d+:\\d{2}$")
+
+/** "3:12" or "1:02:03" -> seconds (0 when it isn't a time). */
+fun parseClock(t: String): Double {
+    if (!TIME.matches(t)) return 0.0
+    return t.split(":").fold(0.0) { acc, part -> acc * 60 + (part.toIntOrNull() ?: 0) }
+}
+
 fun SearchItem.toLocal(): LocalItem? {
     val id = videoId ?: return null
-    // search subtitles look like "Song · Artist · Album · 3:12"; keep the artist part
+    // search subtitles look like "Song · Artist · Album · 3:12"; keep the artist part (and the length)
     val parts = subtitle.split(" • ", " · ").map { it.trim() }.filter { it.isNotBlank() }
-    val artist = parts.firstOrNull { it !in setOf("Song", "Video", "Single", "EP", "Album") && !Regex("^\\d+:\\d+$").matches(it) }.orEmpty()
-    return LocalItem(id, null, title, artist, thumb)
+    val artist = parts.firstOrNull { it !in setOf("Song", "Video", "Single", "EP", "Album") && !TIME.matches(it) && !it.endsWith(" views") && !it.endsWith(" plays") }.orEmpty()
+    val dur = parts.lastOrNull { TIME.matches(it) }?.let(::parseClock) ?: 0.0
+    return LocalItem(id, null, title, artist, thumb, dur)
+}
+
+/** The other way round: a song on the phone as a row in a list. */
+fun LocalItem.toSearchItem(): SearchItem = SearchItem(
+    title = title,
+    subtitle = listOf(artist, if (durationSec > 0) formatTime(durationSec) else "").filter { it.isNotBlank() }.joinToString(" · "),
+    thumb = art, videoId = videoId, playlistId = null, kind = "song",
+)
+
+private val VIDEO_TAG = Regex(
+    "(?i)\\s*[(\\[][^)\\]]*\\b(official|video|audio|lyrics?|visuali[sz]er|4k|hd|hq|mv|m/v|clip|color coded)\\b[^)\\]]*[)\\]]"
+)
+private val ARTIST_NOISE = Regex("(?i)(\\s*-\\s*topic|vevo|\\s+official(\\s+(channel|music))?)$")
+
+/**
+ * Songs found through plain YouTube often carry video titles: "Queen – Bohemian Rhapsody (Official Video Remastered)" by
+ * "Queen Official". This turns them into what YouTube Music would show: "Bohemian Rhapsody" by "Queen". Names that don't
+ * look like that are left exactly as they are.
+ */
+fun cleanSong(rawTitle: String, rawArtist: String): Pair<String, String> {
+    var artist = rawArtist.trim().replace(ARTIST_NOISE, "").removePrefix("Official ").trim()
+    var title = rawTitle.replace(VIDEO_TAG, "").trim()
+    val dash = Regex("^(.+?)\\s+[-–—]\\s+(.+)$").find(title)
+    if (dash != null) {
+        val (a, t) = dash.destructured
+        val aa = a.trim()
+        if (artist.isBlank() || aa.contains(artist, ignoreCase = true) || artist.contains(aa, ignoreCase = true)) {
+            title = t.trim()
+            if (artist.isBlank() || aa.length > artist.length) artist = aa
+        }
+    }
+    title = title.replace(Regex("\\s+"), " ").trim().ifBlank { rawTitle.trim() }
+    return title to artist.ifBlank { rawArtist.trim() }
 }
 
 fun Track.toLocal(): LocalItem? {
@@ -145,14 +187,17 @@ object Streams {
 
     private fun idOf(url: String): String? = Regex("[?&]v=([A-Za-z0-9_-]{11})").find(url)?.groupValues?.get(1)
 
-    private fun StreamInfoItem.toSearchItem(): SearchItem? {
+    private fun StreamInfoItem.toSearchItem(): SearchItem? = toLocalItem()?.toSearchItem()
+
+    /** A song from a YouTube list, with its name tidied up (see [cleanSong]). */
+    private fun StreamInfoItem.toLocalItem(): LocalItem? {
         val id = idOf(url) ?: return null
-        val dur = if (duration > 0) formatTime(duration.toDouble()) else ""
-        return SearchItem(
-            title = name, subtitle = listOf(uploaderName.orEmpty(), dur).filter { it.isNotBlank() }.joinToString(" · "),
-            thumb = bestThumb(this), videoId = id, playlistId = null, kind = "song",
-        )
+        val (t, a) = cleanSong(name, uploaderName.orEmpty())
+        return LocalItem(id, null, t, a, bestThumb(this), if (duration > 0) duration.toDouble() else 0.0)
     }
+
+    /** Songs, not hour-long mixes or live streams: what belongs in a queue that plays on its own. */
+    private fun StreamInfoItem.isSong(): Boolean = duration in 1..900 && streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM
 
     fun search(query: String): List<SearchItem> {
         init()
@@ -161,27 +206,63 @@ object Streams {
         return ex.initialPage.items.mapNotNull { (it as? StreamInfoItem)?.toSearchItem() }
     }
 
-    /** Songs YouTube relates to this one: what autoplay continues with. */
-    fun related(videoId: String): List<LocalItem> {
+    /**
+     * YouTube Music's own radio for a song (the "RDAMVM" mix it plays when you start a radio): about 25 songs per page,
+     * the song itself first. This is what autoplay and the recommendations are built from.
+     */
+    fun radio(videoId: String, pages: Int = 1): List<LocalItem> {
         init()
-        val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
-        return info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.toSearchItem()?.toLocal() }
+        val url = "https://www.youtube.com/watch?v=$videoId&list=RDAMVM$videoId"
+        val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
+        val all = ArrayList<StreamInfoItem>(info.relatedItems)
+        var page = info.nextPage
+        var n = 1
+        while (n < pages && page != null && org.schabi.newpipe.extractor.Page.isValid(page)) {
+            val more = PlaylistInfo.getMoreItems(ServiceList.YouTube, url, page)
+            all.addAll(more.items)
+            page = more.nextPage
+            n++
+        }
+        val seen = HashSet<String>()
+        return all.filter { it.isSong() }.mapNotNull { it.toLocalItem() }.filter { seen.add(it.videoId!!) }
     }
 
-    /** A public playlist's songs (private ones, like your liked music, need the computer). */
+    /** Songs to continue with after this one: its radio, or (if that fails) what YouTube relates to it. */
+    fun related(videoId: String): List<LocalItem> {
+        runCatching { radio(videoId) }.getOrNull()?.filter { it.videoId != videoId }?.takeIf { it.isNotEmpty() }?.let { return it }
+        init()
+        val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
+        return info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.takeIf { s -> s.isSong() }?.toLocalItem() }
+    }
+
+    /** What people search for, as you type (works without the computer). */
+    fun suggestions(query: String): List<String> {
+        init()
+        return ServiceList.YouTube.suggestionExtractor.suggestionList(query).take(8)
+    }
+
+    /** A public playlist's songs (private ones, like your liked music, need the computer, or a synced copy). */
     fun playlist(playlistId: String): List<LocalItem> {
         init()
-        val info = PlaylistInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/playlist?list=$playlistId")
-        return info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.toSearchItem()?.toLocal() }
+        val url = "https://www.youtube.com/playlist?list=$playlistId"
+        val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
+        val all = ArrayList<StreamInfoItem>(info.relatedItems)
+        var page = info.nextPage
+        var n = 1
+        while (n < 10 && page != null && org.schabi.newpipe.extractor.Page.isValid(page)) {
+            val more = PlaylistInfo.getMoreItems(ServiceList.YouTube, url, page)
+            all.addAll(more.items)
+            page = more.nextPage
+            n++
+        }
+        return all.mapNotNull { it.toLocalItem() }
     }
 
     /** Title, artist and cover of a song, when all we have is its id. */
     fun details(videoId: String): LocalItem {
         init()
         val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
-        return LocalItem(
-            videoId, null, info.name, info.uploaderName.orEmpty().removeSuffix(" - Topic"),
-            info.thumbnails.maxByOrNull { it.height }?.url, info.duration.toDouble(),
-        )
+        val (t, a) = cleanSong(info.name, info.uploaderName.orEmpty())
+        return LocalItem(videoId, null, t, a, info.thumbnails.maxByOrNull { it.height }?.url, info.duration.toDouble())
     }
 }

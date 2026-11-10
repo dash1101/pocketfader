@@ -90,7 +90,15 @@ class AudioFetcher:
         return hit
 
     def _trim(self):
-        """Drop the least recently used songs while the cache is over its limit."""
+        """Drop the least recently used songs while the cache is over its limit (and leftovers of fetches that died)."""
+        old = time.time() - 3600
+        for f in self.dir.iterdir():
+            if f.suffix in (".part", ".ytdl") or ".part-Frag" in f.name:
+                try:
+                    if f.stat().st_mtime < old:
+                        f.unlink()
+                except OSError:
+                    pass
         files = sorted((f for f in self.dir.iterdir() if f.suffix in TYPES), key=lambda f: f.stat().st_mtime)
         total = sum(f.stat().st_size for f in files)
         while files and total > self.limit:

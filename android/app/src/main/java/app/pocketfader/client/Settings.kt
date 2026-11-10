@@ -12,8 +12,11 @@ class PocketfaderApp : Application() {
         super.onCreate()
         Settings.init(this)
         Downloads.init(this)
+        Library.init(this)
+        Recommend.init(this)
         LocalPlayer.init(this)
         Widgets.start(this)
+        AutoDownload.soon()
     }
 }
 
@@ -25,15 +28,21 @@ data class Prefs(
     val accent: Int = 0,                     // chosen accent colour (ARGB); 0 = automatic
     val coverWash: Boolean = true,           // tint the background with the cover's colour
     val coverHighlight: Boolean = false,     // lyric highlight takes the cover's colour instead of the accent
-    val queueArt: Boolean = true,
+    val queueArt: Boolean = true,            // little cover pictures in the queue (off helps very old tablets)
     val playOn: String = "computer",         // computer | phone: where music plays
-    val standalone: Boolean = false,         // used without a computer (set up from the first screen)            // little cover pictures in the queue (off helps very old tablets)
+    val standalone: Boolean = false,         // used without a computer (set up from the first screen)
     val navStyle: String = "bar",            // bar | pill: how the bottom navigation looks
     val coverGlow: String = "strong",        // off | soft | strong | extreme: halo around the cover
     val glowUi: Boolean = false,             // glow around text, icons and buttons
     val wavyBar: Boolean = true,             // the seek bar ripples while music plays
     val coverShape: String = "rounded",      // rounded | soft | circle | cut
-    val transitions: Boolean = true,         // fade/slide between screens          // Discord presence card in Mixer (when the computer supports it)
+    val transitions: Boolean = true,         // fade/slide between screens
+    // library & offline
+    val autoSync: Boolean = true,            // sync playlists and likes from the account whenever the computer's YouTube Music is there
+    val autoDlLiked: Boolean = false,        // keep liked songs downloaded
+    val smartDownloads: Int = 0,             // keep this many of your most played / recommended songs downloaded (0 = off)
+    val dlWifiOnly: Boolean = true,          // automatic downloads wait for Wi-Fi
+    val autoDlLimitMb: Int = 2048,           // space automatic downloads may use (0 = no limit)
     // display
     val keepAwake: String = "off",           // off | playing | always
     val dimAfterMin: Int = 0,                // 0 = never; dims while kept awake and untouched
@@ -62,7 +71,7 @@ data class Prefs(
     // updates
     val autoUpdate: Boolean = true,
     // start screen
-    val startTab: String = "playing",        // playing | search | library | mixer
+    val startTab: String = "playing",        // playing | search | settings
 )
 
 /** App settings: persisted in private storage and observable from the UI, the activity and the service. */
@@ -83,7 +92,13 @@ object Settings {
         if (::sp.isInitialized) write(next)
     }
 
-    fun reset() = update { Prefs(playOn = it.playOn, standalone = it.standalone) }
+    // the reset keeps where music plays and the offline rules (resetting those could delete downloads)
+    fun reset() = update {
+        Prefs(
+            playOn = it.playOn, standalone = it.standalone, autoSync = it.autoSync, autoDlLiked = it.autoDlLiked,
+            smartDownloads = it.smartDownloads, dlWifiOnly = it.dlWifiOnly, autoDlLimitMb = it.autoDlLimitMb,
+        )
+    }
 
     private fun read(): Prefs {
         val d = Prefs()
@@ -109,6 +124,9 @@ object Settings {
             autoUpdate = b("autoUpdate", d.autoUpdate),
             pollSpeed = s("pollSpeed", d.pollSpeed), reduceMotion = b("reduceMotion", d.reduceMotion),
             startTab = s("startTab", d.startTab),
+            autoSync = b("autoSync", d.autoSync), autoDlLiked = b("autoDlLiked", d.autoDlLiked),
+            smartDownloads = i("smartDownloads", d.smartDownloads), dlWifiOnly = b("dlWifiOnly", d.dlWifiOnly),
+            autoDlLimitMb = i("autoDlLimitMb", d.autoDlLimitMb),
         )
     }
 
@@ -132,6 +150,9 @@ object Settings {
             .putInt("lyricsSpacing", p.lyricsSpacing).putInt("lyricsDim", p.lyricsDim).putBoolean("autoUpdate", p.autoUpdate)
             .putString("pollSpeed", p.pollSpeed).putBoolean("reduceMotion", p.reduceMotion)
             .putString("startTab", p.startTab)
+            .putBoolean("autoSync", p.autoSync).putBoolean("autoDlLiked", p.autoDlLiked)
+            .putInt("smartDownloads", p.smartDownloads).putBoolean("dlWifiOnly", p.dlWifiOnly)
+            .putInt("autoDlLimitMb", p.autoDlLimitMb)
             .apply()
     }
 }

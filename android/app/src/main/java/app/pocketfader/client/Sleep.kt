@@ -57,7 +57,8 @@ fun SleepButton(s: RemoteState) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (active) "Playback will pause in ${sleepText(left)}." else "Pause playback on the computer after…",
+                        if (active) "Playback will pause in ${sleepText(left)}."
+                        else if (s.source == "phone") "Pause playback on this phone after…" else "Pause playback on the computer after…",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     for (row in listOf(listOf(15, 30, 45), listOf(60, 90, 120))) {

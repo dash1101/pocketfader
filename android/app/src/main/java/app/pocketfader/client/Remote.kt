@@ -96,10 +96,18 @@ object Remote {
     fun computerApi(): PfApi? = api
 
     /** The phone's player reports what it's doing (only shown while playing on the phone). */
-    fun applyLocal(now: Now?, queue: List<Track>, prog: Progress) {
+    fun applyLocal(now: Now?, queue: List<Track>, prog: Progress, sleepLeft: Int = 0) {
         if (!local) return
         _progress.value = prog
-        _state.update { it.copy(now = now, queue = queue, source = "phone", bridge = true, canLyrics = true) }
+        _state.update {
+            // the sleep timer only gets a new timestamp when it changes, not each time this runs (that would redraw everything)
+            val t = SystemClock.elapsedRealtime()
+            val sameTimer = it.sleepLeft > 0 && sleepLeft > 0 && kotlin.math.abs((it.sleepAt + it.sleepLeft * 1000L) - (t + sleepLeft * 1000L)) < 2500
+            it.copy(
+                now = now, queue = queue, source = "phone", bridge = true, canLyrics = true, canSleep = true,
+                sleepLeft = if (sameTimer) it.sleepLeft else sleepLeft, sleepAt = if (sameTimer) it.sleepAt else if (sleepLeft > 0) t else 0L,
+            )
+        }
     }
 
     fun applyProgress(prog: Progress) { if (local) _progress.value = prog }
@@ -115,7 +123,11 @@ object Remote {
         if (mode == "phone") {
             val songs = before.queue.filter { it.section == "queue" }
             val cur = songs.indexOfFirst { it.selected }
-            val list = songs.drop(cur.coerceAtLeast(0)).mapNotNull { it.toLocal() }
+            // the song playing, then the rest of the queue after it (the queue may not mark which row is playing)
+            val n = before.now
+            val playingNow = n?.videoId?.takeIf(::isYtId)?.let { LocalItem(it, null, n.title, n.artist, n.art, n.duration) }
+            val upcoming = (if (cur >= 0) songs.drop(cur + 1) else emptyList()).mapNotNull { it.toLocal() }
+            val list = listOfNotNull(playingNow) + upcoming.filter { it.videoId != playingNow?.videoId }
             Settings.update { it.copy(playOn = "phone") }
             if (carryOver && before.now?.videoId != null && list.isNotEmpty()) {
                 if (before.now.playing) transportComputer("playpause")
@@ -228,6 +240,7 @@ object Remote {
         val now = parseNow(nowJson)
         val loc = local
         if (!loc) _progress.value = Progress(parsePosition(nowJson), sampled)
+        if (!loc && ytm.str("source") == "ytm") Library.observeComputer(now, parsePosition(nowJson))
         val queue = parseQueue(ytm)
         val source = ytm.str("source")
         val bridge = ytm.optBoolean("connected", false) && source == "ytm"
@@ -247,12 +260,14 @@ object Remote {
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
                 canLyrics = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
-                canSleep = st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
-                sleepLeft = sleepFrom(st, cur).first,
-                sleepAt = sleepFrom(st, cur).second,
+                canSleep = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
+                sleepLeft = if (loc) cur.sleepLeft else sleepFrom(st, cur).first,
+                sleepAt = if (loc) cur.sleepAt else sleepFrom(st, cur).second,
                 outputs = if (settling) cur.outputs else (outs ?: cur.outputs),
             )
         }
+        // the account is reachable: a good moment to bring the library over (and send changes made without it)
+        if (bridge) Library.syncIfDue()
     }
 
     /**
@@ -349,9 +364,37 @@ object Remote {
         }
     }
 
-    /** minutes: 1..720, "track" (when this song ends) or 0 to cancel. The computer pauses playback when time is up. */
+    /** minutes: 1..720, "track" (when this song ends) or 0 to cancel. Playback (on the phone, or the computer) pauses when time is up. */
     fun setSleep(minutes: Any) {
+        if (local) { LocalPlayer.setSleep(minutes); return }
         runApi { it.post("/api/sleep", JSONObject().put("minutes", minutes)) }
+    }
+
+    /**
+     * "I'm feeling lucky": something you'd probably like. On the computer with YouTube Music, YouTube Music picks from your
+     * home page; otherwise the phone's own recommendations pick, and the song plays where music is playing (on a computer
+     * with no YouTube Music tab open, one is opened with it).
+     */
+    fun lucky() {
+        if (!local && _state.value.ytm) {
+            command(JSONObject().put("type", "lucky")) { r -> r.optString("picked").takeIf { it.isNotBlank() }?.let { notify("Playing $it") } }
+            return
+        }
+        scope.launch {
+            val pick = Recommend.lucky()
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                when {
+                    pick == null -> notify("Nothing to pick from yet. Play a few songs first.")
+                    local || api == null -> {
+                        if (!local) setPlayOn("phone", carryOver = false)
+                        LocalPlayer.setAutoplay(true)
+                        LocalPlayer.playItems(listOf(pick))
+                        notify("Playing ${pick.title}")
+                    }
+                    else -> { play(pick.videoId!!); notify("Playing ${pick.title}") }
+                }
+            }
+        }
     }
 
     fun transport(action: String, position: Double? = null) {
@@ -372,11 +415,21 @@ object Remote {
         command(b)
     }
 
+    /**
+     * Like or unlike a song. It counts right away on the phone (your liked songs, the recommendations); YouTube Music gets it
+     * now when the computer's tab is connected, or at the next sync when it isn't.
+     */
     fun like(videoId: String, on: Boolean) {
-        if (!_state.value.ytm) { notify("Likes go through YouTube Music on the computer, which isn't connected."); return }
-        hold("liked")
-        _state.update { s -> s.copy(now = s.now?.let { n -> n.copy(liked = on) }) }
-        command(JSONObject().put("type", "like").put("videoId", videoId).put("action", if (on) "like" else "remove"))
+        val connected = _state.value.ytm
+        val n = _state.value.now
+        val item = if (n != null && n.videoId == videoId) LocalItem(videoId, null, n.title, n.artist, n.art, n.duration)
+        else LocalPlayer.queue().firstOrNull { it.videoId == videoId } ?: LocalItem(videoId, null, "", "", null)
+        Library.setLiked(item, on, sendNow = connected)
+        if (!local) hold("liked")
+        _state.update { s -> s.copy(now = s.now?.let { now -> if (now.videoId == videoId) now.copy(liked = on) else now }) }
+        if (local) LocalPlayer.publish()
+        if (connected) command(JSONObject().put("type", "like").put("videoId", videoId).put("action", if (on) "like" else "remove"))
+        else if (on) notify("Liked. It'll be added to your YouTube Music likes at the next sync.")
     }
 
     fun setRepeat(mode: String) {
@@ -446,12 +499,14 @@ object Remote {
         if (local) {
             scope.launch {
                 // your own playlists (and liked music) need the account on the computer; public ones load on the phone
+                val synced = if (playlistId == "LM") Library.liked.value.takeIf { it.isNotEmpty() } else Library.playlist(playlistId)?.tracks
                 val list = runCatching {
-                    if (_state.value.ytm) playlistItems(SearchItem("", "", null, null, playlistId, "playlist")).mapNotNull { it.toLocal() }
-                    else Streams.playlist(playlistId)
-                }.recoverCatching { Streams.playlist(playlistId) }.getOrNull().orEmpty()
+                    if (_state.value.ytm) playlistItems(SearchItem("", "", null, null, playlistId, "playlist"), limit = 1000).mapNotNull { it.toLocal() }
+                    else synced ?: Streams.playlist(playlistId)
+                }.recoverCatching { synced ?: Streams.playlist(playlistId) }.getOrNull().orEmpty()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    if (list.isEmpty()) notify("Couldn't load that playlist on the phone.") else LocalPlayer.playItems(list, 0, shuffle)
+                    if (list.isEmpty()) notify("Couldn't load that playlist on the phone.")
+                    else LocalPlayer.playItems(list, if (shuffle) list.indices.random() else 0, shuffle)
                 }
             }
             return
@@ -511,13 +566,22 @@ object Remote {
 
     fun playlists(): List<SearchItem> = parseItems(ytmCall(JSONObject().put("type", "playlists")), "playlists")
 
-    fun playlistItems(p: SearchItem): List<SearchItem> =
-        parseItems(
-            ytmCall(
-                JSONObject().put("type", "playlistItems")
-                    .put("playlistId", p.playlistId ?: JSONObject.NULL).put("browseId", p.browseId ?: JSONObject.NULL)
-            )
-        )
+    /** A playlist's songs: the first hundred or so, or up to [limit] (long playlists come in pages). */
+    fun playlistItems(p: SearchItem, limit: Int? = null): List<SearchItem> {
+        val b = JSONObject().put("type", "playlistItems")
+            .put("playlistId", p.playlistId ?: JSONObject.NULL).put("browseId", p.browseId ?: JSONObject.NULL)
+        if (limit != null) b.put("limit", limit)
+        return parseItems(ytmCall(b, if (limit != null) 120000 else 25000))
+    }
+
+    /** Search suggestions as you type: your account's (through the computer) when it's there, else YouTube's. */
+    fun suggest(query: String): List<String> {
+        if (_state.value.ytm) {
+            runCatching { ytmCall(JSONObject().put("type", "suggest").put("query", query), 6000) }.getOrNull()
+                ?.optJSONArray("suggestions").strings().takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return Streams.suggestions(query)
+    }
 
     /** A playlist change (move, remove, rename, add, create, delete, queueSave); the reply has `ok`. */
     fun playlistOp(body: JSONObject): JSONObject = ytmCall(body)
@@ -602,6 +666,7 @@ object Remote {
     }
 
     fun adjustVolume(delta: Int) {
+        if (local) { LocalPlayer.setPhoneVolume(LocalPlayer.phoneVolume() + delta); return }
         val target = (_state.value.volume.percent + delta).coerceIn(0, 100)
         settleUntil = SystemClock.elapsedRealtime() + 1500
         _state.update { it.copy(volume = it.volume.copy(percent = target)) }
@@ -609,6 +674,7 @@ object Remote {
     }
 
     fun setMuted(muted: Boolean) {
+        if (local) { if ((LocalPlayer.phoneVolume() == 0) != muted) LocalPlayer.togglePhoneMute(); return }
         _state.update { it.copy(volume = it.volume.copy(muted = muted)) }
         settleUntil = SystemClock.elapsedRealtime() + 1000
         runApi { it.post("/api/volume", JSONObject().put("muted", muted)) }

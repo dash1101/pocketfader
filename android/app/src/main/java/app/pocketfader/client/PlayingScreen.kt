@@ -192,7 +192,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            if (s.canSleep && s.source != "phone") SleepButton(s)
+            if (s.canSleep) SleepButton(s)
             // save the song that's playing to this phone
             if (isYtId(videoId)) {
                 val saved by Downloads.items.collectAsStateWithLifecycle()
@@ -205,7 +205,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     ) { now?.let { n -> Downloads.enqueue(LocalItem(vid, null, n.title, n.artist, n.art, n.duration)) } }
                 }
             }
-            if (s.ytm && isYtId(videoId) && videoId != null) {
+            // likes count on the phone right away, and reach YouTube Music now (computer connected) or at the next sync
+            if (isYtId(videoId) && videoId != null) {
                 val liked = now?.liked == true
                 val primary = MaterialTheme.colorScheme.primary
                 PressIconButton(
