@@ -12,7 +12,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.12.0";
+  const EXT_VERSION = "1.13.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1130,26 +1130,41 @@
     window.postMessage({ __vmr: "ui-result", id: d.id, data }, "*");
   });
 
-  // Push now-playing + queue on a heartbeat so connected clients stay live.
-  let last = "";
-  setInterval(() => {
-    const state = { now: nowPlaying(), queue: readQueue(), ts: Date.now() };
-    const sig = JSON.stringify([state.now, state.queue.map((q) => q.videoId + q.section[0] + (q.selected ? "*" : "")), Math.round(state.now.position)]);
+  // How hard the page is working: long main-thread stalls (any script, YouTube's own included) and the longest of ours.
+  // Reported with the state, so a frozen tab can be traced to us or ruled out.
+  const perf = { longTasks: 0, longestMs: 0, ourMaxMs: 0, since: Date.now() };
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) { perf.longTasks++; if (e.duration > perf.longestMs) perf.longestMs = Math.round(e.duration); }
+    }).observe({ type: "longtask", buffered: true });
+  } catch (e) {}
+  const timed = (fn) => { const t0 = performance.now(); try { fn(); } finally { const d = performance.now() - t0; if (d > perf.ourMaxMs) perf.ourMaxMs = Math.round(d); } };
+
+  // Push now-playing + queue on a heartbeat so connected clients stay live. While the tab is in the background this
+  // slows to every 3 s and the fast beat stops: the page should be left alone when nobody is looking at it.
+  let last = "", beat = 0;
+  setInterval(() => timed(() => {
+    if (document.hidden && (beat++ % 3) !== 0) return;
+    const state = { now: nowPlaying(), queue: readQueue(), ts: Date.now(), perf };
+    const n = state.now;
+    const sig = JSON.stringify([n.videoId, n.title, n.playing, n.liked, n.repeat, n.shuffle, n.autoplay, n.speed, n.art,
+      state.queue.map((q) => q.videoId + q.section[0] + (q.selected ? "*" : "")), Math.round(n.position)]);
     if (sig === last) return; // only push on change (position rounds to whole seconds)
     last = sig;
     window.postMessage({ __vmr: "state", state }, "*");
-  }, 1000);
+  }), 1000);
 
   // A faster, now-playing-only beat so the playback position the server hands out (and the lyrics that
   // follow it) is at most a quarter of a second old. The full state above still carries the queue.
   let lastFast = "";
-  setInterval(() => {
+  setInterval(() => timed(() => {
+    if (document.hidden) return;
     const now = nowPlaying();
     const sig = JSON.stringify([now.videoId, now.playing, Math.round(now.position * 4)]);
     if (sig === lastFast) return;
     lastFast = sig;
     window.postMessage({ __vmr: "state", state: { now, ts: Date.now(), partial: true } }, "*");
-  }, 250);
+  }), 250);
 
   // A snapshot of how this page is laid out, sent once after load, so controls that can't be found can be diagnosed
   // without asking anyone to open developer tools.

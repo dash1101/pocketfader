@@ -16,18 +16,18 @@ This is an early build for testing; expect rough edges.
 You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
 page the server prints and add it to the home screen.
 
-### What's new in alpha.11
+### What's new in alpha.12
 
-- **Home-screen widgets (Android)**: long-press the home screen → Widgets → Pocketfader.
-  - **Now playing** (wide): the cover over a soft blur of its own colours, the title, a progress bar, where it's playing, and
-    like, previous / play-pause / next and volume buttons.
-  - **Now playing (slim)**, **Cover** (album art with play/pause), **Volume** (computer or phone, with mute) and
-    **Quick actions** (I'm feeling lucky, sleep 30 minutes, pause other players, switch between phone and computer).
-- **A new icon** for the app, the browser extension (now 1.12, which finally has an icon) and the web app: equalizer faders on
-  a dark tile over a soft mint background.
+- **Widgets redesigned**: a clean dark card instead of the blurred background, with a large rounded cover, the title and artist,
+  a progress bar with the elapsed time (it counts by itself) and the length, and round previous / play-pause / next buttons.
+  The slim, cover, volume and quick-action widgets follow the same style. The play button uses your accent colour
+  (Settings → Appearance), or a soft periwinkle by default.
+- **Extension 1.13**: while the YouTube Music tab is in the background it now reports only every few seconds and does no other
+  work, and it records how long the page stalls, so freezes can be traced. **Reload the extension and refresh the tab.**
 
 ### Earlier
 
+- alpha.11: home-screen widgets and a new icon.
 - alpha.10: play on the phone itself (YouTube Music and local files), downloads with lyrics, Search with Playlists and On this phone tabs.
 - alpha.9: smoother cover glow, artist pages, search recommendations, soft edges, web app restyle.
 - alpha.8: ambient cover glow, Settings in pages, Settings in the navigation, floating pill navigation, scrolling fixes.
