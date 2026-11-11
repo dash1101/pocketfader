@@ -275,6 +275,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             val liked by Library.liked.collectAsStateWithLifecycle()
             val at by Library.syncedAt.collectAsStateWithLifecycle()
             val status by Library.status.collectAsStateWithLifecycle()
+            val problem by Library.problem.collectAsStateWithLifecycle()
             val keep by Library.keepOffline.collectAsStateWithLifecycle()
             val history by Library.history.collectAsStateWithLifecycle()
             val saved by Downloads.items.collectAsStateWithLifecycle()
@@ -284,6 +285,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 val waiting = Library.pendingCount
                 if (waiting > 0) Info("Waiting to be sent", "$waiting change" + (if (waiting == 1) "" else "s") + " made without the account (likes, songs added to playlists)")
                 status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                if (status == null) problem?.let { Info("The last automatic sync stopped", it) }
                 FilledTonalButton(onClick = { Library.sync() }, enabled = s.ytm && status == null) {
                     Text(if (status != null) "Syncing…" else "Sync now")
                 }
@@ -294,7 +296,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                         if (!s.ytm) " Open YouTube Music on the computer to sync." else "",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Toggle("Sync automatically", "Whenever YouTube Music on the computer is connected (at most every few hours).", p.autoSync) { v ->
+                Toggle("Sync automatically", "Each time this phone pairs with or connects to a computer with YouTube Music open, and every few hours while it stays connected.", p.autoSync) { v ->
                     Settings.update { it.copy(autoSync = v) }
                 }
             }

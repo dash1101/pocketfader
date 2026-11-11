@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
         store.save(c)
         cfg = c
         Remote.configure(c)
+        if (c.isSet) Library.paired()       // bring the library over from this computer as soon as its YouTube Music is there
         LibraryStore.clear()
         if (!c.isSet) stopService(Intent(this, PlaybackService::class.java))
     }

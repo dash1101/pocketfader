@@ -157,8 +157,12 @@ object Remote {
         command(b)
     }
 
+    /** Whether the last poll saw the computer's YouTube Music (so its arrival can be told from its staying). */
+    @Volatile private var hadBridge = false
+
     fun configure(cfg: ServerConfig) {
         api = if (cfg.isSet) PfApi(cfg) else null
+        hadBridge = false
         _state.value = RemoteState(configured = cfg.isSet)
         _progress.value = Progress()
         if (local) LocalPlayer.publish()
@@ -212,7 +216,10 @@ object Remote {
                     failures = 0
                 } catch (e: Exception) {
                     failures++
-                    if (failures >= 2) _state.update { it.copy(online = false, error = e.friendly()) }
+                    if (failures >= 2) {
+                        hadBridge = false
+                        _state.update { it.copy(online = false, error = e.friendly()) }
+                    }
                 }
             }
             delay(delayFor())
@@ -268,6 +275,8 @@ object Remote {
             )
         }
         // the account is reachable: a good moment to bring the library over (and send changes made without it)
+        if (bridge && !hadBridge) Library.connected()
+        hadBridge = bridge
         if (bridge) Library.syncIfDue()
     }
 

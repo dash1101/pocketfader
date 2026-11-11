@@ -85,6 +85,11 @@ object Library {
     @Volatile var loaded = false
         private set
     @Volatile private var lastAttempt = 0L
+    @Volatile private var justConnected = false       // the computer's YouTube Music has just come within reach
+    @Volatile private var justPaired = false          // ...of a computer this phone was only now paired with
+    private val _problem = MutableStateFlow<String?>(null)
+    /** Why the last automatic sync didn't finish (null: it did, or none has run). Automatic syncs don't interrupt with messages. */
+    val problem: StateFlow<String?> = _problem
 
     fun init(ctx: Context) {
         if (::dir.isInitialized) return
@@ -274,17 +279,41 @@ object Library {
 
     // ---------------------------------------------------------------- syncing with the account
 
-    /** Sync when the computer's YouTube Music is connected and the last sync is old (or there are changes to send). */
+    /** The phone has just reached a computer's YouTube Music: the next check brings the library up to date. */
+    fun connected() { justConnected = true }
+
+    /** The phone was just paired with a computer: sync with it as soon as its YouTube Music is there, however recent the last sync. */
+    fun paired() {
+        justPaired = true
+        lastAttempt = 0L
+    }
+
+    /**
+     * Sync when the computer's YouTube Music is connected and there is a reason to: the phone has just paired with or
+     * connected to the computer (so what's on the phone is current before you leave with it), the last sync is old,
+     * or there are changes to send.
+     */
     fun syncIfDue() {
         if (!Settings.prefs.value.autoSync || syncing) return
         val now = System.currentTimeMillis()
         if (now - lastAttempt < 10 * 60_000L) return
-        val due = now - _syncedAt.value > 6 * 3600_000L || pendingCount > 0
-        if (due) sync()
+        val age = now - _syncedAt.value
+        // a connection that only dropped for a moment isn't worth reading every playlist again
+        val due = justPaired || (justConnected && age > 15 * 60_000L) || age > 6 * 3600_000L || pendingCount > 0
+        justConnected = false
+        justPaired = false
+        if (due) sync(quiet = true)
     }
 
-    /** Bring your playlists, liked songs and home page over from the account (needs the computer's YouTube Music tab). */
-    fun sync() {
+    private fun fingerprint(): String =
+        _playlists.value.joinToString(",") { it.id + ":" + it.title + ":" + it.tracks.size + ":" + (it.tracks.firstOrNull()?.videoId ?: "") } +
+            "|" + _liked.value.size + ":" + (_liked.value.firstOrNull()?.videoId ?: "")
+
+    /**
+     * Bring your playlists, liked songs and home page over from the account (needs the computer's YouTube Music tab).
+     * A quiet sync (an automatic one) only says something when the library actually changed.
+     */
+    fun sync(quiet: Boolean = false) {
         if (syncing) return
         syncing = true
         lastAttempt = System.currentTimeMillis()
@@ -292,9 +321,11 @@ object Library {
             try {
                 if (!Remote.state.value.ytm) {
                     _status.value = null
-                    Remote.notify("Syncing needs YouTube Music open on the computer.")
+                    if (!quiet) Remote.notify("Syncing needs YouTube Music open on the computer.")
                     return@launch
                 }
+                val before = fingerprint()
+                val first = _syncedAt.value == 0L
                 _status.value = "Sending your changes…"
                 flushPending()
                 _status.value = "Syncing your liked songs…"
@@ -343,11 +374,14 @@ object Library {
                 runCatching { Remote.home() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { _home.value = it }
                 _syncedAt.value = System.currentTimeMillis()
                 synchronized(this@Library) { save() }
-                Remote.notify("Library synced: ${out.size} playlists, ${_liked.value.size} liked songs")
-                Recommend.invalidate()
+                _problem.value = null
+                val changed = fingerprint() != before
+                if (!quiet || first) Remote.notify("Library synced: ${out.size} playlists, ${_liked.value.size} liked songs")
+                else if (changed) Remote.notify("Library updated from the computer: ${out.size} playlists, ${_liked.value.size} liked songs")
+                if (changed || !quiet) Recommend.invalidate()
                 AutoDownload.soon()
             } catch (e: Exception) {
-                Remote.notify("Sync stopped: ${e.friendly()}")
+                if (quiet) _problem.value = e.friendly() else Remote.notify("Sync stopped: ${e.friendly()}")
             } finally {
                 _status.value = null
                 syncing = false
