@@ -77,7 +77,7 @@ fun DetailHost(modifier: Modifier = Modifier) {
     // each page arrives with a short fade and a small rise (off with "Reduce motion" or screen transitions turned off)
     val still = LocalReduceMotion.current || !Settings.prefs.value.transitions
     val enter = remember(q, d) { Animatable(if (still) 1f else 0f) }
-    LaunchedEffect(enter) { if (enter.value < 1f) enter.animateTo(1f, tween(220)) }
+    LaunchedEffect(enter) { if (enter.value < 1f) enter.animateTo(1f, tween(Motion.Short, easing = Motion.Ease)) }
     val arriving = modifier.graphicsLayer {
         val t = enter.value
         alpha = t

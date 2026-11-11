@@ -2,8 +2,12 @@ package app.pocketfader.client
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -15,9 +19,34 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 private val Violet = Color(0xFF6B3FD6)
+
+/**
+ * One scale of corners for the whole app, shared with the web app and with Refine (docs/DESIGN.md):
+ * the bigger the surface, the rounder it is.
+ */
+object PfShape {
+    val Xs = RoundedCornerShape(8.dp)    // small covers, chips that are not chosen
+    val Sm = RoundedCornerShape(12.dp)   // the highlight behind a row or a button
+    val Md = RoundedCornerShape(16.dp)   // text fields, menus, tiles
+    val Lg = RoundedCornerShape(24.dp)   // cards
+    val Xl = RoundedCornerShape(28.dp)   // sheets, dialogs, the big cover
+    val Full = RoundedCornerShape(percent = 50)   // buttons, chosen chips, switches
+}
+
+/** How long things take, and the one curve they move along; the same values as the web app and Refine. */
+object Motion {
+    const val Quick = 120    // a press
+    const val Short = 200    // a fade, a colour, a chip changing shape
+    const val Medium = 300   // something moving or opening
+    const val Long = 450     // a whole screen or the cover
+    val Ease: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+}
+
+private val AppShapes = Shapes(extraSmall = PfShape.Md, small = PfShape.Xs, medium = PfShape.Md, large = PfShape.Lg, extraLarge = PfShape.Xl)
 
 private val Dark = darkColorScheme(
     primary = Color(0xFFB69CFF),
@@ -88,7 +117,7 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
         }
     }
     CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion, LocalGlowUi provides prefs.glowUi) {
-        MaterialTheme(colorScheme = scheme) {
+        MaterialTheme(colorScheme = scheme, shapes = AppShapes) {
             // The base layer gives every piece of text a readable default colour, whatever theme is chosen.
             androidx.compose.material3.Surface(color = scheme.background, contentColor = scheme.onBackground, content = content)
         }

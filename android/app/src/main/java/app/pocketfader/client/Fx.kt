@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
@@ -58,6 +60,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -115,23 +121,70 @@ private fun smoother(t: Float): Float {
     return x * x * x * (x * (x * 6f - 15f) + 10f)
 }
 
+/** How far a point lies from the straight line between two others. */
+private fun segmentDistance(px: Float, py: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
+    val vx = bx - ax
+    val vy = by - ay
+    val len2 = vx * vx + vy * vy
+    val t = if (len2 <= 0f) 0f else (((px - ax) * vx + (py - ay) * vy) / len2).coerceIn(0f, 1f)
+    return hypot(px - (ax + vx * t), py - (ay + vy * t))
+}
+
+/**
+ * How far the point (x, y) lies outside the cover, 0 when it is under it. The cover is a square one unit wide around
+ * the origin; x and y are already folded into the quarter of one corner, which is rounded (or cut straight) by [r].
+ */
+private fun outsideCover(x: Float, y: Float, r: Float, cut: Boolean): Float {
+    val h = 0.5f
+    if (!cut) {
+        val qx = x - (h - r)
+        val qy = y - (h - r)
+        return max(hypot(max(qx, 0f), max(qy, 0f)) + min(max(qx, qy), 0f) - r, 0f)
+    }
+    if (x <= h && y <= h && x + y <= 2f * h - r) return 0f
+    // the nearest of the side, the cut and the top
+    return min(
+        segmentDistance(x, y, h, -1f, h, h - r),
+        min(segmentDistance(x, y, h, h - r, h - r, h), segmentDistance(x, y, h - r, h, -1f, h)),
+    )
+}
+
+/**
+ * How strong the light is at each point: full under the cover, fading to nothing at the outer edge, and following the
+ * cover's own outline all the way round, so no square corner shows behind a rounded, round or cut one. It is a small
+ * picture that is stretched over the light; [corners] run clockwise from the top left, as a fraction of the cover's width.
+ */
+private fun glowMask(reach: Float, corners: FloatArray, cut: Boolean): ImageBitmap {
+    val n = 192
+    val px = IntArray(n * n)
+    val margin = (reach - 1f) / 2f      // how far the light reaches past the cover, in cover widths
+    for (y in 0 until n) {
+        val cy = ((y + 0.5f) / n - 0.5f) * reach
+        for (x in 0 until n) {
+            val cx = ((x + 0.5f) / n - 0.5f) * reach
+            val r = corners[if (cy < 0f) (if (cx < 0f) 0 else 1) else (if (cx < 0f) 3 else 2)]
+            val a = smoother(1f - outsideCover(abs(cx), abs(cy), r, cut) / margin)
+            px[y * n + x] = (a * 255f).roundToInt().coerceIn(0, 255) shl 24
+        }
+    }
+    return android.graphics.Bitmap.createBitmap(px, n, n, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
+}
+
 /**
  * A soft light that carries the cover's own edges outward, like an ambient backdrop: a blurred copy of the cover is
- * scaled up behind it and faded to nothing toward its outer edge, evenly on all four sides (the fade is applied
- * across and then down, so the light has no outline and no circular halo). [fade] dims it as the cover scrolls away.
+ * scaled up behind it and faded to nothing toward its outer edge, the same distance all the way round the cover's
+ * outline ([shape], on a cover [coverDp] wide), so the light has no outline of its own and nothing sticks out behind
+ * the cover's corners. [fade] dims it as the cover scrolls away.
  */
 @Composable
-fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Float>, modifier: Modifier = Modifier, fade: () -> Float = { 1f }) {
+fun AmbientGlow(
+    thumb: ImageBitmap, level: String, shape: String, coverDp: Float, scale: Float, pulse: State<Float>,
+    modifier: Modifier = Modifier, fade: () -> Float = { 1f },
+) {
     val (reach, strength, sat) = ambientSpec(level) ?: return
     val filter = remember(sat) { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(sat) }) }
-    // where the cover's edge sits inside the scaled-up picture, as a fraction of its width, measured from each side
-    val inner = (1f - 1f / reach) / 2f
-    val ramp = remember(inner) {
-        val steps = 14
-        val up = (0..steps).map { i -> val t = i / steps.toFloat(); (t * inner) to Color.Black.copy(alpha = smoother(t)) }
-        val down = up.reversed().map { (p, c) -> (1f - p) to c }
-        (up + down).toTypedArray()
-    }
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val mask = remember(reach, shape, coverDp.roundToInt(), rtl) { glowMask(reach, coverCorners(shape, coverDp, rtl), shape == "cut") }
     Box(
         modifier
             .graphicsLayer {
@@ -146,9 +199,11 @@ fun AmbientGlow(thumb: ImageBitmap, level: String, scale: Float, pulse: State<Fl
                     thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
                     colorFilter = filter, filterQuality = FilterQuality.High,
                 )
-                // fade to nothing at the outer edge: across, then down (the two multiply)
-                drawRect(Brush.horizontalGradient(*ramp), blendMode = BlendMode.DstIn)
-                drawRect(Brush.verticalGradient(*ramp), blendMode = BlendMode.DstIn)
+                // keep only what the mask lets through: everything under the cover, less and less further out
+                drawImage(
+                    mask, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                    blendMode = BlendMode.DstIn, filterQuality = FilterQuality.High,
+                )
             },
     )
 }
@@ -191,9 +246,29 @@ fun Modifier.pressScale(source: MutableInteractionSource, amount: Float = 0.9f):
 /** Cover shapes: rounded | soft | circle | cut. */
 fun coverShape(kind: String): Shape = when (kind) {
     "soft" -> RoundedCornerShape(56.dp)
-    "circle" -> RoundedCornerShape(percent = 50)
+    "circle" -> PfShape.Full
     "cut" -> CutCornerShape(topStart = 28.dp, bottomEnd = 28.dp, topEnd = 6.dp, bottomStart = 6.dp)
-    else -> RoundedCornerShape(32.dp)
+    else -> PfShape.Xl
+}
+
+/** The corners of [coverShape], clockwise from the top left, as a fraction of a cover [widthDp] wide. Keep the two in step. */
+fun coverCorners(kind: String, widthDp: Float, rtl: Boolean = false): FloatArray {
+    fun part(dp: Float) = if (widthDp > 0f) (dp / widthDp).coerceIn(0f, 0.5f) else 0f
+    return when (kind) {
+        "soft" -> FloatArray(4) { part(56f) }
+        "circle" -> FloatArray(4) { 0.5f }
+        "cut" -> if (rtl) floatArrayOf(part(6f), part(28f), part(6f), part(28f)) else floatArrayOf(part(28f), part(6f), part(28f), part(6f))
+        else -> FloatArray(4) { part(28f) }
+    }
+}
+
+/** A chip is softly squared, and rounds off into a pill once it is chosen. */
+@Composable
+fun chipShape(selected: Boolean): Shape {
+    val reduce = LocalReduceMotion.current
+    // 16 is half a chip's height: a full pill
+    val r by animateDpAsState(if (selected) 16.dp else 8.dp, tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "chip")
+    return RoundedCornerShape(r)
 }
 
 /** Three little bars that dance while music plays (the "now playing" mark). */
@@ -244,7 +319,7 @@ fun WavySeekBar(
     val color = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
     val moving = wavy && playing && !reduce && enabled
-    val amplitude by animateFloatAsState(if (wavy && playing && enabled) 3.5f else 0f, tween(if (reduce) 0 else 500), label = "amp")
+    val amplitude by animateFloatAsState(if (wavy && playing && enabled) 3.5f else 0f, tween(if (reduce) 0 else Motion.Long, easing = Motion.Ease), label = "amp")
     val phase: State<Float> = if (moving) {
         rememberInfiniteTransition(label = "wave").animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(1500, easing = LinearEasing)), label = "phase")
     } else {

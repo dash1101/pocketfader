@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 fun PillNav(labels: List<String>, icons: List<ImageVector>, selected: Int, onSelect: (Int) -> Unit) {
     Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         Surface(
-            shape = RoundedCornerShape(percent = 50),
+            shape = PfShape.Full,
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
             tonalElevation = 6.dp,
             shadowElevation = 10.dp,
@@ -53,12 +53,12 @@ fun PillNav(labels: List<String>, icons: List<ImageVector>, selected: Int, onSel
 private fun PillItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
     val reduce = LocalReduceMotion.current
     val bg by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(if (reduce) 0 else 220), label = "pill-bg",
+        if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "pill-bg",
     )
     val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         Modifier
-            .clip(RoundedCornerShape(percent = 50))
+            .clip(PfShape.Full)
             .background(bg)
             .then(if (reduce) Modifier else Modifier.animateContentSize())
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)

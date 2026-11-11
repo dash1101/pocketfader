@@ -81,7 +81,7 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
 private fun Panel(title: String, content: @Composable () -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = PfShape.Lg,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

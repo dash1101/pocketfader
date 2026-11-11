@@ -184,7 +184,7 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             r?.sources?.forEach { src ->
                 FilterChip(
-                    selected = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id,
+                    selected = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id, shape = chipShape(if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id),
                     onClick = { Settings.update { it.copy(lyricsSource = src.id) } },
                     enabled = src.found,
                     label = { Text(src.label + if (src.found && src.words) " · word-by-word" else if (src.found && src.synced) " · synced" else "") },
@@ -197,14 +197,14 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (r.lines.any { it.rom != null }) {
                     FilterChip(
-                        selected = prefs.lyricsRoman,
+                        selected = prefs.lyricsRoman, shape = chipShape(prefs.lyricsRoman),
                         onClick = { Settings.update { it.copy(lyricsRoman = !it.lyricsRoman) } },
                         label = { Text("Romanize") },
                     )
                 }
                 if (r.lines.any { it.tr != null }) {
                     FilterChip(
-                        selected = prefs.lyricsTranslation,
+                        selected = prefs.lyricsTranslation, shape = chipShape(prefs.lyricsTranslation),
                         onClick = { Settings.update { it.copy(lyricsTranslation = !it.lyricsTranslation) } },
                         label = { Text("Translation") },
                     )
@@ -265,7 +265,7 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
             // never move to a new row (and the lines below never jump) when its turn comes. The emphasis is a scale
             // from the side the text is aligned to, the colour and the brightness.
             val reduce = LocalReduceMotion.current
-            val spec: AnimationSpec<Float> = if (reduce) snap() else tween(260)
+            val spec: AnimationSpec<Float> = if (reduce) snap() else tween(Motion.Medium, easing = Motion.Ease)
             val grow by animateFloatAsState(if (isActive) 1f else 0f, spec, label = "lyric")
             val origin = when (prefs.lyricsAlign) { "center" -> TransformOrigin(0.5f, 0.5f); "end" -> TransformOrigin(1f, 0.5f); else -> TransformOrigin(0f, 0.5f) }
             if (ln.text.isBlank()) {
@@ -396,8 +396,8 @@ fun JumpToLine(state: LazyListState, firstLineIndex: Int, active: Int, modifier:
     androidx.compose.animation.AnimatedVisibility(
         visible = offscreen,
         modifier = modifier,
-        enter = if (reduce) fadeIn(snap()) else fadeIn(tween(160)) + scaleIn(tween(200), initialScale = 0.85f),
-        exit = if (reduce) fadeOut(snap()) else fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.85f),
+        enter = if (reduce) fadeIn(snap()) else fadeIn(tween(Motion.Short, easing = Motion.Ease)) + scaleIn(tween(Motion.Short, easing = Motion.Ease), initialScale = 0.85f),
+        exit = if (reduce) fadeOut(snap()) else fadeOut(tween(Motion.Quick, easing = Motion.Ease)) + scaleOut(tween(Motion.Quick, easing = Motion.Ease), targetScale = 0.85f),
     ) {
         androidx.compose.material3.ExtendedFloatingActionButton(
             onClick = onJump,
@@ -415,7 +415,7 @@ fun LyricsLayoutControls() {
     fun chips(title: String, options: List<Pair<String, String>>, selected: String, pick: (String) -> Unit) {
         Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { (v, l) -> FilterChip(selected = selected == v, onClick = { pick(v) }, label = { Text(l) }) }
+            options.forEach { (v, l) -> FilterChip(selected = selected == v, shape = chipShape(selected == v), onClick = { pick(v) }, label = { Text(l) }) }
         }
     }
     chips("Alignment", listOf("start" to "Left", "center" to "Centered", "end" to "Right"), p.lyricsAlign) { v -> Settings.update { it.copy(lyricsAlign = v) } }

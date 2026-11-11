@@ -36,7 +36,34 @@ without any of it. These changes depend on how YouTube Music's page is built, so
 - **A playlist maker:** start from the song playing, your queue, one of your playlists or your liked songs. It asks YouTube Music
   for the radio of each starting song, ranks what they have in common, keeps any one artist from taking over, and shows the
   result to review: untick songs, rename it, try again for a different mix, then save it as a new private playlist or add it to
-  one of yours, and play it.
+  one of yours, and play it. A song's own menu in YouTube Music offers "Playlist from this song".
+- **Lyrics options:** text size, alignment, and whether the romanized line and the translation are shown.
+- Both layouts of YouTube Music's player bar are supported.
+
+**Android app**
+
+- **Search finds artists, albums and playlists,** not only songs (All, Songs, Artists, Albums, Playlists). Each opens its own
+  page, also when the computer is not reachable. Back steps through the pages you opened.
+- **The library syncs every time the phone pairs with or connects to a computer,** quietly; if an automatic sync fails,
+  Settings says so.
+- **The app no longer closes by itself in the background** a moment after music pauses: the phone player stays alive for ten
+  minutes after a pause, and errors in background work are written down (Settings → About) instead of ending the app.
+- **Swiping the app away stops music that plays on the phone** (your queue and place are kept). To keep it playing, turn on
+  Settings → Controls → "Keep playing when the app is swiped away".
+- **Lyrics:** the line being sung no longer re-wraps as it is highlighted.
+- **The light behind the cover follows the cover's shape,** so nothing square shows behind its rounded corners.
+- Smoother changes between songs and states (cover, title, play button), the small player shows progress, button rows fit
+  narrow phones, lists fade at the edges.
+
+**Web app**
+
+- Search can show only songs, artists, albums or playlists; recent searches are kept as chips.
+- Back returns from a playlist, album or artist page; the song that is playing is marked in lists; the Controls widget shows
+  progress.
+- Fits narrow phones (down to 320 px), and the transport buttons are named for screen readers.
+
+**One look everywhere.** The web app, the Android app and Refine now share one scale of corners, timings and press feedback,
+the same chip and play-button shapes, and the same violet (see `docs/DESIGN.md`).
 
 ### What's new in alpha.15
 

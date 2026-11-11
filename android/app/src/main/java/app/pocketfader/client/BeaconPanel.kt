@@ -224,7 +224,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
 
     Card(
         modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = PfShape.Lg,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -333,7 +333,7 @@ private fun BeaconSettingsList(s: BeaconSettings, enabled: Boolean) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (listOf(0, 1, 5, 15, 60) + s.pauseTimeoutMinutes).distinct().sorted().forEach { m ->
                     FilterChip(
-                        selected = s.pauseTimeoutMinutes == m, enabled = enabled,
+                        selected = s.pauseTimeoutMinutes == m, shape = chipShape(s.pauseTimeoutMinutes == m), enabled = enabled,
                         onClick = { scope.launch { BeaconModel.setSetting("pauseTimeoutMinutes", m) } },
                         label = { Text(if (m == 0) "Never" else "$m min") },
                     )
@@ -348,7 +348,7 @@ private fun BeaconSettingsList(s: BeaconSettings, enabled: Boolean) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((v, label) in listOf("name" to "YouTube Music", "state" to "Artist", "details" to "Song title")) {
                 FilterChip(
-                    selected = s.statusDisplay == v, enabled = enabled,
+                    selected = s.statusDisplay == v, shape = chipShape(s.statusDisplay == v), enabled = enabled,
                     onClick = { scope.launch { BeaconModel.setSetting("statusDisplay", v) } },
                     label = { Text(label) },
                 )

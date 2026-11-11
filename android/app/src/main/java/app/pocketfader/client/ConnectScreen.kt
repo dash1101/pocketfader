@@ -96,7 +96,7 @@ fun ConnectForm(
     }
 
     val canSave = Address.parse(address).url.isNotEmpty()
-    val field = RoundedCornerShape(16.dp)
+    val field = PfShape.Md
 
     Column(
         modifier
@@ -203,7 +203,7 @@ fun ConnectForm(
             val ok = r is TestResult.Ok
             val bad = r is TestResult.Fail
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = PfShape.Md,
                 color = when {
                     ok -> MaterialTheme.colorScheme.primaryContainer
                     bad -> MaterialTheme.colorScheme.errorContainer
@@ -277,7 +277,7 @@ fun ConnectDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = PfShape.Xl,
             tonalElevation = 6.dp,
             modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 680.dp),
         ) {

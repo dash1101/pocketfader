@@ -390,7 +390,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     AnimatedContent(
                         targetState = dest,
                         transitionSpec = {
-                            (fadeIn(tween(200, delayMillis = 60)) + slideInVertically(tween(260)) { it / 28 }) togetherWith fadeOut(tween(90))
+                            (fadeIn(tween(Motion.Short, delayMillis = 60, easing = Motion.Ease)) + slideInVertically(tween(Motion.Medium, easing = Motion.Ease)) { it / 28 }) togetherWith fadeOut(tween(Motion.Quick, easing = Motion.Ease))
                         },
                         label = "screen",
                     ) { d -> DestContent(d, s, cfg) { showConnect = true } }

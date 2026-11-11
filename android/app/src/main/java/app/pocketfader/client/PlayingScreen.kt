@@ -92,7 +92,7 @@ fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28, shape: 
         val calm = LocalReduceMotion.current
         androidx.compose.animation.Crossfade(
             targetState = url, modifier = Modifier.fillMaxSize(),
-            animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else 320), label = "cover-art",
+            animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else Motion.Medium, easing = Motion.Ease), label = "cover-art",
         ) { u ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (u != null) {
@@ -111,7 +111,7 @@ fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28, shape: 
  * older tablets).
  */
 @Composable
-fun Thumb(url: String?, sizeDp: Int, cornerDp: Int = 10, modifier: Modifier = Modifier) {
+fun Thumb(url: String?, sizeDp: Int, cornerDp: Int = 8, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val density = LocalDensity.current.density
     val px = (sizeDp * density).toInt().coerceAtLeast(32)
@@ -148,7 +148,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = 24.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         val calm = LocalReduceMotion.current
         val scale by androidx.compose.animation.core.animateFloatAsState(
-            if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "cover",
+            if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else Motion.Long, easing = Motion.Ease), label = "cover",
         )
         val shape = coverShape(prefs.coverShape)
         // "Vinyl": the round cover turns slowly while music plays
@@ -177,7 +177,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                 // the title and artist fade into each other when the track changes
                 androidx.compose.animation.Crossfade(
                     targetState = (now?.title.orEmpty()) to (now?.artist.orEmpty()),
-                    animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else 280), label = "title",
+                    animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else Motion.Medium, easing = Motion.Ease), label = "title",
                 ) { (title, artist) ->
                     Column {
                         Text(
@@ -259,7 +259,7 @@ fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: 
     val calm = LocalReduceMotion.current
     val playing = s.now?.playing == true
     val scale by androidx.compose.animation.core.animateFloatAsState(
-        if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else 450), label = "glow-scale",
+        if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else Motion.Long, easing = Motion.Ease), label = "glow-scale",
     )
     val pulse = rememberPulse(playing && !calm)
     val thumb = LocalArtThumb.current
@@ -275,7 +275,7 @@ fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: 
                 .size(coverW),
         ) {
             if (thumb != null) {
-                AmbientGlow(thumb, prefs.coverGlow, scale, pulse, Modifier.matchParentSize(), fade)
+                AmbientGlow(thumb, prefs.coverGlow, prefs.coverShape, coverW.value, scale, pulse, Modifier.matchParentSize(), fade)
             } else {
                 Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade() }.coverGlow(tint, prefs.coverGlow, pulse))
             }
@@ -373,7 +373,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
     val reduce = LocalReduceMotion.current
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val percent by androidx.compose.animation.core.animateFloatAsState(
-        if (playing) 50f else 30f, androidx.compose.animation.core.tween(if (reduce) 0 else 260), label = "shape",
+        if (playing) 50f else 30f, androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Medium, easing = Motion.Ease), label = "shape",
     )
     val primary = MaterialTheme.colorScheme.primary
     Surface(
@@ -384,7 +384,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
         modifier = Modifier.size(76.dp).pressScale(src).iconGlow(primary, playing && enabled, 58),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            androidx.compose.animation.Crossfade(playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else 160), label = "pp") { p ->
+            androidx.compose.animation.Crossfade(playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "pp") { p ->
                 Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play", Modifier.size(42.dp))
             }
         }
@@ -485,9 +485,9 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
             visible = showMini,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = if (still) androidx.compose.animation.EnterTransition.None
-            else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(280)) { it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+            else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(Motion.Medium, easing = Motion.Ease)) { it } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)),
             exit = if (still) androidx.compose.animation.ExitTransition.None
-            else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(220)) { it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
+            else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)) { it } + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)),
         ) {
             MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier)
         }
@@ -503,7 +503,7 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = PfShape.Lg,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
@@ -517,7 +517,7 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
             }
             IconButton(onClick = { tap(); Remote.transport("prev") }) { Icon(Icons.Filled.SkipPrevious, "Previous") }
             FilledIconButton(onClick = { tap(); Remote.transport("playpause") }, modifier = Modifier.pressScale(src), interactionSource = src) {
-                androidx.compose.animation.Crossfade(now.playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else 160), label = "mini-pp") { p ->
+                androidx.compose.animation.Crossfade(now.playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "mini-pp") { p ->
                     Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play")
                 }
             }

@@ -189,6 +189,11 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 listOf("1" to "1%", "2" to "2%", "5" to "5%", "10" to "10%"), p.volumeStep.toString(), enabled = p.volumeKeys,
             ) { v -> Settings.update { it.copy(volumeStep = v.toInt()) } }
             Toggle("Haptic feedback", "A small buzz on the main buttons.", p.haptics) { v -> Settings.update { it.copy(haptics = v) } }
+            Toggle(
+                "Keep playing when the app is swiped away",
+                "For music playing on this device. When off, swiping the app away stops the music; the queue and your place in the song are kept.",
+                p.keepPlayingClosed,
+            ) { v -> Settings.update { it.copy(keepPlayingClosed = v) } }
             // other players on the computer (Spotify, a video in another tab, VLC...)
             var pauseOthers by remember { mutableStateOf<Boolean?>(null) }
             androidx.compose.runtime.LaunchedEffect(s.online) {
@@ -460,7 +465,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         }
         Card(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = PfShape.Lg,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
@@ -501,7 +506,7 @@ private fun Choice(
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { (value, label) ->
-                FilterChip(selected = selected == value, onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
+                FilterChip(selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
     }
@@ -571,7 +576,7 @@ private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, versio
                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
             )
             Card(
-                Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                Modifier.fillMaxWidth(), shape = PfShape.Lg,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
             ) {
                 Column {

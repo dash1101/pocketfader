@@ -149,7 +149,7 @@ safely. Settings and the access token live in `~/.config/pocketfader/` (`%APPDAT
 
 ## More
 
-[Cloudflare guide](docs/CLOUDFLARE.md) · [Discord presence](docs/BEACON.md) · [Refine: a better YouTube Music](docs/REFINE.md) · [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
+[Cloudflare guide](docs/CLOUDFLARE.md) · [Discord presence](docs/BEACON.md) · [Refine: a better YouTube Music](docs/REFINE.md) · [Architecture](docs/ARCHITECTURE.md) · [Design language](docs/DESIGN.md) · [HTTP API](docs/API.md) · [Roadmap (native Android app, system stats)](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md) · [Android app](android/README.md)
 
 MIT licensed, except the Android app (`android/`), which is **GPL-3.0-or-later** because it includes
 [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) to play YouTube Music on the phone itself.

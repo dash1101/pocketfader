@@ -221,7 +221,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                 if (query.text.isNotEmpty() || searched) IconButton(onClick = { clear() }) { Icon(Icons.Filled.Close, "Clear") }
             },
             singleLine = true,
-            shape = RoundedCornerShape(28.dp),
+            shape = PfShape.Xl,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { doSearch() }),
         )
@@ -236,7 +236,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
             ) {
                 for ((id, label) in FILTERS) {
                     FilterChip(
-                        selected = filter == id,
+                        selected = filter == id, shape = chipShape(filter == id),
                         onClick = { if (filter != id && !busy) { SearchMemory.filter = id; doSearch(SearchMemory.query) } },
                         label = { Text(label) },
                     )

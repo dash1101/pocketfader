@@ -79,12 +79,12 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
             val tap = rememberTap()
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
-                    selected = now.shuffle, onClick = { tap(); Remote.setShuffle(!now.shuffle) },
+                    selected = now.shuffle, shape = chipShape(now.shuffle), onClick = { tap(); Remote.setShuffle(!now.shuffle) },
                     label = { Text(if (now.shuffle) "Shuffle on" else "Shuffle off") },
                     leadingIcon = { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)) },
                 )
                 FilterChip(
-                    selected = now.repeat != "NONE",
+                    selected = now.repeat != "NONE", shape = chipShape(now.repeat != "NONE"),
                     onClick = { tap(); Remote.setRepeat(when (now.repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
                     label = { Text(when (now.repeat) { "ALL" -> "Loop: queue"; "ONE" -> "Loop: track"; else -> "Loop off" }) },
                     leadingIcon = { Icon(if (now.repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat, null, Modifier.size(18.dp)) },
@@ -92,7 +92,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
                 val auto = now.autoplay
                 if (auto != null) {
                     FilterChip(
-                        selected = auto, onClick = { tap(); Remote.setAutoplay(!auto) },
+                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) },
                         // YouTube Music ignores autoplay while the queue is looping
                         enabled = now.repeat == "NONE",
                         label = { Text(if (now.repeat != "NONE") "Autoplay: off while looping" else if (auto) "Autoplay on" else "Autoplay off") },
@@ -216,7 +216,7 @@ private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, showArt: Bo
             if (showArt) Thumb(t.art, 46)
             if (t.selected) {
                 val playing = Remote.state.collectAsStateWithLifecycle().value.now?.playing == true
-                Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), PfShape.Xs), contentAlignment = Alignment.Center) {
                     EqBars(androidx.compose.ui.graphics.Color.White, playing, Modifier.size(22.dp))
                 }
             }
