@@ -30,7 +30,7 @@
   // ------------------------------------------------------------------ settings
   const PREFS_KEY = "pocketfader.refine.v1";
   const SPEEDS_KEY = "pocketfader.refine.speeds";
-  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, speedMenu: true, keepPitch: true, dice: true };
+  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, speedMenu: true, keepPitch: true, dice: true, lyrics: true };
   const readJSON = (k, d) => {
     try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v && typeof v === "object" ? v : d; } catch (e) { return d; }
   };
@@ -81,6 +81,7 @@
     minus: "M19 13H5v-2h14v2z",
     plus: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
     back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+    lyrics: "M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 6h12v2H6V6zm0 3h12v2H6V9zm0 3h8v2H6v-2z",
   };
 
   // ------------------------------------------------------------------ colours (Material You style tones from one hue)
@@ -209,6 +210,7 @@
   .pf-btn:hover { background: rgba(255,255,255,.07); }
   .pf-btn:active { transform: scale(.96); border-radius: 12px; }
   .pf-btn:disabled { opacity: .45; cursor: default; transform: none; }
+  .pf-ui button:focus-visible, .pf-ui select:focus-visible, .pf-nav-btn:focus-visible, .pf-ui .pf-range:focus-visible { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
   .pf-btn.pf-filled { background: var(--pf-accent); color: var(--pf-on-accent); }
   .pf-btn.pf-filled:hover { filter: brightness(1.06); }
   .pf-btn.pf-tonal { background: var(--pf-container); color: var(--pf-on-container); }
@@ -287,10 +289,34 @@
     background: var(--pf-on-container); color: var(--pf-surface); font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
     transform: translate(-50%, 20px); opacity: 0; transition: transform .35s var(--pf-spring), opacity .2s; pointer-events: none; }
   .pf-toast.pf-open { transform: translate(-50%, 0); opacity: 1; }
+  /* live lyrics */
+  .pf-lyr { position: fixed; right: 16px; bottom: 104px; z-index: 2200; width: min(400px, calc(100vw - 32px)); height: min(64vh, 580px);
+    display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: 28px; box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    opacity: 0; transform: translateY(14px) scale(.97); transform-origin: bottom right; transition: opacity .18s var(--pf-ease), transform .35s var(--pf-spring); }
+  .pf-lyr.pf-open { opacity: 1; transform: none; }
+  .pf-lyr-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 8px 22px; }
+  .pf-lyr-head .pf-head { flex: 1; padding: 0; min-width: 0; }
+  .pf-lyr-head .pf-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pf-lyr-body { position: relative; flex: 1; overflow-y: auto; padding: 18vh 18px 22vh; scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent); }
+  .pf-lyr-body::-webkit-scrollbar { display: none; }
+  .pf-ln { font-size: 22px; font-weight: 700; line-height: 1.3; padding: 7px 8px; margin: 2px 0; border-radius: 14px; color: var(--pf-text);
+    opacity: .38; cursor: pointer; transition: opacity .3s, transform .35s var(--pf-spring), background-color .2s; transform-origin: left center; }
+  .pf-ln:hover { background: rgba(255,255,255,.05); opacity: .7; }
+  .pf-ln.pf-now { opacity: 1; transform: scale(1.03); }
+  .pf-ln.pf-plain { cursor: default; opacity: .9; font-size: 18px; }
+  .pf-ln.pf-plain:hover { background: none; }
+  .pf-ln small { display: block; font-size: 14px; font-weight: 500; color: var(--pf-muted); margin-top: 2px; }
+  .pf-ln .pf-wd { background: linear-gradient(90deg, var(--pf-accent) var(--p, 0%), currentColor var(--p, 0%)); -webkit-background-clip: text;
+    background-clip: text; color: transparent; }
+  .pf-ln .pf-gap { letter-spacing: .3em; }
+  .pf-lyr-msg { color: var(--pf-muted); font-size: 15px; line-height: 1.5; text-align: center; padding: 0 12px; }
   /* the wavy progress bar is drawn over YouTube Music's own, which stays underneath (invisible) for seeking */
   .pf-wave { position: fixed; left: 0; top: 0; pointer-events: none; }
+  .pf-tip { position: fixed; left: 0; top: 0; z-index: 2300; pointer-events: none; padding: 4px 9px; border-radius: 10px; font-size: 12px; font-weight: 600;
+    font-variant-numeric: tabular-nums; background: var(--pf-on-container); color: var(--pf-surface); opacity: 0; transition: opacity .12s; }
+  .pf-tip.pf-open { opacity: 1; }
   [data-pf-wave] { opacity: 0 !important; }
-  .pf-dice .pf-ico { display: grid; place-items: center; }
+  .pf-dice .pf-ico, .pf-lyr-wrap .pf-ico { display: grid; place-items: center; }
   .pf-dice button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
   @keyframes pf-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .pf-ui, .pf-ui *, .pf-nav-btn { transition: none !important; animation: none !important; } }
@@ -521,20 +547,34 @@
     return null;
   };
   const fracAt = (r, x) => clamp((x - r.left) / (r.width || 1), 0, 1);
+  const clock = (sec) => { sec = Math.max(0, Math.floor(sec || 0)); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, x = String(sec % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
+  let tip = null;
+  function showTip(r, x) {
+    const { dur } = times();
+    if (!dur) return hideTip();
+    if (!tip || !tip.isConnected) { tip = h("div", { class: "pf-tip pf-ui", "aria-hidden": "true" }); document.body.append(tip); }
+    tip.textContent = clock(fracAt(r, x) * dur);
+    const w = tip.offsetWidth || 44;
+    tip.style.transform = `translate(${Math.round(clamp(x - w / 2, 4, innerWidth - w - 4))}px, ${Math.round(r.top + r.height / 2 - 40)}px)`;
+    tip.classList.add("pf-open");
+  }
+  function hideTip() { if (tip) tip.classList.remove("pf-open"); }
   window.addEventListener("pointerdown", (e) => {
     const hit = overlays.size && hitHost(e, 8);
-    if (hit) { drag = { host: hit.host, frac: fracAt(hit.r, e.clientX), until: 0 }; kickWave(); }
+    if (hit) { drag = { host: hit.host, frac: fracAt(hit.r, e.clientX), until: 0 }; showTip(hit.r, e.clientX); kickWave(); }
   }, true);
   window.addEventListener("pointermove", (e) => {
     if (!overlays.size) return;
-    if (drag && !drag.until) { drag.frac = fracAt(drag.host.getBoundingClientRect(), e.clientX); kickWave(); return; }
+    if (drag && !drag.until) { const r = drag.host.getBoundingClientRect(); drag.frac = fracAt(r, e.clientX); showTip(r, e.clientX); kickWave(); return; }
     const hit = hitHost(e, 10);
     for (const [host, o] of overlays) {
       const now = !!hit && hit.host === host;
       if (o.hover !== now) { o.hover = now; kickWave(); }
     }
+    if (hit && !overlays.get(hit.host).hidden) showTip(hit.r, e.clientX); else hideTip();
   }, { capture: true, passive: true });
-  window.addEventListener("pointerup", () => { if (drag) { drag.until = Date.now() + 500; kickWave(); } }, true);
+  window.addEventListener("pointerup", () => { if (drag) { drag.until = Date.now() + 500; hideTip(); kickWave(); } }, true);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) kickWave(); });
 
   // ------------------------------------------------------------------ playback speed
@@ -607,10 +647,12 @@
     applyPitch();
   }
   let speedPop = null;
+  let speedFrom = null;
   function closeSpeed() {
     if (!speedPop) return;
     const el = speedPop;
     speedPop = null;
+    if (el.contains(document.activeElement) && speedFrom && speedFrom.isConnected) speedFrom.focus();
     el.classList.remove("pf-open");
     setTimeout(() => el.remove(), 200);
     document.removeEventListener("pointerdown", speedOutside, true);
@@ -659,6 +701,8 @@
     else speedPop.style.top = r.bottom + 10 + "px";
     requestAnimationFrame(() => speedPop && speedPop.classList.add("pf-open"));
     setTimeout(() => document.addEventListener("pointerdown", speedOutside, true), 0);
+    speedFrom = anchor;
+    range.focus({ preventScroll: true });
   }
   const isSpeedButton = (n) => !!n && n.nodeType === 1 && ((n.classList && n.classList.contains("ytmusicPlayerControlsPlaybackRateButton")) ||
     (n.tagName === "BUTTON" && /^playback speed/i.test(n.getAttribute("aria-label") || "")));
@@ -676,6 +720,19 @@
       else openSpeed(hit.tagName === "BUTTON" ? hit : hit.querySelector("button") || hit);
     }, true);
   }
+
+  // Shift+. and Shift+, change the speed in steps (as on YouTube), when not typing somewhere.
+  const STEPS = [0.25, 0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  window.addEventListener("keydown", (e) => {
+    if (!on("speedMenu") || !e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || (e.key !== ">" && e.key !== "<")) return;
+    const t = e.composedPath ? e.composedPath()[0] : e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""))) return;
+    const cur = getRate();
+    const next = e.key === ">" ? STEPS.find((x) => x > cur + 0.001) : [...STEPS].reverse().find((x) => x < cur - 0.001);
+    if (next == null) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    toast("Speed " + fmtRate(setRate(next)));
+  }, true);
 
   // ------------------------------------------------------------------ "something you might like" button
   let dice = null;
@@ -699,6 +756,143 @@
     dice = h("div", { class: "ytmusicPlayerControlsControlButton pf-dice" }, btn);
     const after = main.querySelector(".ytmusicPlayerControlsRepeatButton");
     if (after) after.after(dice); else main.append(dice);
+  }
+
+  // ------------------------------------------------------------------ live lyrics
+  // Time-synced lyrics from the Pocketfader app on this computer (the same ones its apps show), relayed by the
+  // extension's own script: this page can't reach the app itself.
+  let lyrSeq = 0;
+  const lyrWaiting = new Map();
+  window.addEventListener("message", (ev) => {
+    const d = ev.source === window && ev.data;
+    if (d && d.__vmr === "lyrics-result" && lyrWaiting.has(d.id)) { lyrWaiting.get(d.id)(d.data || {}); lyrWaiting.delete(d.id); }
+  });
+  function fetchLyrics(q) {
+    return new Promise((res) => {
+      const id = "pfly" + ++lyrSeq;
+      lyrWaiting.set(id, res);
+      window.postMessage({ __vmr: "lyrics", id, q }, "*");
+      setTimeout(() => { if (lyrWaiting.delete(id)) res({ error: "timeout" }); }, 20000);
+    });
+  }
+  const lyr = { panel: null, body: null, sub: null, key: "", lines: [], els: [], idx: -1, synced: false, userAt: 0, raf: 0, retry: 0, timer: 0 };
+  let lyrBtn = null;
+  function syncLyricsButton() {
+    if (!on("lyrics")) { if (lyrBtn) { lyrBtn.remove(); lyrBtn = null; } if (lyr.panel) closeLyrics(); return; }
+    if (lyrBtn && lyrBtn.isConnected) return;
+    const main = document.querySelector(".ytmusicPlayerControlsMainControls");
+    if (!main) return;
+    const look = main.querySelector(".ytmusicPlayerControlsRepeatButton button, .ytmusicPlayerControlsShuffleButton button");
+    const btn = h("button", { class: (look ? look.className + " " : "") + "pf-lyr-btn", "aria-label": "Live lyrics", title: "Live lyrics",
+      "aria-pressed": String(!!lyr.panel), onclick: (e) => { e.stopPropagation(); if (lyr.panel) closeLyrics(); else openLyrics(); } },
+      h("span", { class: "pf-ico" }, icon(ICON.lyrics)));
+    lyrBtn = h("div", { class: "ytmusicPlayerControlsControlButton pf-lyr-wrap" }, btn);
+    const after = main.querySelector(".pf-dice") || main.querySelector(".ytmusicPlayerControlsRepeatButton");
+    if (after) after.after(lyrBtn); else main.append(lyrBtn);
+  }
+  function placeLyrics() {
+    if (!lyr.panel) return;
+    const bar = document.querySelector("ytmusic-miniplayer, ytmusic-player-bar");
+    const r = bar && bar.getBoundingClientRect();
+    lyr.panel.style.bottom = (r && r.height && r.top > innerHeight / 2 ? Math.round(innerHeight - r.top + 12) : 24) + "px";
+  }
+  function openLyrics() {
+    closeLyrics();
+    lyr.sub = h("div", { class: "pf-sub", text: "" });
+    lyr.body = h("div", { class: "pf-lyr-body", "aria-live": "off" });
+    lyr.panel = h("div", { class: "pf-lyr pf-ui", role: "dialog", "aria-label": "Lyrics" },
+      h("div", { class: "pf-lyr-head" }, h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: "Lyrics" }), lyr.sub),
+        h("button", { class: "pf-btn pf-icon-btn", "aria-label": "Close lyrics", onclick: closeLyrics }, icon(ICON.close))),
+      lyr.body);
+    for (const ev of ["wheel", "touchmove", "pointerdown"]) lyr.body.addEventListener(ev, () => { lyr.userAt = Date.now(); }, { passive: true });
+    document.body.append(lyr.panel);
+    placeLyrics();
+    requestAnimationFrame(() => lyr.panel && lyr.panel.classList.add("pf-open"));
+    if (lyrBtn) lyrBtn.querySelector("button").setAttribute("aria-pressed", "true");
+    lyr.key = "";
+    loadLyrics();
+  }
+  function closeLyrics() {
+    if (!lyr.panel) return;
+    const el = lyr.panel;
+    lyr.panel = lyr.body = null;
+    clearTimeout(lyr.timer);
+    cancelAnimationFrame(lyr.raf); lyr.raf = 0;
+    el.classList.remove("pf-open");
+    setTimeout(() => el.remove(), 220);
+    if (lyrBtn) lyrBtn.querySelector("button").setAttribute("aria-pressed", "false");
+  }
+  function lyrMessage(text) {
+    if (!lyr.body) return;
+    lyr.body.textContent = "";
+    lyr.body.style.paddingTop = "30%";
+    lyr.body.append(h("div", { class: "pf-lyr-msg", text }));
+    lyr.lines = []; lyr.els = []; lyr.idx = -1;
+  }
+  async function loadLyrics() {
+    const np = API.nowPlaying() || {};
+    if (!lyr.panel) return;
+    if (!np.videoId || !np.title) { lyr.sub.textContent = ""; lyrMessage("Play a song to see its lyrics."); return; }
+    const key = np.videoId;
+    if (key !== lyr.key) { lyr.key = key; lyr.retry = 0; lyr.sub.textContent = np.title + (np.artist ? " \u00b7 " + np.artist : ""); lyrMessage("Looking for lyrics\u2026"); }
+    const r = await fetchLyrics({ videoId: np.videoId, title: np.title, artist: np.artist || "", duration: Math.round(np.duration || 0) });
+    if (!lyr.panel || lyr.key !== key) return; // closed, or the song changed meanwhile
+    if (r.error) {
+      lyrMessage(r.error === "offline" ? "Live lyrics come from the Pocketfader app on this computer. Start it, then open lyrics again."
+        : "The Pocketfader app didn't answer in time. Try again in a moment.");
+      return;
+    }
+    const L = r.lyrics;
+    // other sources may still be searching: ask again shortly if what's here isn't time-synced yet
+    if (r.pending && (!L || !L.synced) && lyr.retry++ < 4) { clearTimeout(lyr.timer); lyr.timer = setTimeout(loadLyrics, 2500); }
+    if (!r.found || !L || !L.lines || !L.lines.length) { if (!r.pending) lyrMessage("No lyrics found for this song."); return; }
+    renderLyrics(L);
+  }
+  function renderLyrics(L) {
+    lyr.synced = !!L.synced;
+    lyr.lines = L.lines;
+    lyr.body.textContent = "";
+    lyr.body.style.paddingTop = "";
+    const np = API.nowPlaying() || {};
+    lyr.sub.textContent = [np.title, (L.label || "") + (L.synced ? "" : " (not time-synced)")].filter(Boolean).join(" \u00b7 ");
+    lyr.els = L.lines.map((ln) => {
+      const el = h("div", { class: "pf-ln" + (L.synced ? "" : " pf-plain") });
+      if (!ln.text) el.append(h("span", { class: "pf-gap", text: "\u266a \u266a \u266a" }));
+      else if (L.synced && Array.isArray(ln.w) && ln.w.length) {
+        for (const [, , word] of ln.w) el.append(h("span", { class: "pf-wd", text: word }));
+      } else el.append(ln.text);
+      if (ln.rom) el.append(h("small", { text: ln.rom }));
+      if (ln.tr) el.append(h("small", { text: ln.tr }));
+      if (L.synced && ln.t != null) el.addEventListener("click", () => { try { API.mp().seekTo(ln.t, true); lyr.userAt = 0; } catch (e) {} });
+      lyr.body.append(el);
+      return el;
+    });
+    lyr.idx = -1;
+    if (L.synced) lyrTick(); else lyr.body.scrollTop = 0;
+  }
+  function lyrTick() {
+    lyr.raf = 0;
+    if (!lyr.panel || !lyr.synced || !lyr.lines.length) return;
+    if (!document.hidden) {
+      const pos = times().pos + 0.15; // a touch early, as the eye reads ahead
+      let i = -1;
+      for (let k = 0; k < lyr.lines.length; k++) { if (lyr.lines[k].t != null && lyr.lines[k].t <= pos) i = k; else if (lyr.lines[k].t > pos) break; }
+      if (i !== lyr.idx) {
+        if (lyr.els[lyr.idx]) lyr.els[lyr.idx].classList.remove("pf-now");
+        lyr.idx = i;
+        const el = lyr.els[i];
+        if (el) {
+          el.classList.add("pf-now");
+          if (Date.now() - lyr.userAt > 4000) lyr.body.scrollTo({ top: el.offsetTop - lyr.body.clientHeight * 0.4, behavior: REDUCED.matches ? "auto" : "smooth" });
+        }
+      }
+      const ln = lyr.lines[i], el = lyr.els[i];
+      if (ln && el && Array.isArray(ln.w)) {
+        const spans = el.querySelectorAll(".pf-wd");
+        ln.w.forEach(([a, b], k) => { if (spans[k]) spans[k].style.setProperty("--p", (b > a ? clamp((pos - a) / (b - a), 0, 1) * 100 : pos >= a ? 100 : 0) + "%"); });
+      }
+    }
+    lyr.raf = requestAnimationFrame(() => setTimeout(lyrTick, 60)); // about 15 times a second is plenty
   }
 
   // ------------------------------------------------------------------ toast
@@ -732,7 +926,7 @@
       h("span", { class: "pf-switch" }, input, h("i")));
   }
   function sheetOutside(e) { if (sheet && !sheet.contains(e.target) && e.target !== navBtn && !navBtn.contains(e.target)) closeSheet(); }
-  function sheetKey(e) { if (e.key === "Escape") { closeSheet(); closeSpeed(); } }
+  function sheetKey(e) { if (e.key === "Escape") { closeSheet(); closeSpeed(); if (lyr.panel && lyr.panel.contains(document.activeElement)) closeLyrics(); } }
   function openSheet() {
     closeSheet();
     sheet = h("div", { class: "pf-sheet pf-ui", role: "dialog", "aria-label": "Pocketfader Refine" },
@@ -749,6 +943,7 @@
       sw("keepPitch", "Keep the pitch at other speeds", null),
       h("div", { class: "pf-sec", text: "Controls" }),
       sw("dice", "Something-you-might-like button", "In the player, next to repeat"),
+      sw("lyrics", "Live lyrics button", "Time-synced lyrics from the Pocketfader app, next to the player"),
       h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),
       h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
         "switch off anything that misbehaves. Settings stay in this browser. Pocketfader extension " + VERSION + "." }));
@@ -759,12 +954,15 @@
     navBtn.setAttribute("aria-expanded", "true");
     requestAnimationFrame(() => sheet && sheet.classList.add("pf-open"));
     setTimeout(() => document.addEventListener("pointerdown", sheetOutside, true), 0);
+    const first = sheet.querySelector("input, button");
+    if (first) first.focus({ preventScroll: true });
   }
   function closeSheet() {
     if (!sheet) return;
     const el = sheet;
     sheet = null;
     if (navBtn) navBtn.setAttribute("aria-expanded", "false");
+    if (el.contains(document.activeElement) && navBtn && navBtn.isConnected) navBtn.focus();
     el.classList.remove("pf-open");
     setTimeout(() => el.remove(), 200);
     document.removeEventListener("pointerdown", sheetOutside, true);
@@ -857,17 +1055,30 @@
   const dur = (s) => { const m = Math.round(s / 60); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; };
 
   let maker = null;
+  let makerFrom = null;
   function closeMaker() {
     if (!maker) return;
     const el = maker;
     maker = null;
+    if (makerFrom && makerFrom.isConnected) makerFrom.focus();
     el.classList.remove("pf-open");
     setTimeout(() => el.remove(), 220);
     document.removeEventListener("keydown", makerKey, true);
   }
-  function makerKey(e) { if (e.key === "Escape") { e.stopPropagation(); closeMaker(); } }
+  function makerKey(e) {
+    if (e.key === "Escape") { e.stopPropagation(); closeMaker(); return; }
+    if (e.key !== "Tab" || !maker) return;
+    // keep Tab inside the dialog
+    const items = [...maker.querySelectorAll("button, input, select, [tabindex]")].filter((x) => !x.disabled && x.offsetParent);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (!maker.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
   function openMaker() {
     closeMaker();
+    makerFrom = navBtn;
     const np = API.nowPlaying() || {};
     const queue = API.readQueue().filter((q) => q.section === "queue");
     const st = { source: np.videoId ? "now" : queue.length ? "queue" : "liked", playlist: null, length: 50, fresh: true,
@@ -879,12 +1090,16 @@
     document.addEventListener("keydown", makerKey, true);
 
     const frame = (title, sub, body, foot) => {
+      const hadFocus = dlg.contains(document.activeElement);
       dlg.textContent = "";
       dlg.append(
         h("div", { class: "pf-dlg-head" }, h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: title }), sub ? h("div", { class: "pf-sub", text: sub }) : null),
           h("button", { class: "pf-btn pf-icon-btn", "aria-label": "Close", onclick: closeMaker }, icon(ICON.close))),
         h("div", { class: "pf-dlg-body" }, body),
         h("div", { class: "pf-dlg-foot" }, foot));
+      // each step starts with its main button focused (the dialog is rebuilt, so focus would otherwise be lost)
+      const main = dlg.querySelector(".pf-dlg-foot .pf-filled") || dlg.querySelector(".pf-dlg-foot button");
+      if (main && (hadFocus || !dlg.contains(document.activeElement))) main.focus({ preventScroll: true });
     };
     const choice = (key, title, sub, disabled) => h("button", { class: "pf-choice", "aria-pressed": String(st.source === key), disabled: !!disabled,
       onclick: () => { st.source = key; start(); } }, h("span", { class: "pf-dot" }), h("span", { class: "pf-txt" }, h("b", { text: title }), sub ? h("span", { text: sub }) : null));
@@ -1077,6 +1292,7 @@
     updateColors(true);
     syncWave();
     syncDice();
+    syncLyricsButton();
     applyPitch();
   }
   let lastVid = null, tick = 0;
@@ -1090,8 +1306,9 @@
         applySpeedRule();
         setTimeout(applySpeedRule, 1500); // the player can reset its speed while the new song loads
         updateColors(false);
+        if (lyr.panel) loadLyrics();
       } else if (tick % 4 === 0) updateColors(false); // the cover can arrive a moment after the song
-      if (tick % 3 === 0) { syncNav(); syncDice(); syncWave(); }
+      if (tick % 3 === 0) { syncNav(); syncDice(); syncLyricsButton(); syncWave(); placeLyrics(); }
       kickWave();
     } catch (e) {}
     setTimeout(loop, document.hidden ? 2500 : 700);

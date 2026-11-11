@@ -443,7 +443,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.bridge.poll(instance=inst[:64] if inst else None) or {})
         if path == "/api/ytm/state":
             return self._json(200, app.ytm_state())
-        if path == "/api/lyrics":
+        if path in ("/api/lyrics", "/ext/lyrics"):   # /ext/: the extension's live lyrics inside YouTube Music
             return self._lyrics(parse_qs(urlsplit(self.path).query))
         if path == "/api/update":
             q = parse_qs(urlsplit(self.path).query)

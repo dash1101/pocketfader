@@ -19,7 +19,8 @@ public-IP posture.
 `refine.js` adds a ✦ button to YouTube Music's top bar. From there you can switch each part on or off:
 a Material 3 Expressive look (rounder shapes, colours from the album art, expressive player controls, a wavy progress bar,
 a glow behind the cover), a richer speed menu on the player's own speed button (any speed, pitch on/off, remembered per song
-or playlist), a "play something you might like" button in the player, and a playlist maker. Settings stay in this browser.
+or playlist; Shift+. and Shift+, from the keyboard), a "play something you might like" button and live lyrics in the player,
+and a playlist maker. Live lyrics come from the Pocketfader app on this computer (route `/ext/lyrics`). Settings stay in this browser.
 If the page ever looks wrong, open `https://music.youtube.com/?pf-refine=off` to load it without Refine, then switch off the
 part that misbehaves. See `docs/REFINE.md`.
 

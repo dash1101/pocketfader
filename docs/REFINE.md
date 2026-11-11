@@ -20,6 +20,8 @@ separate panel: a ✦ button in the top bar opens its settings, the speed menu o
 | Speed menu: 0.25×–3×, presets, pitch on/off, remember per song or per playlist | YouTube Music's speed button | Richer speed menu, Keep the pitch |
 | Random-song button in the player controls | player controls | Something-you-might-like button |
 | Playlist maker (item 3 below) | ✦ menu → Make a playlist | — |
+| Live lyrics (item 1 below): time-synced, word by word where available, tap a line to jump, follows the song | lyrics button in the player controls | Live lyrics button |
+| Speed from the keyboard: Shift+. faster, Shift+, slower | keyboard | Richer speed menu |
 
 `?pf-refine=off` on music.youtube.com starts a page with all of it off (the saved choices are kept). The extension's layout
 snapshot (`~/.config/pocketfader/ytm-layout.json`, written a few seconds after each page load) now also records the progress
@@ -30,8 +32,8 @@ Tested on a silent stand-in page with the same element names as the real one; no
 
 ## Next, in this order
 
-1. **Lyrics in the tab.** The same synced lyrics as the apps, as a panel next to the player, with the layout options. The lyrics
-   service already exists in the server; this is mostly interface.
+1. ~~Lyrics in the tab~~ (done: the live lyrics panel; it needs the Pocketfader app running on the computer, whose lyrics
+   service it uses through the extension). Still to come: the apps' layout options (size, alignment, romanization on/off).
 2. **A proper Material You look for the page.** The current theme only swaps colours. The next step is restyling the parts that
    look dated: the player bar and page (rounded shapes, tonal surfaces, the wavy seek bar and cover glow from the apps), and a
    dynamic accent taken from the album art. This is the biggest piece of work, and the most fragile: it depends on YouTube

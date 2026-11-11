@@ -23,8 +23,27 @@
       post("/ext/result", { id: d.id, data: d.data });
     } else if (d.__vmr === "state") {
       if (d.state && typeof d.state === "object") post("/ext/state", { ...d.state, instance: INST });
+    } else if (d.__vmr === "lyrics" && typeof d.id === "string" && d.q && typeof d.q === "object") {
+      lyrics(d.id.slice(0, 40), d.q);
     }
   });
+
+  // Live lyrics inside YouTube Music (refine.js): only song details go out, to this one fixed route, and the address
+  // is built here, so nothing on the page can make this script fetch anything else.
+  async function lyrics(id, q) {
+    const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+    const params = new URLSearchParams({ title: str(q.title, 300), artist: str(q.artist, 300), album: str(q.album, 300),
+      videoId: /^[\w-]{11}$/.test(q.videoId || "") ? q.videoId : "", duration: String(Math.max(0, Math.min(36000, Number(q.duration) || 0))) });
+    if (/^[a-z]{2,12}$/.test(q.source || "")) params.set("source", q.source);
+    let data;
+    try {
+      const r = await fetch(BASE + "/ext/lyrics?" + params, { method: "GET" });
+      data = await r.json();
+    } catch (e) {
+      data = { error: "offline" };
+    }
+    window.postMessage({ __vmr: "lyrics-result", id, data }, "*");
+  }
 
   function post(path, obj) {
     return fetch(BASE + path, {

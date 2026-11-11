@@ -219,8 +219,21 @@ class LyricsApiTests(Base):
 class LyricsAuthTests(Base):
     token = "s3cret"
 
+    def setUp(self):
+        super().setUp()
+        self.app.lyrics = LyricsService(fetch=FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hi"}))
+
     def test_requires_the_token(self):
         self.assertEqual(self.req("GET", "/api/lyrics?title=Song")[0], 401)
+
+    def test_extension_route(self):
+        # the extension on this computer (live lyrics inside YouTube Music) has no token, like its other routes
+        st, body, _ = self.req("GET", "/ext/lyrics?title=Song&artist=Artist&duration=200", headers={"Origin": "https://music.youtube.com"})
+        self.assertEqual(st, 200)
+        self.assertEqual(body["source"], "lrclib")
+        # ...but not when the request came through a proxy or tunnel
+        self.assertEqual(self.req("GET", "/ext/lyrics?title=Song", headers={"X-Forwarded-For": "1.2.3.4"})[0], 401)
+        self.assertEqual(self.req("GET", "/ext/lyrics")[0], 400)
 
 
 if __name__ == "__main__":

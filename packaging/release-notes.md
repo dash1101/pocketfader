@@ -29,6 +29,9 @@ without any of it. These changes depend on how YouTube Music's page is built, so
 - **A richer speed menu** on YouTube Music's own speed button: any speed from 0.25× to 3×, quick presets, keep or drop the
   pitch, and remember a speed for one song or a whole playlist (it comes back when that song or playlist plays, and doesn't spill
   over onto others).
+- **Live lyrics** in YouTube Music: a lyrics button in the player opens time-synced lyrics (word by word where the source has
+  it) from the Pocketfader app, following the song; tap a line to jump there.
+- **Speed from the keyboard:** Shift+. faster, Shift+, slower.
 - **A "play something you might like" button** among the player controls.
 - **A playlist maker:** start from the song playing, your queue, one of your playlists or your liked songs. It asks YouTube Music
   for the radio of each starting song, ranks what they have in common, keeps any one artist from taking over, and shows the
