@@ -4,10 +4,13 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -40,13 +44,13 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -69,6 +75,61 @@ private object SearchMemory {
     var query by mutableStateOf("")
     var results by mutableStateOf<List<SearchItem>>(emptyList())
     var searched by mutableStateOf(false)
+    var filter by mutableStateOf("")        // "" (everything), "songs", "artists", "albums" or "playlists"
+    var tab by mutableIntStateOf(0)
+    var index = 0                           // where the results were scrolled to
+    var offset = 0
+}
+
+private val FILTERS: List<Pair<String, String>> = listOf(
+    "" to "All", "songs" to "Songs", "artists" to "Artists", "albums" to "Albums", "playlists" to "Playlists",
+)
+
+private fun resultKey(it: SearchItem): String = (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind
+
+/** Rows that can be played or opened, each once (the list is keyed by what a row is, so a repeat can't be shown). */
+private fun usable(list: List<SearchItem>): List<SearchItem> {
+    val seen = HashSet<String>()
+    return list.filter { (it.videoId != null || it.playlistId != null || it.kind == "artist" || it.kind == "album") && seen.add(resultKey(it)) }
+}
+
+/** The phone's own search. Everything: the artist you named, then songs with a few albums and playlists among them. */
+private suspend fun phoneSearch(q: String, filter: String): List<SearchItem> {
+    if (filter.isNotEmpty()) return Streams.search(q, filter)
+    return coroutineScope {
+        val songsJob = async { Streams.search(q, "songs") }
+        val artistsJob = async { runCatching { Streams.search(q, "artists") }.getOrDefault(emptyList()) }
+        val albumsJob = async { runCatching { Streams.search(q, "albums") }.getOrDefault(emptyList()) }
+        val listsJob = async { runCatching { Streams.search(q, "playlists") }.getOrDefault(emptyList()) }
+        val songs: List<SearchItem> = songsJob.await()
+        val out = ArrayList<SearchItem>()
+        // an artist comes first only when the search names them
+        out.addAll(
+            artistsJob.await().filter { a ->
+                (a.title.length >= 2 && q.contains(a.title, ignoreCase = true)) || (q.length >= 3 && a.title.startsWith(q, ignoreCase = true))
+            }.take(1)
+        )
+        out.addAll(songs.take(6))
+        out.addAll(albumsJob.await().take(3))
+        out.addAll(listsJob.await().take(3))
+        out.addAll(songs.drop(6))
+        out
+    }
+}
+
+/** With the computer: your account's search. Without it, or if that fails or has nothing of the kind asked for: the phone's own. */
+private suspend fun searchFor(q: String, filter: String, ytm: Boolean): List<SearchItem> {
+    if (ytm) {
+        val found: List<SearchItem>? = runCatching { Remote.search(q, filter.ifEmpty { null }) }.getOrNull()
+        if (found != null) {
+            if (filter.isEmpty()) return usable(found)
+            // an older extension ignores the filter and answers with everything: keep the kind that was asked for
+            val want = when (filter) { "artists" -> "artist"; "albums" -> "album"; "playlists" -> "playlist"; else -> "song" }
+            val only = usable(found.filter { it.kind == want })
+            if (only.isNotEmpty()) return only
+        }
+    }
+    return usable(phoneSearch(q, filter))
 }
 
 /**
@@ -83,7 +144,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val searched = SearchMemory.searched
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val tab = SearchMemory.tab
     var focused by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     val recent by Library.recentSearches.collectAsStateWithLifecycle()
@@ -91,11 +152,20 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     val savedIds = remember(saved) { saved.mapTo(HashSet()) { it.videoId } }
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
-    val resultsState = rememberLazyListState()
+    // opening an album or artist replaces this screen; coming back, the results are where you left them
+    val resultsState = rememberLazyListState(SearchMemory.index, SearchMemory.offset)
+    DisposableEffect(resultsState) {
+        onDispose {
+            SearchMemory.index = resultsState.firstVisibleItemIndex
+            SearchMemory.offset = resultsState.firstVisibleItemScrollOffset
+        }
+    }
 
     fun clear() {
         query = androidx.compose.ui.text.input.TextFieldValue("")
-        SearchMemory.query = ""; SearchMemory.results = emptyList(); SearchMemory.searched = false; error = null; suggestions = emptyList()
+        SearchMemory.query = ""; SearchMemory.results = emptyList(); SearchMemory.searched = false; SearchMemory.filter = ""
+        SearchMemory.index = 0; SearchMemory.offset = 0
+        error = null; suggestions = emptyList()
     }
 
     fun doSearch(text: String = query.text) {
@@ -109,16 +179,21 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
         focus.clearFocus()
         Library.rememberSearch(q)
         scope.launch {
+            var fresh = false
             try {
                 // with the computer: your account's search; without it (or if that fails): the phone's own
-                SearchMemory.results = withContext(Dispatchers.IO) {
-                    if (s.ytm) runCatching { Remote.search(q) }.getOrElse { Streams.search(q) } else Streams.search(q)
-                }
+                val filter = SearchMemory.filter
+                val found = withContext(Dispatchers.IO) { searchFor(q, filter, s.ytm) }
+                SearchMemory.results = found
                 SearchMemory.searched = true
+                SearchMemory.index = 0; SearchMemory.offset = 0
+                fresh = found.isNotEmpty()
             } catch (e: Exception) {
                 error = e.friendly()
             }
             busy = false
+            // a new answer starts at its top (asked only once the list is on screen again: before that it would wait forever)
+            if (fresh) kotlinx.coroutines.withTimeoutOrNull(1500) { resultsState.scrollToItem(0) }
         }
     }
 
@@ -148,6 +223,22 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
         )
 
         val typing = focused && query.text.isNotBlank() && !(searched && query.text.trim() == SearchMemory.query)
+        val filter = SearchMemory.filter
+        // what to look for: shown once something was searched, and not over the suggestions while typing
+        if (SearchMemory.query.isNotEmpty() && !typing && !(focused && query.text.isBlank())) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for ((id, label) in FILTERS) {
+                    FilterChip(
+                        selected = filter == id,
+                        onClick = { if (filter != id && !busy) { SearchMemory.filter = id; doSearch(SearchMemory.query) } },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
         when {
             busy -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             typing && suggestions.isNotEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
@@ -163,15 +254,23 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                 items(recent, key = { "r-$it" }) { q -> TextRow(q, Icons.Filled.History, onClick = { doSearch(q) }) }
             }
             error != null -> Note(error ?: "")
-            searched && results.isEmpty() -> Note("No results.")
+            searched && results.isEmpty() -> Note(
+                when (filter) {
+                    "songs" -> "No songs found for that."
+                    "artists" -> "No artists found for that."
+                    "albums" -> "No albums found for that."
+                    "playlists" -> "No playlists found for that."
+                    else -> "No results."
+                }
+            )
             searched -> LazyColumn(Modifier.fillMaxSize().edgeFade(resultsState), state = resultsState) {
-                items(results, key = { (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind }) { item -> ResultRow(item, results, item.videoId in savedIds) }
+                items(results, key = { resultKey(it) }) { item -> ResultRow(item, item.videoId in savedIds) }
             }
             else -> {
                 TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("For you") })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Playlists") })
-                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("On this phone") })
+                    Tab(selected = tab == 0, onClick = { SearchMemory.tab = 0 }, text = { Text("For you") })
+                    Tab(selected = tab == 1, onClick = { SearchMemory.tab = 1 }, text = { Text("Playlists") })
+                    Tab(selected = tab == 2, onClick = { SearchMemory.tab = 2 }, text = { Text("On this phone") })
                 }
                 when (tab) {
                     0 -> Column(Modifier.fillMaxSize()) {
@@ -252,9 +351,11 @@ private fun SyncedPlaylistsTab(s: RemoteState, onOpen: (SearchItem) -> Unit) {
             Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().edgeFade({ gridState.canScrollBackward }, { gridState.canScrollForward }),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -262,7 +363,7 @@ private fun SyncedPlaylistsTab(s: RemoteState, onOpen: (SearchItem) -> Unit) {
             items(cards.size, key = { cards[it].playlistId ?: cards[it].title }) { i ->
                 val p = cards[i]
                 Column(Modifier.clickable { onOpen(p) }) {
-                    Thumb(p.thumb, 150, 18)
+                    Thumb(p.thumb, 170, 18, Modifier.fillMaxWidth().aspectRatio(1f))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(p.title, Modifier.weight(1f).padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (p.playlistId in keep) Icon(Icons.Filled.DownloadDone, "Kept on this phone", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
@@ -400,21 +501,18 @@ fun formatBytes(b: Long): String = when {
 }
 
 @Composable
-private fun ResultRow(item: SearchItem, all: List<SearchItem>, downloaded: Boolean) {
-    val playable = item.videoId != null || item.playlistId != null
+private fun ResultRow(item: SearchItem, downloaded: Boolean) {
+    val opens = item.videoId != null || item.playlistId != null || item.browseId != null
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = playable || item.kind == "artist") {
-                if (item.kind == "artist") Detail.open(item)
-                else if (item.videoId != null) Remote.playItem(item)      // on the phone, its radio follows (as in YouTube Music)
-                else if (item.playlistId != null) Remote.startPlaylist(item.playlistId, false)
-            }
+            // a song plays (on the phone its radio follows, as in YouTube Music); an artist, album or playlist opens its page
+            .clickable(enabled = opens) { activate(item) { Detail.open(it) } }
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Thumb(item.thumb, 52, 10)
+        Thumb(item.thumb, 52, if (item.kind == "artist") 26 else 10)
         Column(Modifier.weight(1f)) {
             Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
@@ -431,7 +529,7 @@ private fun ResultRow(item: SearchItem, all: List<SearchItem>, downloaded: Boole
         if (item.videoId != null && item.kind == "song") {
             SongMenuButton(item)
         } else if (item.playlistId != null) {
-            IconButton(onClick = { Remote.startPlaylist(item.playlistId, true) }) { Icon(Icons.Filled.Shuffle, "Shuffle play") }
+            IconButton(onClick = { Remote.startPlaylist(item.playlistId, false) }) { Icon(Icons.Filled.PlayArrow, "Play") }
         }
     }
 }

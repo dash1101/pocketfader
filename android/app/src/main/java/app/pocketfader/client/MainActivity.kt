@@ -363,19 +363,24 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                 }
             }
             when {
-                Detail.active -> DetailHost(Modifier.fillMaxSize())
+                Detail.active && !wide -> DetailHost(Modifier.fillMaxSize())
                 showSettings -> SettingsScreen(cfg, s, onEditConnection = { showConnect = true }, modifier = Modifier.fillMaxSize())
                 wide -> Row(Modifier.fillMaxSize()) {
                     PlayerPane(s, Modifier.weight(0.85f).fillMaxSize())
                     Column(Modifier.weight(1.15f).fillMaxSize()) {
-                        TabRow(selectedTabIndex = pane.ordinal) {
-                            Pane.values().forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
-                        }
-                        Box(Modifier.weight(1f).fillMaxWidth()) {
-                            when (pane) {
-                                Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
-                                Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
-                                Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
+                        if (Detail.active) {
+                            // an artist, album or playlist page opens beside the player, which stays in view
+                            DetailHost(Modifier.fillMaxSize())
+                        } else {
+                            TabRow(selectedTabIndex = pane.ordinal) {
+                                Pane.values().forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
+                            }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                when (pane) {
+                                    Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
+                                    Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
+                                    Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
+                                }
                             }
                         }
                     }

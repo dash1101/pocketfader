@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -168,7 +169,7 @@ internal fun ShelvesList(shelves: List<Shelf>, onOpen: (SearchItem) -> Unit) {
                     itemsIndexed(shelf.items, key = { i, it -> (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind + i }) { _, card ->
                         Column(Modifier.width(144.dp).padding(horizontal = 4.dp).clickable { activate(card, onOpen) }) {
                             Box {
-                                Thumb(card.thumb, 136, 14)
+                                Thumb(card.thumb, 136, if (card.kind == "artist") 68 else 14)
                                 if (card.kind == "radio") Icon(
                                     Icons.Filled.Radio, null,
                                     Modifier.align(Alignment.BottomEnd).padding(8.dp).size(22.dp),
@@ -194,6 +195,7 @@ internal fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
     LaunchedEffect(Unit) { LibraryStore.ensurePlaylists() }
     val lists = LibraryStore.playlists
     val err = LibraryStore.playlistsError
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     Column(Modifier.fillMaxSize()) {
         FilledTonalButton(onClick = { creating = true }, modifier = Modifier.padding(16.dp)) {
             Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
@@ -205,14 +207,16 @@ internal fun PlaylistsTab(onOpen: (SearchItem) -> Unit) {
             lists.isEmpty() -> Message("No playlists yet.")
             else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                 columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp),
-                modifier = Modifier.fillMaxSize(),
+                state = gridState,
+                modifier = Modifier.fillMaxSize().edgeFade({ gridState.canScrollBackward }, { gridState.canScrollForward }),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 gridItems(lists, key = { it.playlistId ?: it.browseId ?: it.title }) { p ->
                     Column(Modifier.clickable { onOpen(p) }) {
-                        Thumb(p.thumb, 150, 18)
+                        // the cover fills its cell, so there's no gap beside it on wider screens
+                        Thumb(p.thumb, 170, 18, Modifier.fillMaxWidth().aspectRatio(1f))
                         Text(p.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (p.subtitle.isNotBlank()) {
                             Text(p.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -257,13 +261,17 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
         try {
             tracks = withContext(Dispatchers.IO) {
                 val copy = syncedCopy()
+                var failure: Exception? = null
+                // the account, through the computer: the playlist as it is now
+                val live: List<SearchItem>? = if (Remote.state.value.ytm) {
+                    try { Remote.playlistItems(item, limit = 1000) } catch (e: Exception) { failure = e; null }
+                } else null
                 when {
-                    // the account, through the computer: the playlist as it is now
-                    Remote.state.value.ytm -> Remote.playlistItems(item, limit = 1000)
+                    live != null -> live
                     copy != null -> copy.map { it.toSearchItem() }
-                    // a public playlist works without the account
+                    // a public playlist or album works without the account
                     pid != null && !pid.startsWith("MPRE") -> Streams.playlist(pid).map { it.toSearchItem() }
-                    else -> throw ApiException(0, "Albums open through YouTube Music on the computer, which isn't connected.")
+                    else -> throw failure ?: ApiException(0, "Albums open through YouTube Music on the computer, which isn't connected.")
                 }
             }
         } catch (e: Exception) {
@@ -324,23 +332,52 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
             }
         }
         val list = tracks
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
         when {
             list == null && error != null -> Message(error ?: "")
             list == null -> Loading()
-            else -> LazyColumn(Modifier.fillMaxSize()) {
-                item {
+            list.isEmpty() -> Message("Nothing in here yet.")
+            else -> LazyColumn(Modifier.fillMaxSize().edgeFade(listState), state = listState) {
+                item(key = "head") {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Thumb(item.thumb, 200, 20)
-                        Text("${list.size} tracks", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Thumb(item.thumb ?: list.firstOrNull()?.thumb, 200, 20)
+                        // who it's by (an album's artist and year, a playlist's owner), when the list we came from said so
+                        val by: String? = item.subtitle.takeIf { it.isNotBlank() && !it.first().isDigit() }
+                        if (by != null) {
+                            Text(
+                                by, Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            if (list.size == 1) "1 track" else "${list.size} tracks",
+                            Modifier.padding(top = if (by != null) 2.dp else 10.dp),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             // on the phone, the songs already shown here are played; on the computer, YouTube Music plays the playlist
-                            val songs = list.mapNotNull { it.toLocal() }
+                            val songs = remember(list) { list.mapNotNull { it.toLocal() } }
                             // played on the phone when playing there, or when the computer's YouTube Music can't play it
                             val here = Remote.local || !Remote.state.value.ytm
-                            Button(onClick = { if (here) playOnPhone(songs, 0) else pid?.let { Remote.startPlaylist(it, false) } }, enabled = songs.isNotEmpty() || (!here && pid != null)) {
+                            // an album found by search has no playlist id of its own: its first track carries the album's
+                            val first = list.firstOrNull { it.videoId != null }
+                            val albumId = pid?.takeIf { !it.startsWith("MPRE") } ?: first?.playlistId
+                            val canPlay = songs.isNotEmpty() || (!here && (albumId != null || first != null))
+                            Button(
+                                onClick = {
+                                    val vid = first?.videoId
+                                    if (here) playOnPhone(songs, 0)
+                                    else if (albumId != null) Remote.startPlaylist(albumId, false)
+                                    else if (vid != null) Remote.play(vid)
+                                },
+                                enabled = canPlay,
+                            ) {
                                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text("Play", Modifier.padding(start = 6.dp))
                             }
-                            FilledTonalButton(onClick = { if (here) playOnPhone(songs, songs.indices.random(), shuffle = true) else pid?.let { Remote.startPlaylist(it, true) } }, enabled = songs.isNotEmpty() || (!here && pid != null)) {
+                            FilledTonalButton(
+                                onClick = { if (here) playOnPhone(songs, songs.indices.random(), shuffle = true) else albumId?.let { Remote.startPlaylist(it, true) } },
+                                enabled = if (here) songs.isNotEmpty() else albumId != null,
+                            ) {
                                 Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text("Shuffle", Modifier.padding(start = 6.dp))
                             }
                             IconButton(onClick = { Downloads.enqueue(songs) }, enabled = songs.isNotEmpty()) {

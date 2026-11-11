@@ -555,8 +555,12 @@ object Remote {
         return parseArtist(ytmCall(b, 30000))
     }
 
-    fun search(query: String): List<SearchItem> =
-        parseItems(ytmCall(JSONObject().put("type", "search").put("query", query), 20000))
+    /** Search with the account on the computer. [filter]: null (everything), "songs", "videos", "albums", "artists" or "playlists". */
+    fun search(query: String, filter: String? = null): List<SearchItem> {
+        val b = JSONObject().put("type", "search").put("query", query)
+        if (filter != null) b.put("filter", filter)
+        return parseItems(ytmCall(b, 20000))
+    }
 
     fun home(): List<Shelf> = parseShelves(ytmCall(JSONObject().put("type", "home"), 40000))
 

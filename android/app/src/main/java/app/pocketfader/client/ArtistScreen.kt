@@ -40,7 +40,45 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+
+/**
+ * An artist's page put together on the phone from public searches, for when YouTube Music on the computer isn't there:
+ * their songs, albums and playlists with their name. Less complete than the real page (no singles or related artists).
+ */
+private suspend fun phoneArtist(browseId: String?, name: String): ArtistPage = coroutineScope {
+    val songsJob = async { Streams.search(name, "songs") }
+    val albumsJob = async { runCatching { Streams.search(name, "albums") }.getOrDefault(emptyList()) }
+    val listsJob = async { runCatching { Streams.search(name, "playlists") }.getOrDefault(emptyList()) }
+    val whoJob = async { runCatching { Streams.search(name, "artists") }.getOrDefault(emptyList()) }
+    val songs: List<SearchItem> = songsJob.await()
+    val theirs = songs.filter { it.subtitle.contains(name, ignoreCase = true) }
+    val top = (if (theirs.size >= 3) theirs else songs).take(10)
+    val albums = albumsJob.await().filter { it.subtitle.contains(name, ignoreCase = true) }
+    val lists = listsJob.await().take(10)
+    val who = whoJob.await()
+    val me = who.firstOrNull { browseId != null && it.browseId == browseId }
+        ?: who.firstOrNull { it.title.equals(name, ignoreCase = true) }
+        ?: who.firstOrNull()
+    val shelves = ArrayList<Shelf>()
+    if (top.isNotEmpty()) shelves.add(Shelf("Songs", top))
+    if (albums.isNotEmpty()) shelves.add(Shelf("Albums", albums))
+    if (lists.isNotEmpty()) shelves.add(Shelf("Playlists", lists))
+    if (shelves.isEmpty()) throw ApiException(0, "artist_not_found")
+    ArtistPage(
+        browseId = browseId ?: me?.browseId.orEmpty(),
+        name = me?.title ?: name,
+        description = "Found by searching from this phone. The full artist page needs YouTube Music open on the computer.",
+        thumb = me?.thumb,
+        subscribers = null,
+        playVideoId = top.firstOrNull()?.videoId,
+        playPlaylistId = null,
+        radioPlaylistId = null,
+        shelves = shelves,
+    )
+}
 
 /** An artist's page: who they are, play and radio, their top songs, and rows of albums, singles and more. */
 @Composable
@@ -51,7 +89,11 @@ fun ArtistScreen(browseId: String?, videoId: String?, name: String, onBack: () -
         page = null
         error = null
         try {
-            page = withContext(Dispatchers.IO) { Remote.artist(browseId, videoId, name) }
+            page = withContext(Dispatchers.IO) {
+                // the real page through the computer; without it (or if that fails), one made on the phone
+                val real: ArtistPage? = if (Remote.state.value.ytm) runCatching { Remote.artist(browseId, videoId, name) }.getOrNull() else null
+                real ?: phoneArtist(browseId, name)
+            }
         } catch (e: Exception) {
             error = if (e.message == "artist_not_found") "Couldn't find that artist on YouTube Music." else e.friendly()
         }

@@ -182,7 +182,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                             Text(
                                 artist,
                                 // tap the artist to see their page: about, top songs, albums
-                                modifier = Modifier.then(if (s.ytm && artist.isNotBlank()) Modifier.clickable { Detail.openArtist(videoId, artist) } else Modifier),
+                                modifier = Modifier.then(if (artist.isNotBlank()) Modifier.clickable { Detail.openArtist(videoId, artist) } else Modifier),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
