@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -354,7 +355,11 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                             Modifier.padding(top = if (by != null) 2.dp else 10.dp),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // (with Edit there are four things here: on a narrow phone the row scrolls sideways instead of squeezing the last)
+                        Row(
+                            Modifier.padding(top = 12.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             // on the phone, the songs already shown here are played; on the computer, YouTube Music plays the playlist
                             val songs = remember(list) { list.mapNotNull { it.toLocal() } }
                             // played on the phone when playing there, or when the computer's YouTube Music can't play it
@@ -384,9 +389,9 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                                 Icon(Icons.Filled.Download, "Download all to this phone")
                             }
                             if (editable) {
-                                FilledTonalButton(onClick = { editing = !editing }) {
-                                    Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, null, Modifier.size(18.dp))
-                                    Text(if (editing) "Done" else "Edit", Modifier.padding(start = 6.dp))
+                                // a round button: "Edit" in words made this row too wide for a phone
+                                androidx.compose.material3.FilledTonalIconButton(onClick = { editing = !editing }) {
+                                    Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, if (editing) "Done editing" else "Edit playlist")
                                 }
                             }
                         }

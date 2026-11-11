@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -129,7 +132,8 @@ private fun ArtistContent(p: ArtistPage) {
                         p.subscribers?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // three buttons don't fit every phone: the row then scrolls sideways instead of squeezing the last one
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val vid = p.playVideoId
                     val pl = p.playPlaylistId
                     if (vid != null || pl != null) {
@@ -155,7 +159,8 @@ private fun ArtistContent(p: ArtistPage) {
                     Text(
                         d, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = if (expanded) 40 else 3, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { expanded = !expanded },
+                        modifier = Modifier.clickable { expanded = !expanded }
+                            .then(if (LocalReduceMotion.current) Modifier else Modifier.animateContentSize()),
                     )
                 }
             }
@@ -179,6 +184,8 @@ private fun ArtistContent(p: ArtistPage) {
                             Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(song.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
+                        // play next, add to the queue or a playlist, download: as everywhere else a song is listed
+                        SongMenuButton(song)
                     }
                 }
             } else {

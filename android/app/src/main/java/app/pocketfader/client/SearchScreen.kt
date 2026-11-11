@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -197,6 +198,9 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
         }
     }
 
+    // Back leaves the results (or what was typed) for the library tabs before it leaves the app
+    androidx.activity.compose.BackHandler(enabled = searched || query.text.isNotEmpty()) { clear(); focus.clearFocus() }
+
     // suggestions while typing (a short pause first, so not every letter asks)
     LaunchedEffect(query.text, focused) {
         val q = query.text.trim()
@@ -239,8 +243,17 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                 }
             }
         }
+        // looking again (another kind, another search): what's there stays in place under a thin bar, instead of
+        // the whole list giving way to a spinner and coming back
+        val refreshing = busy && searched && results.isNotEmpty()
+        if (searched && results.isNotEmpty() && !typing) {
+            // (its room is always there, so the list doesn't hop when the bar comes and goes)
+            Box(Modifier.fillMaxWidth().height(4.dp).padding(horizontal = 16.dp)) {
+                if (refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        }
         when {
-            busy -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            busy && !refreshing -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             typing && suggestions.isNotEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
                 items(suggestions, key = { "s-$it" }) { sug -> TextRow(sug, Icons.Filled.Search, onClick = { doSearch(sug) }) }
             }

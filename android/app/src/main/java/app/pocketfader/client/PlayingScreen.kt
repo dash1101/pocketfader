@@ -88,10 +88,19 @@ fun Cover(url: String?, modifier: Modifier = Modifier, corner: Int = 28, shape: 
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        if (url != null) {
-            AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        // the next track's picture fades in over the last one, instead of replacing it in one frame
+        val calm = LocalReduceMotion.current
+        androidx.compose.animation.Crossfade(
+            targetState = url, modifier = Modifier.fillMaxSize(),
+            animationSpec = androidx.compose.animation.core.tween(if (calm) 0 else 320), label = "cover-art",
+        ) { u ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (u != null) {
+                    AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                } else {
+                    Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
@@ -321,8 +330,10 @@ private fun SeekBar(duration: Double, playing: Boolean, wavy: Boolean) {
             },
         )
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(shown * duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(formatTime(duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // figures of one width, so the time doesn't shiver as the seconds change
+            val timeStyle = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
+            Text(formatTime(shown * duration), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatTime(duration), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -488,6 +499,8 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
 private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier = Modifier) {
     val now = s.now ?: return
     val tap = rememberTap()
+    val reduce = LocalReduceMotion.current
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Surface(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         shape = RoundedCornerShape(20.dp),
@@ -495,6 +508,7 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
         tonalElevation = 6.dp,
         shadowElevation = 6.dp,
     ) {
+        Column {
         Row(Modifier.clickable(onClick = onTap).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Thumb(now.art, 44)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -502,12 +516,40 @@ private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier =
                 Text(now.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = { tap(); Remote.transport("prev") }) { Icon(Icons.Filled.SkipPrevious, "Previous") }
-            FilledIconButton(onClick = { tap(); Remote.transport("playpause") }) {
-                Icon(if (now.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (now.playing) "Pause" else "Play")
+            FilledIconButton(onClick = { tap(); Remote.transport("playpause") }, modifier = Modifier.pressScale(src), interactionSource = src) {
+                androidx.compose.animation.Crossfade(now.playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else 160), label = "mini-pp") { p ->
+                    Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play")
+                }
             }
             IconButton(onClick = { tap(); Remote.transport("next") }) { Icon(Icons.Filled.SkipNext, "Next") }
         }
+        // a hairline along the bottom shows how far the track is (once a second is plenty at this size)
+        val fraction = rememberTrackFraction(now.duration, now.playing, 1000L)
+        if (now.duration > 0) {
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { fraction }, modifier = Modifier.fillMaxWidth().height(2.dp),
+                trackColor = androidx.compose.ui.graphics.Color.Transparent,
+            )
+        }
+        }   // Column
     }
+}
+
+/** How far through the track playback is (0..1), moving on by itself between the updates from the player. */
+@Composable
+private fun rememberTrackFraction(duration: Double, playing: Boolean, everyMs: Long): Float {
+    val progress by Remote.progress.collectAsStateWithLifecycle()
+    var tick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(playing, everyMs) {
+        while (playing) {
+            delay(everyMs)
+            tick = SystemClock.elapsedRealtime()
+        }
+    }
+    val clock = maxOf(tick, progress.at)
+    val elapsed = if (playing) (clock - progress.at) / 1000.0 else 0.0
+    val pos = (progress.position + elapsed).coerceIn(0.0, if (duration > 0) duration else 0.0)
+    return if (duration > 0) (pos / duration).toFloat() else 0f
 }
 
 /** Wide layout, left pane: just the player. */
