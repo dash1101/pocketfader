@@ -181,6 +181,10 @@
   .pill:active { filter:brightness(1.15); }
 
   .empty { color:var(--dim); text-align:center; padding:60px 20px; font-size:14px; }
+  .homeempty { grid-column:1 / -1; text-align:center; padding:48px 20px; max-width:460px; margin:0 auto; }
+  .homeempty .t { font-size:20px; font-weight:800; margin-bottom:8px; }
+  .homeempty .d { color:var(--dim); font-size:14px; line-height:1.5; margin-bottom:20px; }
+  .homeempty .acts { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
   .spinner { width:26px; height:26px; border:3px solid var(--line); border-top-color:var(--accent);
              border-radius:50%; animation:spin .8s linear infinite; margin:60px auto; }
   @keyframes spin { to { transform:rotate(360deg); } }
@@ -404,6 +408,10 @@
   .wgrid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); grid-auto-rows:130px; gap:18px; }
   @media (max-width:1180px){ .wgrid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
   @media (max-width:760px){ .wgrid { grid-template-columns:1fr; } }
+  /* a widget wider than the grid on this screen spans what there is, instead of adding phantom columns
+     (which squeezed the others to a sliver on phones) */
+  @media (max-width:1180px){ .wgrid > .widget { grid-column:span min(var(--cols,1), 2); } }
+  @media (max-width:760px){ .wgrid > .widget { grid-column:1 / -1; } }
   .widget { grid-column:span var(--cols,1); grid-row:span var(--rows,2); display:flex; flex-direction:column;
             background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:15px 16px 12px;
             animation:pop .3s ease; position:relative; overflow:hidden; }
@@ -547,6 +555,10 @@
   #app.nolabels .navbtn { font-size:0; gap:0; }
   #app.nolabels .navbtn svg { width:25px; height:25px; }
   /* subtle "edit layout" affordance at the end of Home */
+  .backbtn { width:40px; height:40px; flex:none; margin-right:-6px; border:0; border-radius:50%; background:transparent; color:var(--text);
+             display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .backbtn:hover { background:var(--card); }
+  .backbtn svg { width:22px; height:22px; fill:currentColor; }
   .editrow { display:flex; justify-content:center; margin:22px 0 4px; }
   .editrow button { display:flex; align-items:center; gap:8px; height:40px; padding:0 18px; border-radius:20px;
                     border:1px dashed var(--line); background:transparent; color:var(--dim); font-size:13px; font-weight:600; }
@@ -1004,10 +1016,36 @@ async function post(path, body) {
     return await r.json(); } catch (e) { return null; }
 }
 // YTM command via the extension relay
+// What went wrong, in words (the extension and server answer with short codes).
+const YTM_ERRORS = {
+  extension_offline: "YouTube Music isn't open on the computer",
+  extension_timeout: "YouTube Music didn't answer in time. Try again.",
+  timeout: "YouTube Music didn't answer in time. Try again.",
+  endpoint_not_accepted: "YouTube Music didn't start it. Try again.",
+  no_player: "YouTube Music's player isn't ready yet",
+  no_app: "The YouTube Music page isn't ready yet",
+  row_not_found: "Couldn't find that song on the YouTube Music page",
+  not_in_queue: "That song isn't in the queue any more",
+  queue_changed: 'The queue changed meanwhile. Try again.',
+  order_mismatch: "The queue didn't end up in that order. Try again.",
+  move_too_large: 'That move is too big to do in one go',
+  cannot_move_played_or_current: "Songs already played (or playing) can't be moved",
+  menu_item_missing: "YouTube Music's menu didn't offer that here",
+  no_menu: "YouTube Music's menu didn't open", no_menu_button: "Couldn't find that song's menu on the YouTube Music page",
+  no_like_button: "Couldn't find the like button on the YouTube Music page",
+  like_failed: "YouTube Music didn't take the like", like_not_applied: "YouTube Music didn't take the like",
+  no_autoplay_toggle: "Couldn't find YouTube Music's autoplay switch",
+  autoplay_off_while_looping: "YouTube Music turns autoplay off while repeat is on",
+  nothing_to_pick: "Couldn't find something to play", artist_not_found: "Couldn't find that artist on YouTube Music",
+  no_lyrics: 'No lyrics for this song', unknown_type: 'This YouTube Music page is running an older Pocketfader extension: reload it',
+};
+function ytmError(code) {
+  code = String(code || '');
+  if (/^no_(shuffle|repeat)_button/.test(code)) return "Couldn't find that button. Reload the Pocketfader extension, then refresh the YouTube Music tab.";
+  return YTM_ERRORS[code] || YTM_ERRORS[code.split(':')[0]] || code.replace(/_/g, ' ');
+}
 async function ytm(cmd, quiet) { const r = await post('/api/ytm', cmd);
-  if (r && r.error && !quiet) toast(r.error === 'extension_offline' ? 'YT Music bridge offline'
-      : /^no_(shuffle|repeat)_button/.test(r.error) ? "Couldn't find that button. Reload the Pocketfader extension, then refresh the YouTube Music tab."
-      : r.error);
+  if (r && r.error && !quiet) toast(ytmError(r.error));
   return r; }
 
 /* ==================== themes ==================== */
@@ -1087,7 +1125,9 @@ function rgb2hex(rgb) {
 }
 
 /* ==================== views ==================== */
-let view = 'home', detailStack = null, lastConnected = false;
+// lastConnected: something is playing that we can show (YouTube Music, or another player on the computer);
+// lastYtm: YouTube Music itself is connected through the extension (search, queue, artists...).
+let view = 'home', detailStack = null, lastConnected = false, lastYtm = false;
 const cache = { home:null, playlists:null };
 
 // Slides the selection pill to whichever nav button is active.
@@ -1100,6 +1140,13 @@ function moveNavPill() {
   pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + sel.offsetTop + 'px)';
   pill.style.opacity = '1';
 }
+// Re-measure whenever the bar or a button changes size (a label appearing, fonts loading late, the phone turning).
+try {
+  let navRaf = 0;
+  const navRO = new ResizeObserver(() => { cancelAnimationFrame(navRaf); navRaf = requestAnimationFrame(moveNavPill); });
+  navRO.observe($('#nav')); document.querySelectorAll('.navbtn').forEach(b => navRO.observe(b));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveNavPill);
+} catch (e) {}
 let lastOrient = null;
 window.addEventListener('resize', () => {
   moveNavPill(); hoistTopbar();
@@ -1109,9 +1156,13 @@ window.addEventListener('resize', () => {
   lastOrient = o;
 });
 
+// The five tabs; every other view (a playlist, an artist, the theme picker...) belongs to the tab it was opened from.
+const TOP_VIEWS = new Set(['home', 'search', 'playlists', 'mixer', 'settings']);
+let topView = 'home';
 function setView(v, push = true) {
   view = v;
-  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('sel', b.dataset.view === v));
+  if (TOP_VIEWS.has(v)) topView = v; else if (v === 'theme') topView = 'settings';
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('sel', b.dataset.view === topView));
   moveNavPill();
   const m = $('#main'); m.classList.remove('viewin'); void m.offsetWidth; m.classList.add('viewin');
   render();
@@ -1151,8 +1202,17 @@ function render() {
 
 let suggestTimer = null;
 function topbar(title, withSearch) {
-  // No in-app back button — Android's system back already handles navigation.
   const bar = el('div', 'topbar');
+  // A back arrow on pages inside a tab: the Android back button does the same, but an iPhone home-screen app
+  // and a desktop window have none.
+  if (!TOP_VIEWS.has(view)) {
+    const back = el('button', 'backbtn'); back.title = 'Back'; back.setAttribute('aria-label', 'Back');
+    back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>';
+    back.addEventListener('click', () => {
+      if (history.state && history.state.view === view) history.back(); else setView(topView);
+    });
+    bar.appendChild(back);
+  }
   const h = el('h2', 'viewtitle'); h.textContent = title; bar.appendChild(h);
   setTimeout(hoistTopbar, 0);   // any view that builds a header gets it hoisted on phones
   if (withSearch) {
@@ -1241,7 +1301,7 @@ function lsGet(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); retu
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
 const WIDGETS = {
-  quickpicks:  { name:'Quick Picks',  defCols:3, defRows:2, render:(b) => wSection(b, /quick picks/i,  "Quick Picks aren't loaded — reload the extension + refresh the YT Music tab.") },
+  quickpicks:  { name:'Quick Picks',  defCols:3, defRows:2, render:(b) => wSection(b, /quick picks/i,  "Quick picks show up when YouTube Music is open on the computer.") },
   listenagain: { name:'Listen Again', defCols:3, defRows:2, render:(b) => wSection(b, /listen again/i, "No “Listen again” right now.") },
   speeddial:   { name:'Speed Dial',   defCols:3, defRows:2, render:(b) => wSpeedDial(b) },
   favorites:   { name:'Favorites',    defCols:1, defRows:2, render:wFavorites },
@@ -1264,6 +1324,8 @@ function getLayout() {
   }));
 }
 function setLayout(l) { lsSet(layoutKey(), l); }
+// The visualizer needs a level meter, which only some audio backends have.
+function widgetUsable(id) { return id !== 'visualizer' || !!(mixerState && mixerState.capabilities && mixerState.capabilities.meter); }
 
 // Meter-driven visualizer. Needs a backend with a level meter (capabilities.meter), e.g. Voicemeeter;
 // hidden otherwise. No per-frequency data exists.
@@ -1401,7 +1463,20 @@ async function renderHome(m) {
   const layout = getLayout();
   const grid = el('div', 'wgrid'); m.appendChild(grid);
   // copy has to match the affordance — the edit control is an icon-only pencil now
-  if (!layout.length && !editing) grid.appendChild(emptyMsg('No widgets yet — tap the ✎ pencil, top right, to add some.'));
+  if (!layout.length && !editing) {
+    const box = el('div', 'homeempty');
+    box.innerHTML = '<div class="t">Make Home yours</div><div class="d">Put what you reach for most here: playback controls, the mixer, ' +
+      'your quick picks, favourites. You can move and resize everything later.</div>';
+    const acts = el('div', 'acts');
+    const starter = el('button', 'pill primary'); starter.textContent = 'Add a starter set';
+    starter.addEventListener('click', () => {
+      const ids = ['controls', 'mixer', 'quickpicks', 'favorites'].filter(id => WIDGETS[id] && widgetUsable(id));
+      setLayout(ids.map(id => ({ id, cols: WIDGETS[id].defCols, rows: WIDGETS[id].defRows }))); renderHome(m);
+    });
+    const pick = el('button', 'pill ghost'); pick.textContent = 'Choose widgets';
+    pick.addEventListener('click', () => { $('#app').classList.add('editwidgets'); renderHome(m); });
+    acts.append(starter, pick); box.appendChild(acts); grid.appendChild(box);
+  }
   for (const w of layout) {
     const def = WIDGETS[w.id]; if (!def) continue;
     const card = el('div', 'widget'); card.style.setProperty('--cols', w.cols || 1); card.style.setProperty('--rows', w.rows || 2); card.dataset.wid = w.id;
@@ -1423,7 +1498,7 @@ async function renderHome(m) {
   }
   if (editing) {
     const inUse = new Set(getLayout().map(z => z.id));
-    const avail = Object.entries(WIDGETS).filter(([id]) => !inUse.has(id));
+    const avail = Object.entries(WIDGETS).filter(([id]) => !inUse.has(id) && widgetUsable(id));
     const add = el('div', 'setsec'); add.style.marginTop = '24px';
     add.appendChild(Object.assign(el('h3'), { textContent: avail.length ? 'Add a widget' : 'All widgets added' }));
     const pal = el('div', 'waddgrid');
@@ -1570,6 +1645,8 @@ async function renderPlaylists(m) {
 
 async function renderDetail(m, d) {
   m.innerHTML = '';
+  // its own header (with the back arrow), so the previous page's title doesn't linger above it
+  m.appendChild(topbar(d.kind === 'album' || (d.browseId || '').startsWith('MPRE') ? 'Album' : 'Playlist'));
   const head = el('div', 'detailhead');
   const img = el('img', 'art'); img.src = d.thumb || ART_FALLBACK; img.onerror = () => img.src = ART_FALLBACK;
   const info = el('div');
@@ -1602,7 +1679,10 @@ async function renderDetail(m, d) {
   const r = await ytm({ type:'playlistItems', playlistId: pid, browseId: d.browseId });
   list.innerHTML = '';
   let items = (r && r.items) || [];
-  if (!items.length) { list.appendChild(emptyMsg('Could not load tracks.')); return; }
+  if (!items.length) {
+    list.appendChild(emptyMsg(r && !r.error ? 'This playlist is empty.' : 'Couldn\'t load the songs' + (r && r.error === 'timeout' ? ' in time. Try again.' : '. Is YouTube Music open on the computer?')));
+    return;
+  }
   const editable = !!pid && items.some(i => i.setVideoId);
   d.editable = editable;
   let editing = false;
@@ -1722,8 +1802,9 @@ function renderSettingsTail(m) {
     t.addEventListener('click', () => { on = !on; lsSet(key, on); t.classList.toggle('on', on); applyDisplayPrefs(); if (after) after(on); });
     row.appendChild(t); dp.appendChild(row); };
   mkToggle('Keep screen on', "Stops the screen from sleeping while this page is open. Handy for a tablet that stays on a desk. Not every browser supports it.", 'vmr-wake', false);
-  mkToggle('Pixel shift', 'Moves the whole page a few pixels every few minutes so static parts don\'t burn into OLED screens.', 'vmr-pshift', false);
-  const pr = el('div', 'setrow');
+  mkToggle('Pixel shift', 'Moves the whole page a few pixels every few minutes so static parts don\'t burn into OLED screens.', 'vmr-pshift', false,
+    on => { pr.style.display = on ? '' : 'none'; });
+  const pr = el('div', 'setrow'); pr.style.display = lsGet('vmr-pshift', false) ? '' : 'none';
   pr.innerHTML = '<div><div class="k">Shift every</div><div class="d">Minutes between moves.</div></div>';
   const ps = el('select'); [1, 2, 5, 10].forEach(m => { const o = el('option'); o.value = m; o.textContent = m + ' min'; ps.appendChild(o); });
   ps.value = String(lsGet('vmr-pshift-min', 2));
@@ -1784,16 +1865,16 @@ function renderSettingsTail(m) {
   const eng = mixerState && mixerState.engine && mixerState.engine.connected;
   const st = el('div', 'setsec'); st.appendChild(Object.assign(el('h3'), { textContent:'Status' }));
   st.innerHTML += `
-    <div class="setrow"><div><div class="k">YT Music bridge</div><div class="d">Full YouTube Music control (search, queue, mixes) via the browser extension on the host computer.</div></div><div class="val">${lastConnected ? 'Connected' : 'Offline'}</div></div>
-    <div class="setrow"><div><div class="k">Audio output</div><div class="d">The host's current default output &mdash; this is what the volume slider controls.</div></div><div class="val">${(mixerState && mixerState.volume && mixerState.volume.available) ? mixerState.volume.device : 'Not available'}</div></div>` +
+    <div class="setrow"><div><div class="k">YT Music bridge</div><div class="d">Full YouTube Music control (search, queue, mixes) through the Pocketfader extension in the computer's browser.</div></div><div class="val">${lastYtm ? 'Connected' : 'Not connected'}</div></div>
+    <div class="setrow"><div><div class="k">Audio output</div><div class="d">The computer's current output &mdash; what the volume slider controls.</div></div><div class="val">${(mixerState && mixerState.volume && mixerState.volume.available) ? mixerState.volume.device : 'Not available'}</div></div>` +
     (caps.engine_label ? `<div class="setrow"><div><div class="k">${caps.engine_label} engine</div><div class="d">Master volume &amp; EQ.</div></div><div class="val">${eng ? 'Connected' : 'Not reachable'}</div></div>` : '');
   // When the bridge is down, say how to fix it instead of just reporting "Offline".
-  if (!lastConnected) {
+  if (!lastYtm) {
     const help = el('div', 'setrow');
     help.innerHTML = `<div><div class="k">Bridge is offline — how to fix</div><div class="d">
-      1. Open <b>YouTube Music</b> in Brave on the PC.<br>
+      1. Open <b>music.youtube.com</b> in the browser on the computer.<br>
       2. If it's already open, refresh that tab.<br>
-      3. Still stuck? Reload the Pocketfader extension in <b>brave://extensions</b> (or chrome://extensions).</div></div>`;
+      3. Still stuck? Reload the Pocketfader extension on the browser's extensions page (for example chrome://extensions).</div></div>`;
     st.appendChild(help);
   }
   const rc = el('div', 'setrow');
@@ -2014,6 +2095,8 @@ function openQueueSheet(q) {
   add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:q.videoId }); toast('Starting radio'); });
   add(isPinned(q) ? 'Remove from favorites' : 'Favorite', I.star,
     () => { const on = togglePin({ ...q, kind:'song', subtitle:q.artist }); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
+  if (q.artist && lastYtm && window.openArtist) add('Go to artist', '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/></svg>',
+    () => { if ($('#app').classList.contains('railopen')) history.back(); setTimeout(() => window.openArtist(null, q.artist, q.videoId), 60); });
   add('Share', I.share, () => shareItem({ videoId:q.videoId, title:q.title, subtitle:q.artist }));
   $('#sheet').classList.add('show');
 }
@@ -2051,7 +2134,8 @@ function openSheet(item) {
     mix:'<svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4V8h-3l-2 2-1.4-1.4L12 7h2l-2-2h5V3zM3 6h5l3 3-1.4 1.4L7 8H3V6zm14 9v-3l4 4-4 4v-3h-2l-8-8H3v-2h5l8 8h1z"/></svg>',
     star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17l-6.2 3.3 1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
     share:'<svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg>',
-    like:'<svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>' };
+    like:'<svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>',
+    person:'<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/></svg>' };
   if (item.videoId) {
     add('Play now', I.play, () => { ytm({ type:'play', videoId:item.videoId }); toast('Playing'); setRailTab('queue'); });
     add('Play next', I.next, () => { ytm({ type:'queueAdd', videoId:item.videoId, query:item.title + ' ' + (item.subtitle||''), mode:'next' }); toast('Added — playing next'); });
@@ -2059,7 +2143,12 @@ function openSheet(item) {
     add('Add to playlist…', I.q, () => openAddToPlaylist(item));
     add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:item.videoId }); toast('Starting radio'); setRailTab('queue'); });
     add(isPinned(item) ? 'Remove from favorites' : 'Favorite', I.star, () => { const on = togglePin(item); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
-    add('Like on YT Music', I.like, () => { ytm({ type:'like', videoId:item.videoId, action:'like' }, true); toast('Liked'); });
+    add('Like on YT Music', I.like, async () => {
+      const r = await ytm({ type:'like', videoId:item.videoId, action:'like' }, true);
+      toast(r && r.ok ? 'Liked' : "Couldn't like it" + (lastYtm ? '' : ': YouTube Music isn\'t open on the computer'));
+    });
+    const artist = String(item.subtitle || '').split(' \u2022 ')[0].trim();
+    if (artist && lastYtm && window.openArtist) add('Go to artist', I.person, () => window.openArtist(null, artist, item.videoId));
     add('Share', I.share, () => shareItem(item));
   }
   $('#sheet').classList.add('show');
@@ -2712,16 +2801,16 @@ const BEACON_TEXT = {
   'paused-timeout':['Hidden because the song was paused a while. It returns when you press play.','warn'],
   filtered:['Not shown: this song matches one of your never-show words.','warn'],
   'extension-quiet':['The browser extension went quiet. Check that YouTube Music is open in your browser.','warn'],
-  'extension-missing':["The YTM Beacon browser extension isn't set up yet. Install it on the host computer.",'bad'],
-  'discord-down':["Can't reach Discord. Open the Discord app on the host computer.",'bad'],
-  unsupported:['YTM Beacon on the host is out of date. Update it there.','bad'],
-  unreachable:["YTM Beacon isn't running on the host computer. Start it there.",'bad'],
+  'extension-missing':["YTM Beacon's browser extension isn't set up yet. Add it in the browser on the computer.",'bad'],
+  'discord-down':["Can't reach Discord. Open the Discord app on the computer.",'bad'],
+  unsupported:['YTM Beacon on the computer is out of date. Update it (below, or with ytm-beacon update).','bad'],
+  unreachable:["YTM Beacon isn't running on the computer. Start it there.",'bad'],
 };
 function beaconSection() {
   const sec = el('div', 'setsec'); sec.appendChild(Object.assign(el('h3'), { textContent:'Discord presence' }));
   const box = el('div'); sec.appendChild(box);
   let st = null, heldUntil = 0, misses = 0, rcvAt = 0;
-  const call = async (path, body) => { const r = await post(path, body); if (!r || r.error) { toast((r && r.error) || 'Could not reach the host'); return null; } return r; };
+  const call = async (path, body) => { const r = await post(path, body); if (!r || r.error) { toast((r && r.error) || 'Could not reach the computer'); return null; } return r; };
   const row = (k, d, ctl) => { const r = el('div', 'setrow'); const t = el('div');
     t.appendChild(Object.assign(el('div', 'k'), { textContent:k })); if (d) t.appendChild(Object.assign(el('div', 'd'), { textContent:d }));
     r.appendChild(t); if (ctl) r.appendChild(ctl); return r; };
@@ -2870,11 +2959,11 @@ function applyMixer() {
   if (mv) { if (!holdVol && volSettled && v.available) { mv.value = v.percent; $('#mvolpct').textContent = v.percent + '%'; } mv.disabled = !v.available; }
   const caps = st.capabilities || {};
   const notes = []; const r = e.routing || {};
-  if (!v.available) notes.push('<b>No audio output found on the host.</b>');
+  if (!v.available) notes.push('<b>No audio output found on the computer.</b>');
   if (caps.engine_label && e.connected && r.A1 === false && r.A2 === false) notes.push('<b>Not routed to any output.</b>');
   if (caps.engine_label && !e.connected) notes.push('<b>' + caps.engine_label + ' engine not reachable.</b>');
   if (v.muted) notes.push('<b>Muted.</b>');
-  if (v.available) notes.push('Controls the host\'s main volume' + (v.device ? ' (' + v.device + ')' : '') + ', in sync with its volume keys.');
+  if (v.available) notes.push('Controls the computer\'s main volume' + (v.device ? ' (' + v.device + ')' : '') + ' and follows its volume keys.');
   document.querySelectorAll('.viz').forEach(z => { z.style.display = caps.meter ? '' : 'none'; });
   for (const node of mixerNodes) {
     if (!node.isConnected) continue;
@@ -2957,6 +3046,7 @@ function outputRow(o) {
 
 /* ==================== polling ==================== */
 let wasConnected = null;   // null = first poll, so we don't toast on startup
+let wasYtm = null;
 let cardDismissed = false; // set when you swipe the mini-player away
 // When the app is hidden/backgrounded we barely poll (saves a lot of battery); when
 // visible we poll at a normal rate. The mixer only needs a fast rate while it's on screen.
@@ -2964,7 +3054,7 @@ async function pollMusic() {
   if (!document.hidden) {
     let ok = false;
     try { const r = await fetch('/api/ytm/state'); const st = await r.json();
-      ok = !!st.connected; lastConnected = ok;
+      ok = !!st.connected; lastConnected = ok; lastYtm = ok && st.source === 'ytm';
       $('#ndot').className = 'dot ' + (ok ? 'ok' : 'bad');
       paintNow(ok ? (st.now || {}) : {}, ok ? (st.queue || []) : []);
     } catch (e) { $('#ndot').className = 'dot bad'; }
@@ -2973,8 +3063,8 @@ async function pollMusic() {
     else if (wasConnected === false && ok) toast('Reconnected');
     // Settings shows connection state, so refresh it live rather than making the user
     // navigate away and back to see the change.
-    if (wasConnected !== null && wasConnected !== ok && view === 'settings') render();
-    wasConnected = ok;
+    if (wasConnected !== null && (wasConnected !== ok || wasYtm !== lastYtm) && view === 'settings') render();
+    wasConnected = ok; wasYtm = lastYtm;
   }
   setTimeout(pollMusic, document.hidden ? 5000 : 1000);
 }
@@ -3001,7 +3091,7 @@ $('#app').classList.toggle('nolabels', !lsGet('vmr-navlabels', true));
 window.__cueResume = async () => {
   try {
     const r = await fetch('/api/ytm/state', { cache:'no-store' }); const st = await r.json();
-    lastConnected = !!st.connected;
+    lastConnected = !!st.connected; lastYtm = lastConnected && st.source === 'ytm';
     paintNow(st.connected ? (st.now || {}) : {}, st.connected ? (st.queue || []) : []);
     favPull();
   } catch (e) { toast('Disconnected — reconnecting…'); }
@@ -3083,9 +3173,11 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
   html[data-nav="pill"] #nav { left:16px; right:16px; bottom:calc(10px + var(--sa-bottom, env(safe-area-inset-bottom))); border-radius:999px;
     border:1px solid var(--line); background:color-mix(in srgb, var(--panel) 94%, transparent); box-shadow:0 10px 28px rgba(0,0,0,.45);
     padding:6px 8px; backdrop-filter:blur(10px); justify-content:space-around; }
-  html[data-nav="pill"] .navbtn { height:48px; border-radius:999px; flex-direction:row; gap:8px; font-size:0; flex:0 0 auto; padding:0 14px; }
-  html[data-nav="pill"] .navbtn.sel { font-size:12.5px; padding:0 18px; }
-  html[data-nav="pill"] .navbtn svg { width:23px; height:23px; }
+  html[data-nav="pill"] .navbtn { height:48px; border-radius:999px; flex-direction:row; gap:8px; font-size:0; flex:1 1 0; min-width:40px;
+    padding:0 6px; white-space:nowrap; overflow:hidden; }
+  html[data-nav="pill"] .navbtn.sel { font-size:12.5px; flex:0 1 auto; padding:0 16px; }
+  html[data-nav="pill"] .navbtn svg { width:23px; height:23px; flex:none; }
+  @media (max-width:340px) { html[data-nav="pill"] .navbtn.sel { font-size:0; gap:0; padding:0 12px; } }
 }
 /* little extras */
 #nav .brand { background:none; box-shadow:none; overflow:visible; }
@@ -3192,12 +3284,12 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
   };
   // tap the artist's name under the title
   const npS = $('#np-s');
-  npS.addEventListener('click', () => { if (lastNow && lastNow.artist) openArtist(null, lastNow.artist, lastNow.videoId); });
-  new MutationObserver(() => npS.classList.toggle('link', !!(lastNow && lastNow.artist && lastConnected))).observe(npS, { childList: true, characterData: true, subtree: true });
+  npS.addEventListener('click', () => { if (lastYtm && lastNow && lastNow.artist) openArtist(null, lastNow.artist, lastNow.videoId); });
+  new MutationObserver(() => npS.classList.toggle('link', !!(lastNow && lastNow.artist && lastYtm))).observe(npS, { childList: true, characterData: true, subtree: true });
 
   // ---- open YouTube Music on the computer when nothing is connected ----
   function openBanner() {
-    const m = $('#main'); const old = $('#openytm'); if (lastConnected || !['home', 'search', 'playlists'].includes(view)) { if (old) old.remove(); return; }
+    const m = $('#main'); const old = $('#openytm'); if (lastYtm || !['home', 'search', 'playlists'].includes(view)) { if (old) old.remove(); return; }
     if (old || !m) return;
     const b = el('div', 'openytm'); b.id = 'openytm';
     b.innerHTML = '<div class="m">YouTube Music isn\'t connected on the computer. You can open it there, then play from here.</div>';
@@ -3243,13 +3335,18 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
     const mkTog = (title, desc, on, fn) => { const r = el('div', 'setrow'); r.innerHTML = '<div><div class="k"></div><div class="d"></div></div>';
       r.querySelector('.k').textContent = title; r.querySelector('.d').textContent = desc;
       const t = el('button', 'toggle' + (on ? ' on' : '')); t.addEventListener('click', () => { const n = !t.classList.contains('on'); t.classList.toggle('on', n); fn(n); }); r.appendChild(t); return r; };
+    // Sections go where they belong: look settings under Appearance, the nav style with the other nav setting,
+    // other players with playback, and About last.
+    const sec = (t) => [...m.querySelectorAll('.setsec')].find(x => (x.querySelector('h3') || {}).textContent === t);
+    const putAfter = (ref, node) => { if (ref && ref.parentNode === m) m.insertBefore(node, ref.nextSibling); else m.appendChild(node); };
     const fx = el('div', 'setsec'); fx.appendChild(Object.assign(el('h3'), { textContent: 'Effects' }));
     fx.append(
       mkSel('Cover glow', "A soft light of the cover's colours around the album art.", 'glow', [['off', 'Off'], ['soft', 'Soft'], ['strong', 'Strong'], ['extreme', 'Extreme']]),
       mkSel('Cover shape', 'Circle spins slowly like a record.', 'shape', [['rounded', 'Rounded'], ['soft', 'Soft'], ['circle', 'Circle'], ['cut', 'Cut corners']]),
-      mkTog('Wavy seek bar', 'The played part of the bar ripples while music plays.', P.wavy, v => savePref('wavy', v)),
-      mkSel('Navigation bar (phone)', 'Classic keeps the bar along the bottom; Pill floats above the content.', 'nav', [['bar', 'Classic bar'], ['pill', 'Floating pill']]));
-    m.appendChild(fx);
+      mkTog('Wavy seek bar', 'The played part of the bar ripples while music plays.', P.wavy, v => savePref('wavy', v)));
+    putAfter(sec('Appearance'), fx);
+    const navSel = mkSel('Navigation bar (phone)', 'Classic keeps the bar along the bottom; Pill floats above the content.', 'nav', [['bar', 'Classic bar'], ['pill', 'Floating pill']]);
+    const iface = sec('Interface'); if (iface) iface.appendChild(navSel); else fx.appendChild(navSel);
     const op = el('div', 'setsec'); op.appendChild(Object.assign(el('h3'), { textContent: 'Other players' }));
     const tog = mkTog('Pause other players when YouTube Music starts', 'Other music or video playing on the computer is paused when a YouTube Music song starts.', false, v => post('/api/prefs', { pauseOthers: v }));
     op.appendChild(tog);
@@ -3257,7 +3354,28 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
     const nb = el('div', 'setrow'); nb.innerHTML = '<div><div class="k">Pause other players now</div><div class="d">Pauses everything else that is playing on the computer.</div></div>';
     const btn = el('button', 'pill ghost'); btn.textContent = 'Pause'; btn.style.height = '38px';
     btn.addEventListener('click', async () => { const r = await post('/api/media/pause-others', {}); toast(r && r.paused && r.paused.length ? 'Paused ' + r.paused.join(', ') : 'Nothing else was playing'); });
-    nb.appendChild(btn); op.appendChild(nb); m.appendChild(op);
+    nb.appendChild(btn); op.appendChild(nb); putAfter(sec('Playback'), op);
+
+    // ---- About: the version on the computer, whether a newer one is out, and the Android app ----
+    const ab = el('div', 'setsec'); ab.appendChild(Object.assign(el('h3'), { textContent: 'About' }));
+    const ver = el('div', 'setrow'); ver.innerHTML = '<div><div class="k">Pocketfader</div><div class="d">Checking for updates…</div></div>';
+    ab.appendChild(ver); m.appendChild(ab);
+    fetch('/api/update', { cache: 'no-store' }).then(r => r.json()).then(u => {
+      if (view !== 'settings') return;
+      const pretty = (v) => { const x = String(v || '').replace(/^v/, '').match(/^(\d+\.\d+\.\d+)(?:-?(?:alpha\.?|a)(\d+))?/);
+        return x ? x[1] + (x[2] ? ' alpha ' + x[2] : '') : String(v || ''); };
+      ver.querySelector('.k').textContent = 'Pocketfader ' + pretty(u.current);
+      ver.querySelector('.d').textContent = u.error ? "Couldn't check for updates right now."
+        : u.available ? pretty(u.latest) + ' is out. Update it on the computer (pocketfader --update, or the Pocketfader window).'
+        : 'Up to date.';
+      if (u.apk) {
+        const ap = el('div', 'setrow');
+        ap.innerHTML = '<div><div class="k">Android app</div><div class="d">The native app for Android phones and tablets: lock-screen and volume-key ' +
+          'controls, home-screen widgets, and music on the phone itself. Downloaded through the computer and checked against the release.</div></div>';
+        const a = el('a', 'pill ghost'); a.textContent = 'Download'; a.href = '/api/update/apk'; a.style.cssText = 'height:38px;text-decoration:none;display:inline-flex;align-items:center';
+        ap.appendChild(a); ab.appendChild(ap);
+      }
+    }).catch(() => { ver.querySelector('.d').textContent = "Couldn't check for updates right now."; });
   };
   // set the view for an already-open artist/settings page
   if (view === 'settings' || view === 'artist') render();
