@@ -323,8 +323,16 @@
     return out;
   }
 
-  async function search(query) {
-    const j = await innertube("search", { query });
+  // What YouTube Music's own search chips (Songs, Videos, Albums, Artists, Community playlists) send with the search.
+  const SEARCH_FILTERS = {
+    songs: "EgWKAQIIAWoMEA4QChADEAQQCRAF",
+    videos: "EgWKAQIQAWoMEA4QChADEAQQCRAF",
+    albums: "EgWKAQIYAWoMEA4QChADEAQQCRAF",
+    artists: "EgWKAQIgAWoMEA4QChADEAQQCRAF",
+    playlists: "EgeKAQQoAEABagwQDhAKEAMQBBAJEAU%3D",
+  };
+  const FILTER_KIND = { songs: "song", videos: "song", albums: "album", artists: "artist", playlists: "playlist" };
+  function searchItems(j) {
     const rows = deepFind(j, "musicResponsiveListItemRenderer", []);
     const cards = deepFind(j, "musicTwoRowItemRenderer", []);
     const items = [...rows, ...cards].map(extractItem).filter(Boolean);
@@ -336,6 +344,17 @@
       seen.add(id);
       return true;
     });
+  }
+  // filter: "songs" | "videos" | "albums" | "artists" | "playlists"; anything else searches everything.
+  async function search(query, filter) {
+    const params = Object.prototype.hasOwnProperty.call(SEARCH_FILTERS, filter) ? SEARCH_FILTERS[filter] : null;
+    if (!params) return searchItems(await innertube("search", { query }));
+    const want = FILTER_KIND[filter];
+    const only = (list) => list.filter((it) => it.kind === want);
+    let found = [];
+    try { found = only(searchItems(await innertube("search", { query, params }))); } catch (_) {}
+    // If YouTube Music changes those values, the filter still works: search everything and keep that kind.
+    return found.length ? found : only(searchItems(await innertube("search", { query })));
   }
   // The sections worth having (Speed dial / Quick picks / Listen again) load via
   // continuations, not in the first browse — so follow a few hops, then float those to
@@ -1078,7 +1097,7 @@
         case "playlistCreate": return await playlistCreate(cmd);
         case "playlistDelete": return await playlistDelete(cmd);
         case "queueClear": return { ok: await dismissQueue() };
-        case "search": return { items: await search(cmd.query) };
+        case "search": return { items: await search(cmd.query, cmd.filter) };
         case "speed": return setSpeed(cmd.rate);
         case "lucky": return await lucky();
         case "resolveSongs": return await resolveSongs(cmd.queries);
