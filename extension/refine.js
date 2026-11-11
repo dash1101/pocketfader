@@ -1,4 +1,4 @@
-/* Pocketfader Refine: improvements to YouTube Music itself, built into its own page (page world, after ytm_main.js).
+/* YTM Starcast Refine: improvements to YouTube Music itself, built into its own page (page world, after ytm_main.js).
  *
  *  - A Material 3 Expressive look in separate layers, each with its own switch: rounder shapes, colours taken from the
  *    album art, expressive player controls (a bigger play button that changes shape), a wavy progress bar and a glow
@@ -9,11 +9,16 @@
  *  - A playlist maker: start from the song playing, the queue, one of your playlists or your liked songs; it asks
  *    YouTube Music for the radio of each starting song, ranks what they have in common, and shows the result to
  *    review before saving it as a new playlist or adding it to one of yours.
- *  - Its settings open from a button in YouTube Music's top bar.
+ *  - Its settings open from a button in YouTube Music's top bar, together with YTM Starcast's three main switches.
  *
  * Everything here depends on YouTube Music's page, which changes now and then, so each part fails quietly on its own
  * and can be switched off from that menu. Opening music.youtube.com/?pf-refine=off starts a page without any of it.
- * It talks to nothing but the page and YouTube Music's own endpoints (with your own login); settings stay in this browser.
+ * YTM Starcast's "Refine" switch (in its apps, its toolbar button and that menu) takes all of it away at once, live.
+ * Besides the page and YouTube Music's own endpoints (with your own login), it reaches only the YTM Starcast app on this
+ * computer, and only through the extension's own script (live lyrics, YTM Starcast's switches); settings stay in this browser.
+ *
+ * Page-world names from before the rename are kept on purpose (Symbol.for("pocketfader.api" / "pocketfader.refine"),
+ * __pfRefineLoaded, the pf- / --pf- CSS names and the pocketfader.refine.* keys, which hold people's settings).
  */
 (() => {
   "use strict";
@@ -37,8 +42,13 @@
   };
   const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const prefs = { ...DEFAULTS, ...readJSON(PREFS_KEY, {}) };
+  // YTM Starcast's "Refine" switch, as the app last said (see setPart). Remembered, so a page that opens while Refine is off
+  // doesn't show it for a moment first. The detailed switches above are kept as they are either way.
+  const PART_KEY = "pocketfader.refine.part";
+  let partOn = readJSON(PART_KEY, {}).on !== false;
   // ?pf-refine=off: this page starts with everything off (the saved choices are kept for next time)
-  const on = (k) => !KILL && !!prefs[k];
+  const live = () => !KILL && partOn;
+  const on = (k) => live() && !!prefs[k];
   function setPref(k, v) {
     prefs[k] = !!v;
     writeJSON(PREFS_KEY, prefs);
@@ -162,6 +172,7 @@
     });
   }
   async function updateColors(force) {
+    if (!partOn) return;   // Refine is switched off in YTM Starcast: its colours aren't in the page at all
     if (!on("colors")) { if (colorFor !== "-") { colorFor = "-"; setPalette(palette(DEFAULT_HUE, 1)); } return; }
     const url = artUrl();
     if (!url || colorBusy || (!force && url === colorFor)) return;
@@ -213,6 +224,10 @@
   .pf-switch input:checked + i { background: var(--pf-accent); border-color: var(--pf-accent); }
   .pf-switch input:checked + i::after { left: 22px; top: 2px; width: 24px; height: 24px; background: var(--pf-on-accent); }
   .pf-switch input:focus-visible + i { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
+  .pf-switch input:disabled { cursor: default; }
+  .pf-switch input:disabled + i { opacity: .45; }
+  .pf-row:has(input:disabled) { cursor: default; }
+  .pf-row:has(input:disabled):hover { background: none; }
   .pf-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 20px; border: 0;
     cursor: pointer; font-size: 14px; font-weight: 600; background: transparent; color: var(--pf-accent); transition: background-color .2s, border-radius var(--pf-t-short) var(--pf-ease), transform .15s; }
   .pf-btn:hover { background: rgba(255,255,255,.07); }
@@ -433,6 +448,14 @@
     add("pf-refine-ui", CSS_UI);
     for (const [k, css] of Object.entries(LAYERS)) styleEls[k] = add("pf-refine-" + k, css);
   }
+  // YTM Starcast's Refine switch is off: none of Refine's styles stay in the page.
+  function removeStyles() {
+    for (const id of ["pf-refine-ui", ...Object.keys(LAYERS).map((k) => "pf-refine-" + k)]) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+    for (const k of Object.keys(styleEls)) delete styleEls[k];
+  }
 
   // ------------------------------------------------------------------ the player
   const video = () => document.querySelector("#movie_player video, video.html5-main-video, video");
@@ -446,6 +469,7 @@
   }
   let boundVideo = null;
   function syncPlaying() {
+    if (!partOn) return;
     const playing = playerState() === 1;
     if (document.documentElement.hasAttribute("data-pf-playing") !== playing) {
       document.documentElement.toggleAttribute("data-pf-playing", playing);
@@ -660,7 +684,7 @@
   }
   function applyPitch() {
     const v = video();
-    if (v && "preservesPitch" in v) v.preservesPitch = !!prefs.keepPitch;
+    if (v && "preservesPitch" in v) v.preservesPitch = !live() || !!prefs.keepPitch;   // Refine off: the browser's own way
   }
   // YouTube Music's player only knows a few speeds; anything in between is set on the media element itself.
   function setRateRaw(r) {
@@ -697,6 +721,7 @@
   // A remembered speed is put back when its song or playlist plays, and doesn't spill over onto other songs.
   let ruleApplied = false;
   function applySpeedRule() {
+    if (!live()) return;   // Refine is off (for this page, or by YTM Starcast's switch): YouTube Music keeps its own speed
     const rule = ruleFor(API.curVideo(), API.curPlaylist());
     if (rule) {
       if (Math.abs(getRate() - rule.rate) > 0.01) setRateRaw(rule.rate);
@@ -846,7 +871,7 @@
   }
 
   // ------------------------------------------------------------------ live lyrics
-  // Time-synced lyrics from the Pocketfader app on this computer (the same ones its apps show), relayed by the
+  // Time-synced lyrics from the YTM Starcast app on this computer (the same ones its apps show), relayed by the
   // extension's own script: this page can't reach the app itself.
   let lyrSeq = 0;
   const lyrWaiting = new Map();
@@ -973,9 +998,9 @@
     const r = await fetchLyrics({ videoId: np.videoId, title: np.title, artist: np.artist || "", duration: Math.round(np.duration || 0) });
     if (!lyr.panel || lyr.key !== key) return; // closed, or the song changed meanwhile
     if (r.error) {
-      lyrMessage(r.error === "offline" ? "Live lyrics come from the Pocketfader app on this computer. Start it, then open lyrics again."
-        : r.error === "old_app" ? "Live lyrics need a newer Pocketfader app on this computer. Update it, then open lyrics again."
-        : "The Pocketfader app didn't answer in time. Try again in a moment.");
+      lyrMessage(r.error === "offline" ? "Live lyrics come from the YTM Starcast app on this computer. Start it, then open lyrics again."
+        : r.error === "old_app" ? "Live lyrics need a newer YTM Starcast app on this computer. Update it, then open lyrics again."
+        : "The YTM Starcast app didn't answer in time. Try again in a moment.");
       return;
     }
     const L = r.lyrics;
@@ -1084,10 +1109,10 @@
   // ------------------------------------------------------------------ the ✦ menu in the top bar
   let navBtn = null, sheet = null;
   function syncNav() {
-    if (navBtn && navBtn.isConnected) return;
+    if (!partOn || (navBtn && navBtn.isConnected)) return;
     const nav = document.querySelector("ytmusic-nav-bar");
     if (!nav) return;
-    navBtn = h("button", { class: "pf-nav-btn", "aria-label": "Pocketfader Refine", title: "Pocketfader Refine", "aria-expanded": "false",
+    navBtn = h("button", { class: "pf-nav-btn", "aria-label": "YTM Starcast Refine", title: "YTM Starcast Refine", "aria-expanded": "false",
       onclick: (e) => { e.stopPropagation(); if (sheet) closeSheet(); else openSheet(); } }, icon(ICON.sparkle));
     const right = nav.querySelector("#right-content, .right-content");
     if (right) right.prepend(navBtn);
@@ -1101,13 +1126,105 @@
       h("span", { class: "pf-row-text" }, label, sub ? h("small", { text: sub }) : null),
       h("span", { class: "pf-switch" }, input, h("i")));
   }
+  // YTM Starcast's three main switches, kept by the app on this computer. Asked through the extension's own script, like live
+  // lyrics: this page can't reach the app itself.
+  let scSeq = 0;
+  const scWaiting = new Map();
+  function askStarcast(op, extra) {
+    return new Promise((res) => {
+      const id = "pfsc" + ++scSeq;
+      scWaiting.set(id, res);
+      window.postMessage({ __vmr: "starcast", id, op, ...extra }, "*");
+      setTimeout(() => { if (scWaiting.delete(id)) res({ error: "timeout" }); }, 9000);
+    });
+  }
+  // What the app says about Discord status, in plain words (the same wording as the toolbar button's).
+  const DISCORD_TEXT = {
+    showing: "Showing on your Discord profile.", waiting: "Getting ready to show…", idle: "Ready. Nothing is playing.",
+    off: "Off. Nothing is shown on Discord.", snoozed: "Hidden for a while. It comes back by itself.",
+    "paused-hidden": "Not shown while the music is paused.", "paused-timeout": "Hidden after a long pause. It comes back when you press play.",
+    filtered: "Not shown: this song matches one of your never-show words.", ad: "Hidden while an advert plays.",
+    "discord-down": "Can't reach Discord. Open the Discord app on this computer.",
+    "extension-quiet": "Waiting to hear from YouTube Music.", "extension-missing": "Waiting to hear from YouTube Music.",
+    "beacon-running": "The old YTM Beacon app is still running. Open YTM Starcast to move over from it.",
+    unreachable: "Discord status isn't answering right now. Try again in a moment.",
+  };
+  const PART_ROWS = [
+    ["remote", "YouTube Music remote", "Search, your library and this tab's queue from your phone"],
+    ["discord", "Discord status", "Show what you play on your Discord profile"],
+    ["refine", "Refine", "Everything in this menu. Once it's off, turn it back on from YTM Starcast's button in the browser toolbar or in the YTM Starcast app"],
+  ];
+  function starcastSection() {
+    const note = h("p", { class: "pf-foot", role: "status", text: "Asking YTM Starcast on this computer…" });
+    const rows = {};
+    // what the app last said (null: not known, or an app from before these switches, which has them all on)
+    let parts = null, ok = false, busy = false;
+    function show(r) {
+      if (r.parts || r.status) {
+        const st = r.status || {};
+        const p = r.parts || st.parts;
+        parts = p && typeof p === "object" ? p : null;
+        ok = !!parts;
+        if (r.status) {
+          const v = typeof st.version === "string" ? st.version.slice(0, 24) : "";
+          note.textContent = "YTM Starcast" + (v ? " " + v : "") + " is running on this computer.";
+          const dc = st.discord && typeof st.discord === "object" ? st.discord : null;
+          rows.discord.small.textContent = (dc && DISCORD_TEXT[dc.headline]) || rows.discord.sub;
+        }
+      } else {
+        ok = false;
+        if (r.error === "old_app") {
+          parts = null;
+          note.textContent = "The app on this computer is an older version" + (r.app && r.app.version ? " (" + r.app.version + ")" : "") +
+            ". Update it to YTM Starcast to change these here.";
+        } else if (r.error === "offline") note.textContent = "YTM Starcast isn't answering on this computer. Start it to change these.";
+        else if (r.error === "timeout") note.textContent = "YTM Starcast didn't answer in time. Try again in a moment.";
+        else if (r.error === "needs_press") note.textContent = "That didn't go through. Switch it on with a click or the Space key, " +
+          "or from YTM Starcast's button in the browser toolbar.";
+        else note.textContent = "That didn't go through. Try again in a moment.";
+      }
+      // a change that didn't go through flips back here, to what the app last said
+      for (const [key, row] of Object.entries(rows)) {
+        row.input.disabled = busy || !ok;
+        row.input.checked = parts ? parts[key] !== false : true;
+      }
+    }
+    let gen = 0;   // an answer that arrives after a newer question (or a change) is dropped
+    async function refresh() {
+      const mine = ++gen;
+      const r = await askStarcast("status");
+      if (mine === gen && !busy) show(r);
+    }
+    for (const [key, , sub] of PART_ROWS) {
+      // data-pf-part: the extension's own script switches a part on only after a real press on this switch
+      const input = h("input", { type: "checkbox", role: "switch", disabled: true, "data-pf-part": key });
+      input.checked = true;
+      const small = h("small", { text: sub });
+      input.addEventListener("change", async () => {
+        busy = true;
+        gen++;
+        for (const row of Object.values(rows)) row.input.disabled = true;
+        const r = await askStarcast("parts", { parts: { [key]: input.checked } });
+        busy = false;
+        show(r);
+        setTimeout(refresh, 900);   // the Discord line catches up a moment later
+      });
+      rows[key] = { input, small, sub };
+    }
+    refresh();
+    // one flat list: h() flattens its children only one level deep
+    return [h("div", { class: "pf-sec", text: "YTM Starcast" }),
+      ...PART_ROWS.map(([key, label]) => h("label", { class: "pf-row" },
+        h("span", { class: "pf-row-text" }, label, rows[key].small), h("span", { class: "pf-switch" }, rows[key].input, h("i")))),
+      note];
+  }
   function sheetOutside(e) { if (sheet && !sheet.contains(e.target) && e.target !== navBtn && !navBtn.contains(e.target)) closeSheet(); }
   function sheetKey(e) { if (e.key === "Escape") { closeSheet(); closeSpeed(); if (lyr.panel && lyr.panel.contains(document.activeElement)) closeLyrics(); } }
   function openSheet() {
     closeSheet();
-    sheet = h("div", { class: "pf-sheet pf-ui", role: "dialog", "aria-label": "Pocketfader Refine" },
+    sheet = h("div", { class: "pf-sheet pf-ui", role: "dialog", "aria-label": "YTM Starcast Refine" },
       h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: "Refine" }),
-        h("div", { class: "pf-sub", text: KILL ? "Off for this page (?pf-refine=off). Your choices below are kept for next time." : "Pocketfader's additions to YouTube Music" })),
+        h("div", { class: "pf-sub", text: KILL ? "Off for this page (?pf-refine=off). Your choices below are kept for next time." : "YTM Starcast's additions to YouTube Music" })),
       h("div", { class: "pf-sec", text: "Look" }),
       sw("shapes", "Rounder shapes", "Covers, lists, menus and the search box"),
       sw("colors", "Colours from the album art", "The page takes on the colour of the cover"),
@@ -1119,11 +1236,12 @@
       sw("keepPitch", "Keep the pitch at other speeds", null),
       h("div", { class: "pf-sec", text: "Controls" }),
       sw("dice", "Something-you-might-like button", "In the player, next to repeat"),
-      sw("lyrics", "Live lyrics button", "Time-synced lyrics from the Pocketfader app, next to the player"),
+      sw("lyrics", "Live lyrics button", "Time-synced lyrics from the YTM Starcast app, next to the player"),
       sw("songMenu", "In song menus", "\u201cPlaylist from this song\u201d in YouTube Music's own \u22ee menus"),
       h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),
+      starcastSection(),
       h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
-        "switch off anything that misbehaves. Settings stay in this browser. Pocketfader extension " + VERSION + "." }));
+        "switch off anything that misbehaves. Settings stay in this browser. YTM Starcast extension " + VERSION + "." }));
     const r = navBtn.getBoundingClientRect();
     sheet.style.top = r.bottom + 8 + "px";
     sheet.style.right = Math.max(8, innerWidth - r.right - 4) + "px";
@@ -1420,7 +1538,7 @@
       const save = h("button", { class: "pf-btn pf-filled", onclick: async () => {
         save.disabled = true;
         const title = (name.value || defaultName()).trim().slice(0, 150);
-        const r = await API.playlistCreate({ title, description: "Made with Pocketfader", privacy: "PRIVATE", videoIds: kept() }).catch(() => null);
+        const r = await API.playlistCreate({ title, description: "Made with YTM Starcast", privacy: "PRIVATE", videoIds: kept() }).catch(() => null);
         if (r && r.ok) saved(r.playlistId, title); else { save.disabled = false; toast("YouTube Music didn't save it. Are you signed in?"); }
       } }, "Save as a playlist");
       const addBtn = h("button", { class: "pf-btn pf-tonal", onclick: () => addTo() }, "Add to one of mine…");
@@ -1471,37 +1589,75 @@
 
   // ------------------------------------------------------------------ putting it together
   function applyAll() {
-    ensureStyles();
+    if (partOn) ensureStyles(); else removeStyles();
     for (const [k, el] of Object.entries(styleEls)) el.media = on(k) ? "all" : "not all";
-    updateColors(true);
+    if (partOn) updateColors(true);
     syncWave();
     syncDice();
     syncLyricsButton();
     syncSpeedButton();
     applyPitch();
   }
+  function restorePalette() {
+    const saved = on("colors") && readJSON(COLOR_KEY, null);
+    setPalette(saved && isFinite(saved.h) ? palette(saved.h, saved.s) : palette(DEFAULT_HUE, 1));
+  }
+  // YTM Starcast's "Refine" switch went off: everything Refine added leaves the page at once (open menus and dialogs too),
+  // and a speed Refine remembered for this song steps back. Speeds set by hand stay.
+  function takeDown() {
+    closeSheet(); closeSpeed(); closeLyrics(); closeMaker();
+    applyAll();                                   // styles, the wave, the player buttons and the pitch (all follow on())
+    for (const el of document.querySelectorAll(".pf-ui, .pf-menu-item")) el.remove();   // closing ones too: no styles are left for them
+    if (navBtn) { navBtn.remove(); navBtn = null; }
+    document.documentElement.removeAttribute("data-pf-playing");
+    const st = document.documentElement.style;
+    for (const k of Object.keys(colors)) st.removeProperty("--pf-" + k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
+    if (ruleApplied) { ruleApplied = false; if (Math.abs(getRate() - 1) > 0.01) setRateRaw(1); }
+  }
+  function setPart(v) {
+    if (v === partOn) return;
+    partOn = v;
+    writeJSON(PART_KEY, { on: v });
+    if (!v) { takeDown(); return; }
+    colorFor = "";                                // read the cover again
+    restorePalette();
+    lastVid = null;                               // the loop applies this song's remembered speed again
+    applyAll();
+    syncPlaying();
+    syncNav();
+  }
+  // The extension's own script passes on what the YTM Starcast app says ({cfg}: an app from before the switches says
+  // nothing, which means on), and answers Refine's panel.
+  window.addEventListener("message", (ev) => {
+    const d = ev.source === window && ev.data;
+    if (!d || typeof d !== "object") return;
+    if (d.__vmr === "cfg" && d.cfg && typeof d.cfg === "object") setPart(d.cfg.refine !== false);
+    else if (d.__vmr === "starcast-result" && scWaiting.has(d.id)) { scWaiting.get(d.id)(d.data && typeof d.data === "object" ? d.data : {}); scWaiting.delete(d.id); }
+  });
   let lastVid = null, tick = 0;
   function loop() {
     try {
-      tick++;
-      syncPlaying();
-      const vid = API.curVideo();
-      if (vid !== lastVid) {
-        lastVid = vid;
-        applySpeedRule();
-        setTimeout(applySpeedRule, 1500); // the player can reset its speed while the new song loads
-        updateColors(false);
-        if (lyr.panel) loadLyrics();
-      } else if (tick % 4 === 0) updateColors(false); // the cover can arrive a moment after the song
-      if (tick % 3 === 0) { syncNav(); syncDice(); syncLyricsButton(); syncSpeedButton(); syncWave(); placeLyrics(); }
-      kickWave();
+      if (partOn) {
+        tick++;
+        syncPlaying();
+        const vid = API.curVideo();
+        if (vid !== lastVid) {
+          lastVid = vid;
+          applySpeedRule();
+          setTimeout(applySpeedRule, 1500); // the player can reset its speed while the new song loads
+          updateColors(false);
+          if (lyr.panel) loadLyrics();
+        } else if (tick % 4 === 0) updateColors(false); // the cover can arrive a moment after the song
+        if (tick % 3 === 0) { syncNav(); syncDice(); syncLyricsButton(); syncSpeedButton(); syncWave(); placeLyrics(); }
+        kickWave();
+      }
     } catch (e) {}
-    setTimeout(loop, document.hidden ? 2500 : 700);
+    setTimeout(loop, document.hidden || !partOn ? 2500 : 700);
   }
 
   Object.defineProperty(window, Symbol.for("pocketfader.refine"), { configurable: true, value: Object.freeze({
     report: () => ({
-      version: VERSION, killed: KILL, prefs: { ...prefs },
+      version: VERSION, killed: KILL, part: partOn, prefs: { ...prefs },
       nav: navBtn ? (navBtn.isConnected ? (navBtn.classList.contains("pf-float") ? "floating" : "top bar") : "removed") : "not placed",
       dice: !!(dice && dice.isConnected), speedButton: !!document.querySelector(".ytmusicPlayerControlsPlaybackRateButton") || !!(speedBtn && speedBtn.isConnected),
       lyricsButton: !!(lyrBtn && lyrBtn.isConnected), bar: (() => { const b = barHost(); return b ? (b.classic ? "classic" : "newer") : "none"; })(),
@@ -1512,9 +1668,9 @@
   }) });
   if (window.__pfTest) window.__pfRefineTest = { dominant, palette, rank, spread, pickSeeds, songKey, cleanTitle, artistKey, findSliders, report: () => window[Symbol.for("pocketfader.refine")].report() };
 
-  const saved = on("colors") && readJSON(COLOR_KEY, null);
-  setPalette(saved && isFinite(saved.h) ? palette(saved.h, saved.s) : palette(DEFAULT_HUE, 1));
+  if (partOn) restorePalette();
   applyAll();
   loop();
-  console.log("[Pocketfader] Refine ready" + (KILL ? " (off for this page)" : ""));
+  window.postMessage({ __vmr: "cfg-get" }, "*");   // what the YTM Starcast app said, if the extension's script already knows
+  console.log("[YTM Starcast] Refine ready" + (KILL ? " (off for this page)" : !partOn ? " (switched off in YTM Starcast)" : ""));
 })();

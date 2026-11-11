@@ -3,7 +3,7 @@ package app.pocketfader.client
 import android.content.Context
 import android.net.Uri
 
-/** Everything needed to reach one Pocketfader server. */
+/** Everything needed to reach one YTM Starcast server. */
 data class ServerConfig(
     val url: String = "",
     val token: String = "",

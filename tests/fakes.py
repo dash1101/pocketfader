@@ -1,6 +1,6 @@
 """Test doubles. Nothing in the test-suite may execute a real write: FakeRunner never
 spawns a process, and the server tests use in-memory backends."""
-from pocketfader.runner import Result, Runner
+from starcast.runner import Result, Runner
 
 
 class FakeRunner(Runner):

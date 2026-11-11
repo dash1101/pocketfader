@@ -1,11 +1,12 @@
 # Voicemeeter (optional, Windows only)
 
-Voicemeeter is **not** used by default. Pocketfader controls the host's normal system volume.
+Voicemeeter is **not** used by default. YTM Starcast controls the host's normal system volume.
 Choose it explicitly if you already run VB-Audio Voicemeeter and want its extras:
 
 ```powershell
-python -m pocketfader --audio voicemeeter
-# or at logon:  .\packaging\install.ps1 -Audio voicemeeter
+python -m starcast --audio voicemeeter
+# or at logon:  .\install-exe.ps1 -Audio voicemeeter   (from the Windows download)
+#           or:  .\packaging\install.ps1 -Audio voicemeeter   (from the source)
 ```
 
 It adds: a **3-band EQ** (Strip[2] EQGain1/2/3 = Bass/Mid/High, ±12 dB), a **level meter**
@@ -16,7 +17,7 @@ and *Relaunch Windows Volume sync*. The EQ/meter UI is hidden on every other bac
 
 - **Volume is never written to Voicemeeter.** VMWV (Voicemeeter Windows Volume) force-syncs
   `Strip[2].Gain` from the Windows endpoint volume about every 100 ms, so a direct write is stomped.
-  Pocketfader drives the *Windows* endpoint volume (pycaw) and lets VMWV propagate it. The mapping
+  YTM Starcast drives the *Windows* endpoint volume (pycaw) and lets VMWV propagate it. The mapping
   is linear: 0–100 % ≙ −60…+12 dB. EQ is safe to write directly (VMWV only owns Gain and Mute).
 - **Voicemeeter Standard has one hardware bus** feeding both A1 and A2 device slots identically.
   `Bus[1].Gain` and `Strip[2].A2` exist only because the API is shared with Banana/Potato; on Standard

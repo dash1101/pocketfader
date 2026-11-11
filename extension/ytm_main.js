@@ -1,4 +1,4 @@
-/* Pocketfader — YouTube Music bridge (MAIN world).
+/* YTM Starcast — YouTube Music bridge (MAIN world).
  *
  * Runs in the PAGE context so it can call music.youtube.com internals directly:
  *   - #movie_player (transport, now-playing)
@@ -9,10 +9,31 @@
  *
  * Every primitive here was verified live against a logged-in tab first
  * (see docs/ytm-control-probe.md).
+ *
+ * The page-world names below (Symbol.for("pocketfader.api"), the __vmr message tag) are kept from before the rename on
+ * purpose: Refine and older copies of these scripts still look for them.
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "1.15.0";
+  const EXT_VERSION = "2.0.0";   // keep in step with manifest.json
+
+  // One copy of this script answers commands per page. With two copies of the extension loaded (an older Pocketfader one
+  // kept beside this one, or this one twice) every command would otherwise run twice: "next" would skip two songs. Older
+  // copies only act on the old "cmd" tag, which this version's bridge no longer sends; a second copy of this version stays
+  // out of the way. Either way the page is marked, so the toolbar button can say that two copies are loaded.
+  let twinSeen = false;
+  function twin(version) {
+    if (twinSeen) return;
+    twinSeen = true;
+    try { document.documentElement.setAttribute("data-starcast-twin", String(version || "older").slice(0, 24)); } catch (e) {}
+    console.warn("[YTM Starcast] another copy of the extension is loaded in this page (" + (version || "older") + "); keep only one");
+  }
+  const MAIN_KEY = Symbol.for("starcast.main");
+  if (window[MAIN_KEY]) { twin(window[MAIN_KEY].version); return; }
+  try { Object.defineProperty(window, MAIN_KEY, { value: Object.freeze({ version: EXT_VERSION }) }); } catch (e) {}
+  const olderApi = window[Symbol.for("pocketfader.api")];   // an older copy that started first
+  if (olderApi) twin(olderApi.version);
+
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
   const media = () => document.querySelector("#movie_player video, video.html5-main-video");
@@ -198,6 +219,35 @@
     if (img && /^https?:\/\/(lh\d|i\.ytimg|yt3)/.test(img.src || "")) return bigArt(img.src) || img.src;
     return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
   }
+  // The browser's media session, only when it describes the same song (right after a song change it can still hold the
+  // last one). The album and the artist come from there.
+  function sessionFor(title) {
+    try {
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      return md && title && md.title === title ? md : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function currentAlbum(md) {
+    try { return md && md.album ? String(md.album).slice(0, 300) : null; } catch (e) { return null; }
+  }
+  // The artist as YouTube Music shows it (every artist of a song by several), from the same media session. Without it,
+  // the channel the video is on, without YouTube's " - Topic" and "VEVO" endings.
+  function currentArtist(md, vd) {
+    try { if (md && md.artist) return String(md.artist).slice(0, 300); } catch (e) {}
+    const author = typeof vd.author === "string" ? vd.author.trim() : "";
+    return author.replace(/ - Topic$/, "").replace(/(\S)VEVO$/, "$1") || author || null;
+  }
+  // An advert is playing: the player carries YouTube's "ad-showing" class while one runs. Looking through the whole page
+  // as well costs more, so that is done at most once a second.
+  let adSeen = false, adAt = 0;
+  function adShowing(p) {
+    try { if (p.classList && p.classList.contains("ad-showing")) return true; } catch (e) {}
+    const now = Date.now();
+    if (now - adAt >= 1000) { adAt = now; adSeen = !!document.querySelector(".ad-showing"); }
+    return adSeen;
+  }
   function nowPlaying() {
     const t0 = performance.now();
     const p = mp();
@@ -205,13 +255,16 @@
     const vd = p.getVideoData() || {};
     const ps = p.getProgressState ? p.getProgressState() : {};
     const state = p.getPlayerState ? p.getPlayerState() : -1;
+    const md = sessionFor(vd.title);                // the browser's media session, when it describes this song
     return {
       playing: state === 1,
       paused: state === 2,
       buffering: state === 3,
       videoId: vd.video_id || null,
       title: vd.title || null,
-      artist: vd.author || null,
+      artist: currentArtist(md, vd),                // as YouTube Music shows it; string | null
+      album: currentAlbum(md),                      // string | null
+      ad: adShowing(p),                             // an advert is playing (Discord status is cleared meanwhile)
       art: currentArt(vd.video_id),
       position: ps.currentTime ?? (p.getCurrentTime ? p.getCurrentTime() : 0),
       duration: ps.duration ?? (p.getDuration ? p.getDuration() : 0),
@@ -1176,10 +1229,26 @@
   }
 
   // -------------------------------------------------------- bridge messaging
+  // Which parts of YTM Starcast are switched on, as the app last said (an app from before the switches says nothing: all on).
+  const cfg = { remote: true, discord: true, refine: true };
   window.addEventListener("message", async (ev) => {
     if (ev.source !== window) return;
     const d = ev.data;
-    if (!d || d.__vmr !== "cmd") return;
+    if (!d || typeof d !== "object") return;
+    if (d.__vmr === "cfg" && d.cfg && typeof d.cfg === "object") {
+      for (const k of Object.keys(cfg)) cfg[k] = d.cfg[k] !== false;
+      return;
+    }
+    // the tab came back from the browser's back/forward cache after saying goodbye: send everything again
+    if (d.__vmr === "resend") { last = ""; lastFast = ""; return; }
+    // an older copy's bridge (its own page script runs that command), or an older copy's state: two copies are loaded
+    if (d.__vmr === "cmd") { twin(); return; }
+    if (d.__vmr === "state") {
+      const v = d.state && d.state.now && d.state.now.ext;
+      if (v && v !== EXT_VERSION) twin(String(v));
+      return;
+    }
+    if (d.__vmr !== "starcast-cmd" || !d.command) return;
     const data = await handle(d.command);
     window.postMessage({ __vmr: "result", id: d.command.id, data }, "*");
   });
@@ -1201,8 +1270,8 @@
     if (document.hidden && (beat++ % 3) !== 0) return;
     const state = { now: nowPlaying(), queue: readQueue(), ts: Date.now(), perf };
     const n = state.now;
-    const sig = JSON.stringify([n.videoId, n.title, n.playing, n.liked, n.repeat, n.shuffle, n.autoplay, n.speed, n.art,
-      state.queue.map((q) => q.videoId + q.section[0] + (q.selected ? "*" : "")), Math.round(n.position)]);
+    const sig = JSON.stringify([n.videoId, n.title, n.artist, n.playing, n.liked, n.repeat, n.shuffle, n.autoplay, n.speed, n.art,
+      n.album, n.ad, state.queue.map((q) => q.videoId + q.section[0] + (q.selected ? "*" : "")), Math.round(n.position)]);
     if (sig === last) return; // only push on change (position rounds to whole seconds)
     last = sig;
     window.postMessage({ __vmr: "state", state }, "*");
@@ -1210,11 +1279,12 @@
 
   // A faster, now-playing-only beat so the playback position the server hands out (and the lyrics that
   // follow it) is at most a quarter of a second old. The full state above still carries the queue.
+  // With both the remote and Discord status switched off nobody needs that precision, so it rests.
   let lastFast = "";
   setInterval(() => timed(() => {
-    if (document.hidden) return;
+    if (document.hidden || (!cfg.remote && !cfg.discord)) return;
     const now = nowPlaying();
-    const sig = JSON.stringify([now.videoId, now.playing, Math.round(now.position * 4)]);
+    const sig = JSON.stringify([now.videoId, now.playing, now.ad, Math.round(now.position * 4)]);
     if (sig === lastFast) return;
     lastFast = sig;
     window.postMessage({ __vmr: "state", state: { now, ts: Date.now(), partial: true } }, "*");
@@ -1255,5 +1325,5 @@
 
   if (window.__pfTest) window.__pfHandle = handle;   // lets the test-suite drive commands directly
   window.postMessage({ __vmr: "ready" }, "*");
-  console.log("[Pocketfader] YTM main-world bridge ready");
+  console.log("[YTM Starcast] YouTube Music page bridge ready");
 })();

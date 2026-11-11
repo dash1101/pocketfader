@@ -171,7 +171,8 @@ class MainActivity : ComponentActivity() {
     /** While the app is open the phone's volume keys control the computer. */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         val p = Settings.prefs.value
-        if (p.volumeKeys && cfg.isSet && !Remote.local && Remote.state.value.volume.available) {
+        val st = Remote.state.value
+        if (p.volumeKeys && cfg.isSet && !Remote.local && st.audioOn && st.volume.available) {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> { Remote.adjustVolume(p.volumeStep); return true }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> { Remote.adjustVolume(-p.volumeStep); return true }
@@ -193,7 +194,7 @@ class MainActivity : ComponentActivity() {
 
 /** Where music plays: the computer or this phone. Switching offers to bring the current song along. */
 @Composable
-private fun PlayOnButton(prefs: Prefs, hasComputer: Boolean) {
+private fun PlayOnButton(prefs: Prefs, hasComputer: Boolean, remoteOn: Boolean) {
     var open by remember { mutableStateOf(false) }
     val phone = prefs.playOn == "phone"
     Box {
@@ -221,7 +222,8 @@ private fun PlayOnButton(prefs: Prefs, hasComputer: Boolean) {
                     leadingIcon = { Icon(Icons.Filled.Computer, null) },
                     onClick = { open = false; Remote.setPlayOn("computer", carryOver = false) },
                 )
-                if (phone) androidx.compose.material3.DropdownMenuItem(
+                // carrying the song over needs the computer's YouTube Music remote, so it isn't offered while that is off
+                if (phone && remoteOn) androidx.compose.material3.DropdownMenuItem(
                     text = { Text("Continue this song on the computer") },
                     leadingIcon = { Icon(Icons.Filled.Computer, null) },
                     onClick = { open = false; Remote.setPlayOn("computer", carryOver = true) },
@@ -232,10 +234,11 @@ private fun PlayOnButton(prefs: Prefs, hasComputer: Boolean) {
 }
 
 @Composable
-private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, onEditConnection: () -> Unit) {
+private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, remoteOff: Boolean, onEditConnection: () -> Unit) {
     when (d) {
-        Dest.Playing -> PlayingPage(s, Modifier.fillMaxSize())
-        Dest.Search -> SearchScreen(s, Modifier.fillMaxSize())
+        // with the YouTube Music remote switched off on the computer, its screens give way to a short note
+        Dest.Playing -> if (remoteOff) RemoteOffPage(s, Modifier.fillMaxSize()) else PlayingPage(s, Modifier.fillMaxSize())
+        Dest.Search -> if (remoteOff) RemoteOffPage(s, Modifier.fillMaxSize()) else SearchScreen(s, Modifier.fillMaxSize())
         Dest.Settings -> SettingsScreen(cfg, s, onEditConnection = onEditConnection, modifier = Modifier.fillMaxSize())
     }
 }
@@ -260,7 +263,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                 androidx.compose.material3.TextButton(
                     onClick = { Settings.update { it.copy(standalone = true, playOn = "phone") }; Remote.configure(cfg) },
                     modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 12.dp),
-                ) { Text("No computer? Use Pocketfader on this phone only") }
+                ) { Text("No computer? Use YTM Starcast on this phone only") }
             }
         }
         return
@@ -278,6 +281,16 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     }
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     val snackbar = remember { SnackbarHostState() }
+    // The YouTube Music remote is switched off on the computer (music playing on this phone doesn't need it).
+    val remoteOff = cfg.isSet && prefs.playOn != "phone" && !s.remoteOn
+    // its Search tab goes away while it's off; the Playing tab says so, with a button to turn it back on
+    val dests = Dest.values().filter { !(remoteOff && it == Dest.Search) }
+    LaunchedEffect(remoteOff) {
+        if (remoteOff) {
+            if (dest == Dest.Search) dest = Dest.Playing
+            Detail.close()     // an artist or album page needs the remote too
+        }
+    }
 
     BackHandler(enabled = showSettings) { showSettings = false }
     // leaving for another tab closes an artist / album page that was open on top
@@ -310,21 +323,30 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         topBar = {
             TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                title = { Text(if (showSettings) "Settings" else if (wide) "Pocketfader" else if (dest == Dest.Playing) "Now playing" else dest.label, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                title = {
+                    Text(
+                        when {
+                            showSettings -> "Settings"
+                            wide -> "YTM Starcast"
+                            dest == Dest.Playing -> if (remoteOff) "YTM Starcast" else "Now playing"
+                            else -> dest.label
+                        },
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    )
+                },
                 navigationIcon = {
                     if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
                 actions = {
-                    if (!showSettings) PlayOnButton(prefs, cfg.isSet)
+                    if (!showSettings) PlayOnButton(prefs, cfg.isSet, s.remoteOn)
                     if (wide && !showSettings) IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, "Settings") }
                 },
             )
         },
         bottomBar = {
             if (!wide && !showSettings) {
-                val dests = Dest.values()
                 if (prefs.navStyle == "pill") {
-                    PillNav(dests.map { it.label }, dests.map { it.icon }, dest.ordinal) { dest = dests[it] }
+                    PillNav(dests.map { it.label }, dests.map { it.icon }, dests.indexOf(dest).coerceAtLeast(0)) { dest = dests[it] }
                 } else {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
                         dests.forEach { d ->
@@ -365,6 +387,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
             when {
                 Detail.active && !wide -> DetailHost(Modifier.fillMaxSize())
                 showSettings -> SettingsScreen(cfg, s, onEditConnection = { showConnect = true }, modifier = Modifier.fillMaxSize())
+                wide && remoteOff -> RemoteOffPage(s, Modifier.fillMaxSize())
                 wide -> Row(Modifier.fillMaxSize()) {
                     PlayerPane(s, Modifier.weight(0.85f).fillMaxSize())
                     Column(Modifier.weight(1.15f).fillMaxSize()) {
@@ -393,9 +416,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             (fadeIn(tween(Motion.Short, delayMillis = 60, easing = Motion.Ease)) + slideInVertically(tween(Motion.Medium, easing = Motion.Ease)) { it / 28 }) togetherWith fadeOut(tween(Motion.Quick, easing = Motion.Ease))
                         },
                         label = "screen",
-                    ) { d -> DestContent(d, s, cfg) { showConnect = true } }
+                    ) { d -> DestContent(d, s, cfg, remoteOff) { showConnect = true } }
                 } else {
-                    DestContent(dest, s, cfg) { showConnect = true }
+                    DestContent(dest, s, cfg, remoteOff) { showConnect = true }
                 }
             }
         }

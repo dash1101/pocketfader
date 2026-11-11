@@ -52,7 +52,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -86,7 +88,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
     }
     Column(modifier.fillMaxSize()) {
     PageHeader(allCats.firstOrNull { it.key == current }?.title ?: "Settings") { page = null }
-    if (current == "sound") {
+    if (current == "sound" && !s.audioOn) {
+        // computer audio is switched off on the computer: say so, with a way to turn it back on
+        Column(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) { AudioOffNote(s.online) }
+    } else if (current == "sound") {
         MixerScreen(s, Modifier.weight(1f).fillMaxWidth())
     } else {
     CompositionLocalProvider(LocalPageTitle provides (allCats.firstOrNull { it.key == current }?.title ?: "")) {
@@ -103,8 +108,46 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             }
             Info("Computer", cfg.url.ifBlank { "Not set up" })
             Info("Status", status)
-            Info("YouTube Music extension", if (s.ytm) "Connected" else "Not connected")
+            Info(
+                "YouTube Music extension",
+                if (!s.remoteOn) "Not used: the YouTube Music remote is switched off" else if (s.ytm) "Connected" else "Not connected",
+            )
             FilledTonalButton(onClick = onEditConnection, modifier = Modifier.padding(top = 4.dp)) { Text("Edit connection") }
+        }
+
+        if (page == "parts") Section("Parts") {
+            // fresh from the computer each time the page opens (another phone or the browser may have changed them)
+            LaunchedEffect(Unit) { Remote.refreshParts() }
+            val parts = s.parts
+            if (parts == null) {
+                Text(
+                    "This computer's YTM Starcast has no parts to switch on or off yet. Update YTM Starcast on the computer.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val scope = rememberCoroutineScope()
+                Text(
+                    "Switch off the parts you don't use. They are switched on the computer, so the change counts for every phone " +
+                        "and browser that uses it.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Toggle(
+                    "YouTube Music remote", "See and control what plays in YouTube Music on the computer: the queue, search and your library.",
+                    parts.remote, enabled = s.online,
+                ) { v -> scope.launch { Remote.setPart("remote", v) } }
+                Toggle(
+                    "Discord status", "Show the song you're playing on your Discord profile.",
+                    parts.discord, enabled = s.online,
+                ) { v -> scope.launch { Remote.setPart("discord", v); if (s.canBeacon) BeaconModel.refresh() } }
+                Toggle(
+                    "Refine in YouTube Music", "Improvements inside YouTube Music in the computer's browser. Its own options are in its ✦ panel there.",
+                    parts.refine, enabled = s.online,
+                ) { v -> scope.launch { Remote.setPart("refine", v) } }
+                Toggle(
+                    "Computer audio", "The computer's volume, output devices and equalizer.",
+                    parts.audio, enabled = s.online,
+                ) { v -> scope.launch { Remote.setPart("audio", v) } }
+            }
         }
 
         if (page == "appearance") Section("Appearance") {
@@ -181,13 +224,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "Media notification", "Playback controls on the lock screen and in the notification shade. Also keeps the connection alive in the background.",
                 p.notification,
             ) { v -> Settings.update { it.copy(notification = v) } }
-            Toggle("Volume buttons control the computer", "While the app is open, or the notification is active and something is playing.", p.volumeKeys) { v ->
-                Settings.update { it.copy(volumeKeys = v) }
+            // the computer's volume is part of "Computer audio"; with that switched off there is nothing for the buttons to change
+            if (s.audioOn) {
+                Toggle("Volume buttons control the computer", "While the app is open, or the notification is active and something is playing.", p.volumeKeys) { v ->
+                    Settings.update { it.copy(volumeKeys = v) }
+                }
+                Choice(
+                    "Volume step", "Percent per button press.",
+                    listOf("1" to "1%", "2" to "2%", "5" to "5%", "10" to "10%"), p.volumeStep.toString(), enabled = p.volumeKeys,
+                ) { v -> Settings.update { it.copy(volumeStep = v.toInt()) } }
             }
-            Choice(
-                "Volume step", "Percent per button press.",
-                listOf("1" to "1%", "2" to "2%", "5" to "5%", "10" to "10%"), p.volumeStep.toString(), enabled = p.volumeKeys,
-            ) { v -> Settings.update { it.copy(volumeStep = v.toInt()) } }
             Toggle("Haptic feedback", "A small buzz on the main buttons.", p.haptics) { v -> Settings.update { it.copy(haptics = v) } }
             Toggle(
                 "Keep playing when the app is swiped away",
@@ -245,13 +291,13 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 BeaconCard(s.online)
             } else {
                 Text(
-                    "This computer's Pocketfader doesn't support Discord presence yet. Update Pocketfader on the computer.",
+                    "This computer's YTM Starcast doesn't support Discord status yet. Update YTM Starcast on the computer.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
-                "YTM Beacon shows the song playing in YouTube Music on your Discord profile. Here you can see whether it's working, " +
-                    "turn it on or off, hide it for a while, change what it shows, and install or update it on the computer.",
+                "Discord status shows the song playing in YouTube Music on your Discord profile. Here you can see whether it's " +
+                    "working, turn it on or off, hide it for a while and change what it shows. Discord has to be open on the computer.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -386,7 +432,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
         }
 
         if (page == "about") Section("About") {
-            Info("Pocketfader app", version.ifBlank { "unknown" })
+            Info("YTM Starcast app", version.ifBlank { "unknown" })
             Info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             OutlinedButton(onClick = { confirmReset = true }) { Text("Reset all settings") }
         }
@@ -420,7 +466,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             }
             Text(
                 "When Android closes the app to free memory, that isn't an error in the app, but it is why the music's place can be " +
-                    "lost; switching off battery optimisation for Pocketfader in Android's settings helps on devices that do it often. " +
+                    "lost; switching off battery optimisation for YTM Starcast in Android's settings helps on devices that do it often. " +
                     "This report stays on this device unless you copy it somewhere.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -482,13 +528,13 @@ private fun Info(label: String, value: String) {
 }
 
 @Composable
-private fun Toggle(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun Toggle(title: String, subtitle: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
     }
 }
 
@@ -538,7 +584,8 @@ private val groups = listOf(
         Cat("screen", "Screen & always-on", Icons.Filled.Smartphone),
     ),
     "Connections" to listOf(
-        Cat("connection", "Connection", Icons.Filled.Link), Cat("discord", "Discord presence", Icons.Filled.Chat), Cat("updates", "Updates", Icons.Filled.SystemUpdate),
+        Cat("connection", "Connection", Icons.Filled.Link), Cat("parts", "Parts", Icons.Filled.PowerSettingsNew),
+        Cat("discord", "Discord status", Icons.Filled.Chat), Cat("updates", "Updates", Icons.Filled.SystemUpdate),
     ),
     "More" to listOf(Cat("performance", "Performance", Icons.Filled.Speed), Cat("about", "About", Icons.Filled.Info)),
 )
@@ -546,17 +593,33 @@ private val allCats = groups.flatMap { it.second }
 
 private fun themeLabel(t: String) = when (t) { "light" -> "Light"; "dark" -> "Dark"; "black" -> "Black"; else -> "System" }
 
+private fun partsSummary(p: Parts): String {
+    val off = listOfNotNull(
+        "Remote".takeIf { !p.remote }, "Discord status".takeIf { !p.discord },
+        "Refine".takeIf { !p.refine }, "Computer audio".takeIf { !p.audio },
+    )
+    return if (off.isEmpty()) "Everything is on" else "Off: " + off.joinToString(", ")
+}
+
+/** Pages left out of the overview: Parts on a computer without part switches, the computer's sound while that part is off. */
+private fun catShown(key: String, s: RemoteState): Boolean = when (key) {
+    "parts" -> s.parts != null
+    "sound" -> s.audioOn
+    else -> true
+}
+
 private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String = when (key) {
     "sound" -> if (s.volume.available) "${s.volume.percent}%" + (if (s.volume.muted) " (muted)" else "") + s.volume.device.let { if (it.isBlank()) "" else " · $it" } else "No audio output found"
     "downloads" -> (if (p.playOn == "phone") "Playing on this phone" else "Playing on the computer") + " · " + Downloads.items.value.size + " downloaded"
     "library" -> Library.syncedAt.value.let { at -> if (at == 0L) "Sync your playlists and likes to this phone" else "Synced " + ago(at) } +
         (if (p.autoDlLiked || p.smartDownloads > 0 || Library.keepOffline.value.isNotEmpty()) " · automatic downloads on" else "")
     "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
-    "controls" -> "Notification " + (if (p.notification) "on" else "off") + " · volume keys " + (if (p.volumeKeys) "on" else "off")
+    "controls" -> "Notification " + (if (p.notification) "on" else "off") + (if (s.audioOn) " · volume keys " + (if (p.volumeKeys) "on" else "off") else "")
     "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")
     "effects" -> "Glow " + p.coverGlow + " · " + (if (p.wavyBar) "wavy bar" else "plain bar")
     "screen" -> when (p.keepAwake) { "always" -> "Always on"; "playing" -> "On while playing"; else -> "Screen sleeps normally" } + (if (p.pixelShift) " · pixel shift" else "")
     "connection" -> if (!s.configured) "Not set up" else if (s.online) "Connected · " + cfg.url.removePrefix("http://").removePrefix("https://").trimEnd('/') else "Can't reach the computer"
+    "parts" -> s.parts?.let { partsSummary(it) } ?: "Switch parts of YTM Starcast on or off"
     "discord" -> BeaconModel.status?.let { beaconSummary(it) } ?: "Show your music on Discord"
     "updates" -> "Installed " + version.ifBlank { "unknown" }
     "performance" -> (when (p.pollSpeed) { "fast" -> "Fast updates"; "battery" -> "Battery saver"; else -> "Normal updates" }) + (if (p.reduceMotion) " · reduced animations" else "")
@@ -570,17 +633,20 @@ private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, versio
         modifier.edgeFade(scroll).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        for ((label, cats) in groups) {
-            Text(
-                label.uppercase(), Modifier.padding(start = 8.dp, top = 10.dp), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-            )
-            Card(
-                Modifier.fillMaxWidth(), shape = PfShape.Lg,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            ) {
-                Column {
-                    for (c in cats) CategoryRow(c, summaryText(c.key, p, s, cfg, version)) { open(c.key) }
+        for ((label, all) in groups) {
+            val cats = all.filter { catShown(it.key, s) }
+            if (cats.isNotEmpty()) {
+                Text(
+                    label.uppercase(), Modifier.padding(start = 8.dp, top = 10.dp), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                )
+                Card(
+                    Modifier.fillMaxWidth(), shape = PfShape.Lg,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                ) {
+                    Column {
+                        for (c in cats) CategoryRow(c, summaryText(c.key, p, s, cfg, version)) { open(c.key) }
+                    }
                 }
             }
         }

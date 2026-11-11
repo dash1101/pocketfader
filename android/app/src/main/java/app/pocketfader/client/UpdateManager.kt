@@ -18,7 +18,7 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * New versions of the app. The computer running Pocketfader looks for releases on GitHub (so the phone never
+ * New versions of the app. The computer running YTM Starcast looks for releases on GitHub (so the phone never
  * needs a GitHub login) and passes the new APK on; this class asks it, downloads, and hands the file to
  * Android's installer.
  */
@@ -91,7 +91,7 @@ object UpdateManager {
     suspend fun install(ctx: Context) {
         if (downloading) return
         if (Build.VERSION.SDK_INT >= 26 && !ctx.packageManager.canRequestPackageInstalls()) {
-            message = "Allow Pocketfader to install apps, then tap Install again."
+            message = "Allow YTM Starcast to install apps, then tap Install again."
             ctx.startActivity(
                 Intent(AndroidSettings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -102,12 +102,12 @@ object UpdateManager {
         message = "Downloading…"
         try {
             val dir = File(ctx.cacheDir, "updates").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
-            val file = File(dir, "pocketfader-update.apk")
+            val file = File(dir, "ytm-starcast-update.apk")
             withContext(Dispatchers.IO) { Remote.downloadUpdate(file) }
             if (signedByAnotherKey(ctx, file)) {
                 needsReinstall = true
                 message = "This version is signed with a different key than the one installed (older test builds used a temporary key), " +
-                    "so Android won't install it over this one. Uninstall Pocketfader once, then install the new APK from the download page. " +
+                    "so Android won't install it over this one. Uninstall YTM Starcast once, then install the new APK from the download page. " +
                     "Future updates will install normally."
                 downloading = false
                 return

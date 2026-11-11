@@ -24,7 +24,7 @@ of polling, native playlists and playlist editing, home screen widget and quick-
 - **Kotlin + Jetpack Compose**, single-activity, MVVM. Min SDK 21.
 - **Networking**: OkHttp + kotlinx.serialization against the documented [HTTP API](API.md);
   `Authorization: Bearer <token>`; SSE client for live state (falls back to short polling on older servers).
-- **Discovery/pairing**: `NsdManager` for `_pocketfader._tcp`; scan a QR code from the server to get address + token.
+- **Discovery/pairing**: `NsdManager` for `_ytm-starcast._tcp`; scan a QR code from the server to get address + token.
   Token kept in `EncryptedSharedPreferences`.
 - **Playback surface**: a foreground `MediaSessionService` publishing a `MediaSession` whose metadata/position/state
   mirror the computer's now-playing, so lock screen, Bluetooth headsets, Wear OS and Android Auto "just work".

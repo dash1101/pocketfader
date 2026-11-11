@@ -1,0 +1,80 @@
+/* YTM Starcast's toolbar popup. Colours and the shared scale come from docs/DESIGN.md (the web app's dark look). */
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0c; --panel: #131318; --card: #1a1a21; --card2: #20212a; --line: #2b2c37;
+  --text: #f0f1f6; --dim: #9a9cab; --dim2: #6b6d7c;
+  --accent: #8b5cf6; --accent2: #b69cff; --live: #3fb950; --danger: #f85149; --warn: #d29922;
+  --r-xs: 8px; --r-sm: 12px; --r-md: 16px; --r-lg: 24px; --r-xl: 28px; --r-full: 999px;
+  --t-quick: .12s; --t-short: .2s; --t-medium: .3s;
+  --ease: cubic-bezier(.2, 0, 0, 1); --spring: cubic-bezier(.34, 1.3, .64, 1);
+}
+* { box-sizing: border-box; }
+body {
+  width: 320px;
+  margin: 0;
+  padding: 14px;
+  background: var(--panel);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+header { display: flex; align-items: center; gap: 12px; margin: 0 2px 12px; }
+header img { width: 36px; height: 36px; flex: none; }
+.name { flex: 1; min-width: 0; }
+h1 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.2; }
+.name span { display: block; font-size: 12px; color: var(--dim); }
+#version { flex: none; font-size: 11.5px; color: var(--dim); padding: 2px 9px; border-radius: var(--r-full); background: var(--card2);
+  font-variant-numeric: tabular-nums; }
+#version[hidden] { display: none; }
+
+.card { background: var(--card); border-radius: var(--r-lg); margin-bottom: 10px; }
+.card[hidden] { display: none; }
+#state { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; }
+.dot { flex: none; width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--dim2); transition: background-color var(--t-short) var(--ease); }
+.dot.ok { background: var(--live); box-shadow: 0 0 0 4px color-mix(in srgb, var(--live) 18%, transparent); }
+.dot.warn { background: var(--warn); }
+.dot.bad { background: var(--danger); }
+.txt { flex: 1; min-width: 0; }
+#headline { font-weight: 600; }
+small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+small[hidden] { display: none; }
+
+.list { padding: 6px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 12px; border-radius: var(--r-md); cursor: pointer;
+  transition: background-color var(--t-short) var(--ease); }
+.row:hover { background: rgba(255, 255, 255, .04); }
+.row:has(input:disabled) { cursor: default; }
+.row:has(input:disabled):hover { background: none; }
+
+/* the switch, as in the web app and Refine */
+.switch { position: relative; flex: none; width: 46px; height: 28px; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.switch input:disabled { cursor: default; }
+.switch i { position: absolute; inset: 0; border-radius: var(--r-full); background: var(--card2); border: 2px solid var(--line); pointer-events: none;
+  transition: background-color var(--t-short) var(--ease), border-color var(--t-short) var(--ease), opacity var(--t-short); }
+.switch i::after { content: ""; position: absolute; left: 4px; top: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--dim);
+  transition: left var(--t-medium) var(--spring), top var(--t-medium) var(--spring), width var(--t-medium) var(--spring),
+    height var(--t-medium) var(--spring), background-color var(--t-short); }
+.switch input:checked + i { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + i::after { left: 20px; top: 2px; width: 20px; height: 20px; background: #fff; }
+.switch input:active:not(:disabled) + i::after { width: 22px; }
+.switch input:checked:active:not(:disabled) + i::after { left: 18px; }
+.switch input:disabled + i { opacity: .45; }
+.switch input:focus-visible + i { outline: 2px solid var(--accent2); outline-offset: 2px; }
+
+button, a.filled { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 18px; border: 0;
+  border-radius: var(--r-full); font: inherit; font-size: 13.5px; font-weight: 600; text-decoration: none; cursor: pointer;
+  transition: transform var(--t-quick) var(--ease), filter var(--t-short) var(--ease), border-radius var(--t-short) var(--ease); }
+button:active, a.filled:active { transform: scale(.96); border-radius: var(--r-sm); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+button[hidden] { display: none; }
+button:disabled { opacity: .5; cursor: default; transform: none; }
+.tonal { margin-top: 10px; background: color-mix(in srgb, var(--accent) 22%, var(--card2)); color: var(--accent2); }
+.tonal:hover { filter: brightness(1.12); }
+a.filled { width: 100%; background: var(--accent); color: #fff; height: 40px; }
+a.filled:hover { filter: brightness(1.08); }
+footer { margin-top: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::after { transition: none !important; }
+}

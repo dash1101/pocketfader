@@ -13,11 +13,21 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Unit tests (fake backends only; never touches audio)
         run: python -m unittest discover -s tests -t .
-      - name: Package builds and ships the web app
+      - name: Package builds and ships the web app and Discord status
         run: |
           pip install build
           python -m build --wheel
-          python -m zipfile -l dist/*.whl | grep -q static/index.html
+          python -m zipfile -l dist/*.whl | grep -q starcast/static/index.html
+          python -m zipfile -l dist/*.whl | grep -q starcast/discord/presence.py
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Manifest parses and the scripts compile
+        run: |
+          python3 -m json.tool extension/manifest.json > /dev/null
+          for f in extension/*.js; do node --check "$f"; done
 
   android:
     runs-on: ubuntu-latest

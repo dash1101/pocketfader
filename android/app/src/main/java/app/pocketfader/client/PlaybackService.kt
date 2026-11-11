@@ -49,7 +49,7 @@ class PlaybackService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        session = MediaSessionCompat(this, "Pocketfader").apply {
+        session = MediaSessionCompat(this, "YTM Starcast").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() = Remote.transport("playpause")
                 override fun onPause() = Remote.transport("playpause")
@@ -65,11 +65,16 @@ class PlaybackService : Service() {
                 if (direction != 0) Remote.adjustVolume(direction * Settings.prefs.value.volumeStep)
             }
         }
-        applyVolumeMode(Settings.prefs.value.volumeKeys)
+        applyVolumeMode(volumeKeysWanted())
         Remote.ensureConfigured(ConfigStore(this))
         Remote.acquire()
-        scope.launch { Remote.state.collect { publish(it) } }
-        scope.launch { Settings.prefs.collect { applyVolumeMode(it.volumeKeys) } }
+        scope.launch {
+            Remote.state.collect {
+                publish(it)
+                runCatching { applyVolumeMode(volumeKeysWanted()) }     // "Computer audio" may have been switched on or off
+            }
+        }
+        scope.launch { Settings.prefs.collect { applyVolumeMode(volumeKeysWanted()) } }
         // the position drifts on its own while playing, so refresh it now and then (and after seeks)
         scope.launch {
             Remote.progress.collect {
@@ -134,6 +139,9 @@ class PlaybackService : Service() {
     private var lastPos = 0.0
     private var remoteVolume = false
 
+    /** The volume keys change the computer's volume: the setting is on, and "Computer audio" is switched on there. */
+    private fun volumeKeysWanted(): Boolean = Settings.prefs.value.volumeKeys && Remote.state.value.audioOn
+
     private fun applyVolumeMode(remote: Boolean) {
         if (remote == remoteVolume && ::volume.isInitialized && started) return
         remoteVolume = remote
@@ -171,7 +179,7 @@ class PlaybackService : Service() {
         lastPosUpdate = android.os.SystemClock.elapsedRealtime()
         lastPos = prog.position
         // Only touch the session when something visible changed (position drifts every poll).
-        val key = listOf(now?.title, now?.artist, playing, art != null, s.online).joinToString("|")
+        val key = listOf(now?.title, now?.artist, playing, art != null, s.online, s.remoteOn).joinToString("|")
         session.setPlaybackState(
             PlaybackStateCompat.Builder()
                 .setActions(
@@ -225,6 +233,7 @@ class PlaybackService : Service() {
             .setContentText(
                 when {
                     !s.online && s.configured -> "Can't reach the computer"
+                    !s.remoteOn -> "The YouTube Music remote is switched off"
                     else -> now?.artist.orEmpty()
                 }
             )

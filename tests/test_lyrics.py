@@ -6,8 +6,8 @@ import base64
 import time
 import zlib
 
-from pocketfader.lyrics import _KRC_KEY, LyricsService, _norm, _score, parse_krc, parse_lrc
-from pocketfader.romanize import romanize
+from starcast.lyrics import _KRC_KEY, LyricsService, _norm, _score, parse_krc, parse_lrc
+from starcast.romanize import romanize
 
 from .test_server import Base
 

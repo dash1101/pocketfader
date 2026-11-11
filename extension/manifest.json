@@ -1,12 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Pocketfader \u2014 YouTube Music bridge",
-  "version": "1.15.0",
-  "description": "Control YouTube Music in this browser from the Pocketfader app, and refine YouTube Music itself: look, speed, lyrics, playlists.",
+  "name": "YTM Starcast",
+  "version": "2.0.0",
+  "description": "Your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music.",
   "host_permissions": [
     "http://127.0.0.1:8777/*",
-    "http://localhost:8777/*"
+    "http://localhost:8777/*",
+    "https://music.youtube.com/*"
   ],
+  "action": {
+    "default_title": "YTM Starcast",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": [

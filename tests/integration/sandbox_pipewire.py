@@ -8,10 +8,10 @@ import json, os, sys, tempfile, time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from pocketfader.backends.eq_pipewire import SINK_NAME, BuiltinEQ
-from pocketfader.backends.pulse import PulseAudio
-from pocketfader.config import JsonFile
-from pocketfader.runner import Runner
+from starcast.backends.eq_pipewire import SINK_NAME, BuiltinEQ
+from starcast.backends.pulse import PulseAudio
+from starcast.config import JsonFile
+from starcast.runner import Runner
 
 if "pfs" not in os.environ.get("PULSE_SERVER", "") or "pfs" not in os.environ.get("XDG_RUNTIME_DIR", ""):
     sys.exit("refusing to run: environment does not point at the sandbox")

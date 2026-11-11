@@ -8,7 +8,8 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        // the app's identity on the phone; the code keeps its own package name (namespace above), so nothing else changes
+        // the app's identity on the phone. It keeps its first name although the app is now YTM Starcast: changing it would
+        // install a second app instead of updating this one. The code keeps its own package name (namespace above).
         applicationId = "app.novalabs.pocketfader"
         // Android 5.0 (Lollipop): the oldest release Jetpack Compose supports.
         minSdk = 21
@@ -23,7 +24,7 @@ android {
     val releaseKey = System.getenv("PF_KEYSTORE")?.takeIf { file(it).exists() }
     signingConfigs {
         if (releaseKey != null) {
-            create("pocketfader") {
+            create("starcast") {
                 storeFile = file(releaseKey)
                 storePassword = System.getenv("PF_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("PF_KEY_ALIAS")
@@ -31,7 +32,7 @@ android {
             }
         }
     }
-    val appSigning = if (releaseKey != null) signingConfigs.getByName("pocketfader") else signingConfigs.getByName("debug")
+    val appSigning = if (releaseKey != null) signingConfigs.getByName("starcast") else signingConfigs.getByName("debug")
 
     buildTypes {
         release {

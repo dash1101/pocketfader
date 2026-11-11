@@ -1,7 +1,8 @@
 name: release
 
-# Push a tag like v0.1.0-alpha.1 to build everything and publish a pre-release.
+# Push a tag like v0.2.0-alpha.1 to build everything and publish a pre-release.
 # "Run workflow" from the Actions tab builds the same artifacts without publishing.
+# Keep this file's name: the Android versionCode is its run number, which must keep rising.
 on:
   push:
     tags: ["v*"]
@@ -20,24 +21,26 @@ jobs:
       - name: Build
         run: |
           pip install pyinstaller
-          pyinstaller --onefile --name pocketfader \
-            --add-data "pocketfader/static:pocketfader/static" \
-            --paths . --collect-submodules pocketfader packaging/entry.py
+          pyinstaller --onefile --name ytm-starcast \
+            --add-data "starcast/static:starcast/static" \
+            --paths . --collect-submodules starcast packaging/entry.py
       - name: Smoke test
         run: |
-          ./dist/pocketfader --version
-          ./dist/pocketfader --port 8799 --dry-run --audio none --media none &
+          ./dist/ytm-starcast --version
+          ./dist/ytm-starcast --port 8799 --dry-run --audio none --media none &
           sleep 3
           curl -sf http://127.0.0.1:8799/api/info
-          curl -sf http://127.0.0.1:8799/ | grep -q Pocketfader
+          curl -sf http://127.0.0.1:8799/ | grep -q "<title>YTM Starcast</title>"
+          curl -sf http://127.0.0.1:8799/api/parts | grep -q '"discord"'
+          curl -sf http://127.0.0.1:8799/api/beacon | grep -q '"headline"'
           kill %1
       - name: Package
         run: |
-          mkdir pocketfader-linux-x86_64
-          cp dist/pocketfader README.md LICENSE pocketfader-linux-x86_64/
-          tar czf pocketfader-linux-x86_64.tar.gz pocketfader-linux-x86_64
+          mkdir ytm-starcast-linux-x86_64
+          cp dist/ytm-starcast README.md LICENSE ytm-starcast-linux-x86_64/
+          tar czf ytm-starcast-linux-x86_64.tar.gz ytm-starcast-linux-x86_64
       - uses: actions/upload-artifact@v4
-        with: { name: linux, path: pocketfader-linux-x86_64.tar.gz }
+        with: { name: linux, path: ytm-starcast-linux-x86_64.tar.gz }
 
   server-windows:
     runs-on: windows-latest
@@ -50,24 +53,24 @@ jobs:
         run: |
           pip install pyinstaller ".[windows]"
           # The lazily-imported Windows backends must at least import cleanly.
-          python -c "import pocketfader.backends.windows.winaudio, pocketfader.backends.windows.gsmtc; print('windows backends import ok')"
+          python -c "import starcast.backends.windows.winaudio, starcast.backends.windows.gsmtc; print('windows backends import ok')"
       - name: Build
         shell: pwsh
         run: |
-          pyinstaller --onefile --name pocketfader `
-            --add-data "pocketfader/static;pocketfader/static" `
-            --paths . --collect-submodules pocketfader --collect-all winrt `
+          pyinstaller --onefile --name ytm-starcast `
+            --add-data "starcast/static;starcast/static" `
+            --paths . --collect-submodules starcast --collect-all winrt `
             packaging/entry.py
           # The desktop window (no console). tkinter ships with this Python.
           python -c "import tkinter; print('tkinter ok')"
-          pyinstaller --onefile --windowed --name pocketfader-gui `
-            --paths . --collect-submodules pocketfader.gui `
+          pyinstaller --onefile --windowed --name ytm-starcast-gui `
+            --paths . --collect-submodules starcast.gui `
             packaging/gui_entry.py
       - name: Smoke test
         shell: pwsh
         run: |
-          .\dist\pocketfader.exe --version
-          $p = Start-Process .\dist\pocketfader.exe -PassThru `
+          .\dist\ytm-starcast.exe --version
+          $p = Start-Process .\dist\ytm-starcast.exe -PassThru `
             -ArgumentList "--port 8799 --dry-run --audio none --media none" `
             -RedirectStandardOutput out.txt -RedirectStandardError err.txt
           $ok = $false
@@ -75,17 +78,22 @@ jobs:
             Start-Sleep 1
             try { (Invoke-WebRequest http://127.0.0.1:8799/api/info -UseBasicParsing).Content; $ok = $true; break } catch {}
           }
+          if ($ok) {
+            # Discord status (built in) must load in the packaged program too
+            $b = (Invoke-WebRequest http://127.0.0.1:8799/api/beacon -UseBasicParsing).Content
+            if ($b -notmatch '"headline"') { $ok = $false; Write-Host "no Discord status: $b" }
+          }
           Get-Content out.txt, err.txt -ErrorAction SilentlyContinue
           Stop-Process $p -Force
           if (-not $ok) { throw "server did not start" }
       - name: Package
         shell: pwsh
         run: |
-          New-Item -ItemType Directory pocketfader-windows-x64 | Out-Null
-          Copy-Item dist\pocketfader.exe, dist\pocketfader-gui.exe, packaging\install-exe.ps1, README.md, LICENSE pocketfader-windows-x64
-          Compress-Archive pocketfader-windows-x64 pocketfader-windows-x64.zip
+          New-Item -ItemType Directory ytm-starcast-windows-x64 | Out-Null
+          Copy-Item dist\ytm-starcast.exe, dist\ytm-starcast-gui.exe, packaging\install-exe.ps1, README.md, LICENSE ytm-starcast-windows-x64
+          Compress-Archive ytm-starcast-windows-x64 ytm-starcast-windows-x64.zip
       - uses: actions/upload-artifact@v4
-        with: { name: windows, path: pocketfader-windows-x64.zip }
+        with: { name: windows, path: ytm-starcast-windows-x64.zip }
 
   python-package:
     runs-on: ubuntu-latest
@@ -96,8 +104,29 @@ jobs:
       - run: |
           pip install build
           python -m build
+          # the web app and the Discord status engine must be inside the wheel
+          python -m zipfile -l dist/*.whl | grep -q "starcast/static/index.html"
+          python -m zipfile -l dist/*.whl | grep -q "starcast/discord/presence.py"
       - uses: actions/upload-artifact@v4
         with: { name: python, path: dist/* }
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        run: |
+          python3 -m json.tool extension/manifest.json > /dev/null
+          for f in extension/*.js; do node --check "$f"; done
+      - name: Package
+        # The files sit at the top of the zip: unzip it into a folder and "Load unpacked" that folder.
+        run: |
+          cd extension
+          zip -r -X -q ../ytm-starcast-extension.zip .
+          cd ..
+          unzip -l ytm-starcast-extension.zip | grep -q " manifest.json$"
+      - uses: actions/upload-artifact@v4
+        with: { name: extension, path: ytm-starcast-extension.zip }
 
   android:
     runs-on: ubuntu-latest
@@ -112,8 +141,8 @@ jobs:
           PF_KEYSTORE_B64: ${{ secrets.PF_KEYSTORE_B64 }}
         run: |
           if [ -n "$PF_KEYSTORE_B64" ]; then
-            echo "$PF_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/pf-release.jks"
-            echo "PF_KEYSTORE=$RUNNER_TEMP/pf-release.jks" >> "$GITHUB_ENV"
+            echo "$PF_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "PF_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
             echo "Signing with the persistent release key."
           else
             echo "::warning::No PF_KEYSTORE_B64 secret: the APKs are signed with a throwaway key, so they cannot update an installed copy."
@@ -126,15 +155,15 @@ jobs:
         run: gradle --no-daemon :app:assembleRelease :app:assembleUnshrunk -PpfVersionName="${GITHUB_REF_NAME#v}" -PpfVersionCode="${GITHUB_RUN_NUMBER}"
       - name: Collect
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk pocketfader-android.apk
+          cp android/app/build/outputs/apk/release/app-release.apk ytm-starcast-android.apk
           # An unshrunk build, in case the shrunk one misbehaves on some device.
-          cp android/app/build/outputs/apk/unshrunk/app-unshrunk.apk pocketfader-android-unshrunk.apk
+          cp android/app/build/outputs/apk/unshrunk/app-unshrunk.apk ytm-starcast-android-unshrunk.apk
       - uses: actions/upload-artifact@v4
-        with: { name: android, path: "pocketfader-android*.apk" }
+        with: { name: android, path: "ytm-starcast-android*.apk" }
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [server-linux, server-windows, python-package, android]
+    needs: [server-linux, server-windows, python-package, extension, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -143,18 +172,19 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { path: artifacts, merge-multiple: true }
       - name: Name assets and checksum
+        # The programs carry the tag in their names; the APKs and the extension keep plain names, so links to the
+        # newest release always work.
         run: |
           cd artifacts
-          mv pocketfader-android.apk "pocketfader-android-${GITHUB_REF_NAME}.apk"
-          mv pocketfader-android-unshrunk.apk "pocketfader-android-unshrunk-${GITHUB_REF_NAME}.apk"
-          mv pocketfader-linux-x86_64.tar.gz "pocketfader-${GITHUB_REF_NAME}-linux-x86_64.tar.gz"
-          mv pocketfader-windows-x64.zip "pocketfader-${GITHUB_REF_NAME}-windows-x64.zip"
+          mv ytm-starcast-linux-x86_64.tar.gz "ytm-starcast-${GITHUB_REF_NAME}-linux-x86_64.tar.gz"
+          mv ytm-starcast-windows-x64.zip "ytm-starcast-${GITHUB_REF_NAME}-windows-x64.zip"
           sha256sum * > SHA256SUMS.txt
           ls -la
+          cat SHA256SUMS.txt
       - name: Publish pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" artifacts/* \
-            --prerelease --title "Pocketfader $GITHUB_REF_NAME" \
+            --prerelease --title "YTM Starcast $GITHUB_REF_NAME" \
             --notes-file packaging/release-notes.md

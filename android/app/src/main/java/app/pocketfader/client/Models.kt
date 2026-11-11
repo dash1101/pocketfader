@@ -288,7 +288,37 @@ fun isNewer(latest: String, current: String): Boolean {
     return false
 }
 
-// ---- YTM Beacon (Discord presence), as relayed by the computer
+// ---- the parts of YTM Starcast on the computer, each with its own switch
+
+/** Which parts are switched on on the computer. Every app (and the browser extension) follows the same switches. */
+@Immutable
+data class Parts(
+    val remote: Boolean = true,      // the YouTube Music remote
+    val discord: Boolean = true,     // Discord status
+    val refine: Boolean = true,      // Refine inside YouTube Music
+    val audio: Boolean = true,       // the computer's volume, outputs and equalizer
+)
+
+/** The `parts` object of a reply (/api/state, /api/parts), or null when there is none (an older server: everything is on). */
+fun parseParts(o: JSONObject?): Parts? {
+    val p = o?.optJSONObject("parts") ?: return null
+    return Parts(
+        remote = p.optBoolean("remote", true),
+        discord = p.optBoolean("discord", true),
+        refine = p.optBoolean("refine", true),
+        audio = p.optBoolean("audio", true),
+    )
+}
+
+fun Parts.withPart(key: String, on: Boolean): Parts = when (key) {
+    "remote" -> copy(remote = on)
+    "discord" -> copy(discord = on)
+    "refine" -> copy(refine = on)
+    "audio" -> copy(audio = on)
+    else -> this
+}
+
+// ---- Discord status, as the computer reports it (older computers relayed the separate YTM Beacon app)
 
 @Immutable
 data class BeaconSettings(
@@ -300,6 +330,17 @@ data class BeaconSettings(
     val showButtons: Boolean = true,
     val showAlbumArt: Boolean = true,
     val statusDisplay: String = "name",    // name | state | details
+    val hideMatching: List<String> = emptyList(),   // never show songs with these words
+    val hideMatchingKnown: Boolean = false,         // the computer sends the list (so it can be changed from here)
+)
+
+/** The old, separate YTM Beacon app on the computer, which YTM Starcast can take over from ("Move over"). */
+@Immutable
+data class BeaconApp(
+    val running: Boolean = false,
+    val installed: Boolean = false,
+    val canMigrate: Boolean = false,
+    val version: String? = null,
 )
 
 @Immutable
@@ -329,11 +370,14 @@ data class BeaconStatus(
     val settings: BeaconSettings = BeaconSettings(),
     val install: BeaconInstall = BeaconInstall(),
     val receivedAt: Long = 0L,              // SystemClock.elapsedRealtime() when this arrived (counts the hide timer down)
+    val builtIn: Boolean = false,           // the computer shows the status itself (it reports `beaconApp`); else it relays YTM Beacon
+    val beaconApp: BeaconApp = BeaconApp(),
 )
 
 fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
     val s = o.optJSONObject("settings")
     val np = o.optJSONObject("nowPlaying")
+    val app = o.optJSONObject("beaconApp")
     return BeaconStatus(
         reachable = o.optBoolean("reachable", false),
         version = o.str("version").orEmpty(),
@@ -352,6 +396,8 @@ fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
             showButtons = s.optBoolean("showButtons", true),
             showAlbumArt = s.optBoolean("showAlbumArt", true),
             statusDisplay = s.str("statusDisplay") ?: "name",
+            hideMatching = s.optJSONArray("hideMatching").strings().filter { it.isNotBlank() },
+            hideMatchingKnown = s.optJSONArray("hideMatching") != null,
         ),
         install = o.optJSONObject("install")?.let { i ->
             val job = i.optJSONObject("job")
@@ -363,6 +409,13 @@ fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
             )
         } ?: BeaconInstall(),
         receivedAt = receivedAt,
+        builtIn = app != null,
+        beaconApp = if (app == null) BeaconApp() else BeaconApp(
+            running = app.optBoolean("running", false),
+            installed = app.optBoolean("installed", false),
+            canMigrate = app.optBoolean("canMigrate", false),
+            version = app.str("version"),
+        ),
     )
 }
 

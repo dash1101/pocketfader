@@ -229,7 +229,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
             Text(
                 when {
                     s.source == "phone" -> "Nothing is playing on this phone. Search for a song, or play something you downloaded (Search → On this phone)."
-                    s.online -> "Start something on the computer. Open YouTube Music with the Pocketfader extension, or any player."
+                    s.online -> "Start something on the computer. Open YouTube Music with the YTM Starcast extension, or any player."
                     else -> "Waiting for the computer…"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -244,7 +244,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         SeekBar(now?.duration ?: 0.0, playing, prefs.wavyBar)
         Transport(now, s.bridge, hasTrack)
         Spacer(Modifier.height(4.dp))
-        if (s.source == "phone") PhoneVolumeRow() else VolumeRow(s.volume)
+        // the computer's volume only while "Computer audio" is switched on there
+        if (s.source == "phone") PhoneVolumeRow() else if (s.audioOn) VolumeRow(s.volume)
     }
 }
 

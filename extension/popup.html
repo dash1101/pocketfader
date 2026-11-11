@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YTM Starcast</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon-48.png" alt="" width="36" height="36">
+    <div class="name">
+      <h1>YTM Starcast</h1>
+      <span>YouTube Music companion</span>
+    </div>
+    <span id="version" hidden></span>
+  </header>
+
+  <section class="card" id="state" aria-live="polite">
+    <span class="dot idle" id="dot" aria-hidden="true"></span>
+    <div class="txt">
+      <div id="headline">Checking&hellip;</div>
+      <small id="detail" hidden></small>
+      <button type="button" id="act" class="tonal" hidden></button>
+    </div>
+  </section>
+
+  <section class="card list" id="parts" hidden>
+    <label class="row">
+      <span class="txt">YouTube Music remote<small>Search, your library and the queue from your phone</small></span>
+      <span class="switch"><input type="checkbox" role="switch" data-part="remote" checked disabled><i></i></span>
+    </label>
+    <label class="row">
+      <span class="txt">Discord status<small id="discord">Show what you play on your Discord profile</small></span>
+      <span class="switch"><input type="checkbox" role="switch" data-part="discord" checked disabled><i></i></span>
+    </label>
+    <label class="row">
+      <span class="txt">Refine<small>Improvements inside YouTube Music</small></span>
+      <span class="switch"><input type="checkbox" role="switch" data-part="refine" checked disabled><i></i></span>
+    </label>
+  </section>
+
+  <footer>
+    <a id="open" class="filled" href="http://127.0.0.1:8777/" target="_blank" rel="noopener">Open YTM Starcast</a>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

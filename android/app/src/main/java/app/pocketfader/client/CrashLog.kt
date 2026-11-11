@@ -45,7 +45,7 @@ object CrashLog {
         try {
             val entry = buildString {
                 append("== ").append(kind).append(" ==\n")
-                append(stamp(System.currentTimeMillis())).append(" · Pocketfader ").append(version)
+                append(stamp(System.currentTimeMillis())).append(" · YTM Starcast ").append(version)
                 append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(") · ")
                 append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
                 append(where)
@@ -108,7 +108,7 @@ object CrashLog {
 
     /** Everything, as text to copy into a report. */
     fun report(c: Context): String = buildString {
-        append("Pocketfader ").append(version).append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ")
+        append("YTM Starcast ").append(version).append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ")
             .append(Build.VERSION.SDK_INT).append(") · ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append("\n\n")
         val ex = exits(c)
         if (ex.isNotEmpty()) {

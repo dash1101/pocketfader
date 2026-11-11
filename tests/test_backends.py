@@ -1,8 +1,14 @@
 import json
+import tempfile
+import threading
+import time
 import unittest
+from pathlib import Path
 
-from pocketfader.backends.mpris import Mpris, app_id
-from pocketfader.backends.pulse import SINK, PulseAudio, parse_sink
+from starcast.backends.eq_pipewire import SINK_NAME, BuiltinEQ, chain_conf
+from starcast.config import JsonFile
+from starcast.backends.mpris import Mpris, app_id
+from starcast.backends.pulse import SINK, PulseAudio, classify_sink, parse_sink
 
 from .fakes import FakeRunner
 
@@ -30,7 +36,7 @@ def props(status="Playing", title="Song", pos=30_000_000, tid="/t/1"):
 class RunnerTests(unittest.TestCase):
     def test_dry_run_write_never_executes(self):
         import os, tempfile
-        from pocketfader.runner import Runner
+        from starcast.runner import Runner
         marker = os.path.join(tempfile.mkdtemp(), "should-not-exist")
         r = Runner(dry_run=True)
         self.assertTrue(r.write(["touch", marker]).ok)
@@ -38,12 +44,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(r.log, [["touch", marker]])
 
     def test_reads_still_execute_in_dry_run(self):
-        from pocketfader.runner import Runner
+        from starcast.runner import Runner
         self.assertEqual(Runner(dry_run=True).read(["echo", "hi"]).out.strip(), "hi")
 
     def test_real_write_executes_when_not_dry_run(self):
         import os, tempfile
-        from pocketfader.runner import Runner
+        from starcast.runner import Runner
         marker = os.path.join(tempfile.mkdtemp(), "created")
         Runner().write(["touch", marker])
         self.assertTrue(os.path.exists(marker))
@@ -64,15 +70,22 @@ class PulseTests(unittest.TestCase):
         self.assertFalse(PulseAudio(FakeRunner())._read()["available"])
 
     def test_eq_sink_is_named_after_the_device_it_feeds(self):
-        eq = {**SINK_JSON, "name": "pocketfader_eq", "description": "Pocketfader EQ"}
+        eq = {**SINK_JSON, "name": "pocketfader_eq", "description": "YTM Starcast EQ"}
         r = FakeRunner({"get-default-sink": "pocketfader_eq\n", "list sinks": json.dumps([SINK_JSON, eq])})
         a = PulseAudio(r)
         a.hidden_sinks.add("pocketfader_eq")
-        self.assertEqual(a._read()["device"], "Pocketfader EQ")      # no alias yet: honest fallback
+        self.assertEqual(a._read()["device"], "YTM Starcast EQ")           # no alias yet: honest fallback
         a.aliases["pocketfader_eq"] = "alsa_output.x"
         self.assertEqual(a._read()["device"], "Desk Speakers")
         outs = a.outputs()
         self.assertEqual([(o["name"], o["default"]) for o in outs], [("alsa_output.x", True)])
+
+    def test_eq_output_is_called_starcast_but_keeps_its_node_name(self):
+        conf = chain_conf("alsa_output.x", {"bass": 3})
+        self.assertIn('node.description = "YTM Starcast EQ"', conf)
+        self.assertIn('node.name = "pocketfader_eq"', conf)          # kept, so an EQ left running stays recognised
+        self.assertNotIn("Pocketfader", conf)
+        self.assertEqual(classify_sink({"name": "pocketfader_eq_out", "properties": {}}), "virtual")
 
     def test_set_volume_targets_default_sink_only_and_clamps(self):
         r = FakeRunner()
@@ -159,6 +172,130 @@ class MprisTests(unittest.TestCase):
         self.assertFalse(m.snapshot()["available"])
         self.assertFalse(m.play_pause())
         self.assertEqual(r.log, [])
+
+
+
+class _Proc:
+    """A stand-in for the filter-chain process: nothing is started."""
+
+    def __init__(self):
+        self.alive = True
+        self.pid = 999999
+
+    def poll(self):
+        return None if self.alive else 0
+
+    def terminate(self):
+        self.alive = False
+
+    kill = terminate
+
+    def wait(self, timeout=None):
+        return 0
+
+
+class _EQAudio:
+    """The audio backend the EQ talks to, in memory: a real device "speakers" and, once built, the EQ sink."""
+
+    def __init__(self):
+        self.default, self.calls, self.eq_up = "speakers", [], False
+        self.hidden_sinks, self.aliases = set(), {}
+
+    def default_name(self):
+        return self.default
+
+    def outputs(self, include_hidden=False):
+        return [{"name": "speakers"}] + ([{"name": SINK_NAME}] if self.eq_up else [])
+
+    def set_output(self, name):
+        self.calls.append(("set_output", name))
+        self.default = name
+        return True
+
+    def set_output_volume(self, name, p):
+        self.calls.append(("set_output_volume", name, p))
+
+    def set_output_mute(self, name, m):
+        self.calls.append(("set_output_mute", name, m))
+
+
+class _EQ(BuiltinEQ):
+    """The built-in EQ with the PipeWire parts replaced: builds of the chain are counted, nothing is run."""
+    restore_delay = watch_every = 0.05
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.spawns = []
+        self._spawn_lock = threading.Lock()
+
+    def available(self):
+        return True, ""
+
+    def _kill_stale(self):
+        pass
+
+    def _spawn(self, target):
+        with self._spawn_lock:
+            self._kill_chain()
+            self.spawns.append(target)
+            self._proc = _Proc()
+            self.audio.eq_up = True
+            return True
+
+    def _wait_sink(self, timeout=4.0):
+        return True
+
+
+class BuiltinEQStartTests(unittest.TestCase):
+    """An EQ that was on before a restart is put back once: building the chain twice would kill the first one (a
+    gap in the sound)."""
+
+    def make(self, enabled=True):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = JsonFile(Path(tmp.name) / "eq.json")
+        store.merge({"enabled": enabled, "target": "speakers"})
+        runner = FakeRunner()
+        runner.dry_run = False          # the watchdog only acts for real; FakeRunner still never starts a process
+        eq = _EQ(runner, _EQAudio(), store, tmp.name)
+        self.addCleanup(eq.stop)
+        return eq
+
+    def test_put_back_once_after_a_start(self):
+        eq = self.make()
+        eq.start()
+        time.sleep(0.6)                 # the restore, and several watchdog checks after it
+        self.assertEqual(eq.spawns, ["speakers"])
+        self.assertEqual([c for c in eq.audio.calls if c[0] == "set_output"], [("set_output", SINK_NAME)])
+        self.assertEqual(eq.audio.default, SINK_NAME)
+        self.assertEqual(eq.snapshot()["running"], True)
+        # the chain dies later: the watchdog still brings it back
+        eq._proc.alive = False
+        time.sleep(0.4)
+        self.assertEqual(eq.spawns, ["speakers", "speakers"])
+
+    def test_off_means_nothing_is_built(self):
+        eq = self.make(enabled=False)
+        eq.start()
+        time.sleep(0.3)
+        self.assertEqual((eq.spawns, eq.audio.calls), ([], []))
+
+    def test_stopped_before_the_restore_builds_nothing(self):
+        eq = self.make()
+        eq.restore_delay = 0.3
+        eq.start()
+        eq.stop()
+        time.sleep(0.5)
+        self.assertEqual(eq.spawns, [])
+
+    def test_switched_off_before_the_restore_stays_off(self):
+        eq = self.make()
+        eq.restore_delay = 0.3
+        eq.start()
+        eq.disable()
+        time.sleep(0.5)
+        self.assertEqual(eq.spawns, [])
+        self.assertFalse(eq.enabled)
 
 
 if __name__ == "__main__":

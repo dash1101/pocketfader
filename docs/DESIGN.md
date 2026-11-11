@@ -1,12 +1,13 @@
 # Design language
 
-Pocketfader has three faces: the web app, the Android app, and Refine (the part of the extension that lives inside
+YTM Starcast has three faces: the web app, the Android app, and Refine (the part of the extension that lives inside
 YouTube Music). They are built with different tools, so nothing forces them to look alike. This page is the one scale
 they all draw from. When you add or change something, take the value from here rather than inventing a new one.
+The extension's toolbar popup (`extension/popup.css`) uses the same values, under the web app's names.
 
 | | Web app | Android app | Refine |
 |---|---|---|---|
-| Where it lives | `pocketfader/static/index.html` (`:root`) | `Theme.kt` (`PfShape`, `Motion`), `Fx.kt` | `extension/refine.js` (`CSS_UI`) |
+| Where it lives | `starcast/static/index.html` (`:root`) | `Theme.kt` (`PfShape`, `Motion`), `Fx.kt` | `extension/refine.js` (`CSS_UI`) |
 | Corners | `--r-xs` … `--r-full` | `PfShape.Xs` … `PfShape.Full` | `--pf-r-xs` … `--pf-r-full` |
 | Timings | `--t-quick` … `--t-long` | `Motion.Quick` … `Motion.Long` | `--pf-t-quick` … `--pf-t-long` |
 | Curves | `--ease`, `--spring` | `Motion.Ease`, Compose springs | `--pf-ease`, `--pf-spring` |

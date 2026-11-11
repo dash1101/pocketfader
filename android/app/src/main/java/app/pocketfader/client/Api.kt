@@ -5,7 +5,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-class ApiException(val code: Int, message: String) : Exception(message)
+/** [body]: the server's JSON answer when it sent one with the error (some carry a `message` written for people). */
+class ApiException(val code: Int, message: String, val body: JSONObject? = null) : Exception(message)
 
 /**
  * Minimal client for the server's HTTP API (docs/API.md). Plain HttpURLConnection so the app
@@ -66,7 +67,7 @@ class PfApi(private val cfg: ServerConfig) {
             // A redirect here almost always means a Cloudflare Access login page, not our API.
             conn.instanceFollowRedirects = false
             conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("User-Agent", "Pocketfader-Android")
+            conn.setRequestProperty("User-Agent", "ytm-starcast-android")
             if (cfg.token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${cfg.token}")
             if (cfg.hasCloudflareToken) {
                 conn.setRequestProperty("CF-Access-Client-Id", cfg.cfClientId)
@@ -90,9 +91,11 @@ class PfApi(private val cfg: ServerConfig) {
             val json = try {
                 if (text.isBlank()) JSONObject() else JSONObject(text)
             } catch (e: JSONException) {
-                throw ApiException(code, "That address didn't answer like a Pocketfader server.")
+                throw ApiException(code, "That address didn't answer like a YTM Starcast server.")
             }
-            if (code >= 400) throw ApiException(code, json.optString("error").ifBlank { "Server error ($code)" })
+            // replies that carry readable words (e.g. the Discord status while the old YTM Beacon app runs) show them;
+            // the others carry only a code, which callers turn into words themselves
+            if (code >= 400) throw ApiException(code, json.optString("message").ifBlank { json.optString("error") }.ifBlank { "Server error ($code)" }, json)
             return json
         } finally {
             conn.disconnect()
@@ -102,10 +105,10 @@ class PfApi(private val cfg: ServerConfig) {
 
 /** Human-readable text for whatever went wrong. */
 fun Throwable.friendly(): String = when (this) {
-    is ApiException -> message.orEmpty()
+    is ApiException -> if (message == "part_off") "That part of YTM Starcast is switched off. Turn it on in Settings → Parts." else message.orEmpty()
     is java.net.UnknownHostException -> "Can't find that computer. Check the address (and that Tailscale is on, if you use it)."
     is java.net.SocketTimeoutException -> "The computer didn't answer in time."
-    is java.net.ConnectException -> "Couldn't connect. Is Pocketfader running and reachable from this phone?"
+    is java.net.ConnectException -> "Couldn't connect. Is YTM Starcast running and reachable from this phone?"
     is javax.net.ssl.SSLException -> "Secure connection failed (${message.orEmpty().take(80)})."
     else -> message ?: javaClass.simpleName
 }

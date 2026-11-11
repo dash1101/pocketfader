@@ -14,5 +14,5 @@ dependencyResolutionManagement {
         maven { url = uri("https://jitpack.io") }
     }
 }
-rootProject.name = "pocketfader-android"
+rootProject.name = "ytm-starcast-android"
 include(":app")

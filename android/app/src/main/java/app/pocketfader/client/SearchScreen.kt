@@ -477,7 +477,7 @@ private fun DeviceTab() {
         when {
             !granted -> item(key = "files-ask") {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("Pocketfader needs your permission to see the music files on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("YTM Starcast needs your permission to see the music files on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FilledTonalButton(onClick = { ask.launch(DeviceMusic.permission) }, modifier = Modifier.padding(top = 8.dp)) { Text("Allow access to music") }
                 }
             }

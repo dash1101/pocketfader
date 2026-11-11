@@ -1,26 +1,36 @@
-## Pocketfader — pre-release
+## Pocketfader is now YTM Starcast, and YTM Beacon is built in
 
-Control your computer's volume and music from your phone, including a full YouTube Music remote.
+YTM Starcast is your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better
+YouTube Music. It is Pocketfader under a new name, and it now also does what the separate YTM Beacon app did. One app on
+the computer, one browser extension and one Android app do it all, and every part has its own on/off switch.
+
 This is an early build for testing; expect rough edges.
 
-### Downloads
+### What's new in 0.2.0-alpha.1
 
-| File | For | How to use |
-|---|---|---|
-| `pocketfader-…-linux-x86_64.tar.gz` | Linux computer (server) | Extract and run `./pocketfader`. Needs PipeWire/PulseAudio (`pactl`); `busctl` (systemd) is used for media-player control. For a background service that starts at login, use `install.sh` from the source instead. |
-| `pocketfader-…-windows-x64.zip` | Windows computer (server) | Extract and open `pocketfader-gui.exe` for a small control window, or run `pocketfader.exe` / `install-exe.ps1` directly. **Experimental.** |
-| `pocketfader-android-….apk` | Android 5.0+ phone or tablet (client) | Install the APK (allow "install unknown apps"), open it, enter your computer's address (e.g. `my-computer.tailnet.ts.net:8777`) and tap **Test**, then **Save**. A native app: now playing, queue, search, output devices and equalizer, lock-screen controls, and the volume buttons control the computer. |
-| `pocketfader-<version>-py3-none-any.whl` / `.tar.gz` | Any OS with Python 3.9+ | `pipx install pocketfader-<version>-py3-none-any.whl` |
-| `SHA256SUMS.txt` | | Verify downloads with `sha256sum -c SHA256SUMS.txt`. |
+**One app**
 
-You don't need the Android app to use Pocketfader: any phone, tablet or laptop can open the web
-page the server prints and add it to the home screen.
+- **Pocketfader is now YTM Starcast.** Same app, new name: your settings, access token, paired phones and Android app carry
+  over.
+- **Discord status is built in.** YTM Starcast shows the song you play in YouTube Music on your Discord profile by itself; the
+  YTM Beacon app isn't needed any more. Control it from Settings → Discord status: show or hide it, hide it for a while,
+  private mode, show while paused (and for how long), progress bar, play/pause icon, Listen button, album art and the
+  name next to your username.
+- **Never show songs matching:** words that keep a song off Discord, in the web app and the Android app.
+- **Adverts stay off Discord,** and closing the YouTube Music tab clears your status at once.
+- **A switch for every part:** Settings → Parts in the web app, the Android app and the desktop window turns the YouTube
+  Music remote, Discord status, Refine and the computer's audio controls on or off. A part that's off is hidden.
+- **The extension has a toolbar button** (extension 2.0): whether YTM Starcast is running, the switches for the remote, Discord
+  status and Refine, and what Discord status is doing. Refine's ✦ menu has the same switches.
+- **The extension is a download now:** `ytm-starcast-extension.zip` in each release.
+- **Moving over:** run YTM Starcast's installer once on the computer. It replaces Pocketfader and removes the YTM Beacon app,
+  keeping your settings. Then remove the YTM Beacon extension from your browser by hand (the release page on GitHub
+  has every step). YTM Starcast needs a Chromium-based browser on Linux or Windows: with YTM Beacon in Firefox or on
+  macOS, keep YTM Beacon for now.
 
-### What's new in alpha.16
-
-**Refine: a better YouTube Music, inside YouTube Music.** With the Pocketfader extension (1.15) loaded, music.youtube.com gets a
-✦ button in its top bar. Everything below has its own switch there, and opening `music.youtube.com/?pf-refine=off` starts a page
-without any of it. These changes depend on how YouTube Music's page is built, so treat them as experimental.
+**Refine: a better YouTube Music, inside YouTube Music.** With YTM Starcast's extension loaded, music.youtube.com gets a ✦
+button in its top bar. Everything below has its own switch there, and opening `music.youtube.com/?pf-refine=off` starts a
+page without any of it. These changes depend on how YouTube Music's page is built, so treat them as experimental.
 
 - **A Material 3 Expressive look**, in layers you can switch separately: rounder shapes (covers, lists, menus, search), colours
   taken from the album art, expressive player controls (a bigger play button that turns from a circle into a rounded square while
@@ -30,7 +40,7 @@ without any of it. These changes depend on how YouTube Music's page is built, so
   pitch, and remember a speed for one song or a whole playlist (it comes back when that song or playlist plays, and doesn't spill
   over onto others).
 - **Live lyrics** in YouTube Music: a lyrics button in the player opens time-synced lyrics (word by word where the source has
-  it) from the Pocketfader app, following the song; tap a line to jump there.
+  it) from YTM Starcast, following the song; tap a line to jump there.
 - **Speed from the keyboard:** Shift+. faster, Shift+, slower.
 - **A "play something you might like" button** among the player controls.
 - **A playlist maker:** start from the song playing, your queue, one of your playlists or your liked songs. It asks YouTube Music
@@ -61,41 +71,66 @@ without any of it. These changes depend on how YouTube Music's page is built, so
 - Back returns from a playlist, album or artist page; the song that is playing is marked in lists; the Controls widget shows
   progress.
 - Fits narrow phones (down to 320 px), and the transport buttons are named for screen readers.
+- The Discord status card can hide a paused song after a while, as the Android app already could.
 
 **One look everywhere.** The web app, the Android app and Refine now share one scale of corners, timings and press feedback,
 the same chip and play-button shapes, and the same violet (see `docs/DESIGN.md`).
 
-### What's new in alpha.15
+### Moving over from Pocketfader or YTM Beacon
 
-**Your library, without the computer.** The Android app now keeps a copy of your YouTube Music library and makes its own
-recommendations, so playing on the phone feels the same whether or not YouTube Music is open on your computer.
+**YTM Starcast needs a Chromium-based browser (Chrome, Brave, Edge…) on a Linux or Windows computer.** YTM Beacon also works
+in Firefox and on macOS; there, keep using YTM Beacon for now. With YTM Beacon in Firefox on Linux or Windows, install YTM
+Starcast with `--keep-ytm-beacon` (Linux) or `-KeepYtmBeacon` (Windows), or Discord status stops.
 
-- **Library sync:** your playlists (all their songs), liked songs and YouTube Music home page are copied to the phone whenever
-  YouTube Music is open on the computer (Settings → Library & offline). Without it, Search → Playlists shows the synced copy and
-  every playlist opens and plays from it. Likes and songs you add to your own playlists in the meantime are sent to your account
-  at the next sync.
-- **For you, made on the phone:** Quick picks, Listen again, Mixed for you (a radio per favourite artist), Forgotten favorites and
-  Discover, worked out from what you play (on the phone and on the computer), skip and like, using YouTube Music's own song
-  radios. "I'm feeling lucky" uses them too. Your listening history stays on the phone.
-- **Better autoplay on the phone:** it continues with YouTube Music's radio for the song, not with YouTube's related videos (which
-  could add hour-long compilations), and leaves out songs you just heard or keep skipping.
-- **Automatic downloads:** keep your liked songs downloaded, keep any playlist on the phone ("Keep on this phone" on the
-  playlist), and smart downloads (your most played songs and current quick picks). A space limit and a Wi-Fi only option;
-  songs you downloaded yourself are never removed automatically.
-- **Faster, sturdier downloads,** fetched in pieces at full speed, with a progress notification and a Stop button.
-- **Playing on the phone:** shuffle keeps "Play next" working and shows the real order; a sleep timer (including "when this
-  song ends"); the queue and position are kept when the app is closed; a song that won't load is retried once, and playback stops
-  instead of racing through the queue when nothing loads (no connection).
-- **Search:** suggestions as you type, recent searches, and results that stay when you switch screens. Song names found
-  without the computer are tidied ("Bohemian Rhapsody" by Queen, not "Queen – Bohemian Rhapsody (Official Video)").
-- **Fixes:** the widgets' lucky, sleep and mute buttons act on the phone when music plays there; likes work while playing on the
-  phone; moving playback to the phone starts from the right song.
-- **Computer and extension (1.14):** with several YouTube Music tabs open, Pocketfader follows the one that's playing instead of
-  mixing them up; commands sent while the tab was reloading no longer run late (three taps on Next don't skip three songs a
-  minute later). Reload the extension in your browser to get 1.14.
+1. **On the computer, run YTM Starcast's installer once.**
+   - Linux: download the source code of this release (or clone the repository) and run `./install.sh`.
+   - Windows: extract `ytm-starcast-v…-windows-x64.zip` and run `install-exe.ps1` in it (right-click → Run with PowerShell).
 
-### Earlier
+   It replaces Pocketfader: your settings, access token, paired phones and options such as `--lan` carry over (on Linux,
+   so does its start-at-login choice). On Windows, YTM Starcast starts at every logon, and if Pocketfader ran from the
+   folder its zip was extracted to, delete that folder by hand. The installer also removes the YTM Beacon app with Beacon's
+   own uninstaller; YTM Starcast takes over your Discord settings from it. Pocketfader's own update check can't find this
+   release (its Updates row reports "GitHub answered 301"), so use the installer.
+2. **In your browser, by hand:** remove the **YTM Beacon** extension on the extensions page, and swap the Pocketfader
+   extension for YTM Starcast's: unzip `ytm-starcast-extension.zip` into a folder you keep, then Developer mode → Load unpacked →
+   that folder. Keep only one copy of YTM Starcast's extension.
+3. **On your phone:** update the Android app. It is the same app, so your settings, library, downloads and widgets stay.
+   Once the computer runs YTM Starcast, the app offers the update (Settings → Updates); or install `ytm-starcast-android.apk` over it.
 
+Installed Pocketfader or YTM Beacon with Orbit? Update Orbit first and let it move you over.
+
+To keep the YTM Beacon app for now, install with `--keep-ytm-beacon` (Linux) or `-KeepYtmBeacon` (Windows). YTM Starcast leaves
+Discord to Beacon while it runs, and Settings → Discord status → **Move over** finishes the move later.
+
+### Downloads
+
+| File | For | How to use |
+|---|---|---|
+| `ytm-starcast-v…-linux-x86_64.tar.gz` | Linux computer (server) | Extract and run `./ytm-starcast`. Needs PipeWire/PulseAudio (`pactl`); `busctl` (systemd) is used for media-player control. For a background service that starts at login, and to move over from Pocketfader or YTM Beacon, use `install.sh` from the source code instead. |
+| `ytm-starcast-v…-windows-x64.zip` | Windows computer (server) | Extract and run `install-exe.ps1` (right-click → Run with PowerShell): it installs YTM Starcast for your user, starts it at every logon, and moves you over from Pocketfader and YTM Beacon. `ytm-starcast-gui.exe` is a small control window. **Experimental.** |
+| `ytm-starcast-extension.zip` | The browser on the computer (Chrome, Brave, Edge…) | Unzip into a folder you keep, then the extensions page → Developer mode → Load unpacked → that folder. Needed for the YouTube Music remote, Discord status and Refine. |
+| `ytm-starcast-android.apk` | Android 5.0+ phone or tablet (client) | Install the APK (allow "install unknown apps"), open it, enter your computer's address (e.g. `my-computer.tailnet.ts.net:8777`) and tap **Test**, then **Save**. A native app: now playing, queue, search, output devices and equalizer, Discord status, lock-screen controls, widgets, and the volume buttons control the computer. It installs over the Pocketfader app. |
+| `ytm-starcast-android-unshrunk.apk` | Android, if the first one misbehaves | The same app, built without shrinking. |
+| `ytm_starcast-…-py3-none-any.whl` / `.tar.gz` | Any OS with Python 3.9+ | `pipx install ytm_starcast-<version>-py3-none-any.whl` |
+| `SHA256SUMS.txt` | | Verify downloads with `sha256sum -c SHA256SUMS.txt`. |
+
+You don't need the Android app to use YTM Starcast: any phone, tablet or laptop can open the web page the server prints and add
+it to the home screen.
+
+### Quick start
+
+1. Install YTM Starcast on your computer. It prints an address such as `http://100.x.y.z:8777/`.
+2. Install [Tailscale](https://tailscale.com) on the computer and the phone (recommended), or install with `--lan` to use
+   your home Wi-Fi (this turns on an access token).
+3. Open the address on the phone (or enter it in the Android app).
+4. Add the browser extension (`ytm-starcast-extension.zip`) to the browser on the computer and keep a music.youtube.com tab
+   open.
+5. For Discord status, keep the Discord desktop app open on the computer.
+
+### Earlier (released as Pocketfader)
+
+- alpha.15: your library without the computer (library sync, recommendations made on the phone, automatic downloads),
+  better autoplay and sturdier downloads on the phone, and the extension follows the tab that is playing.
 - alpha.14: new Android application ID `app.novalabs.pocketfader` (uninstall the old app once).
 - alpha.13: widgets without a background, plus Discord presence and Up next widgets.
 - alpha.12: widgets redesigned (clean card, rounded cover, live elapsed time); extension 1.13 quieter in the background.
@@ -108,30 +143,25 @@ recommendations, so playing on the phone feels the same whether or not YouTube M
 - alpha.5: jump to the current lyric line, lyrics layout options, steadier buttons.
 - alpha.4: word-by-word lyrics, faster lyrics, closer sync, a lighter Up next, and in-app updates.
 
-### Quick start
-
-1. Run the server on your computer. It prints an address such as `http://100.x.y.z:8777/`.
-2. On your phone, install [Tailscale](https://tailscale.com) on both devices (recommended), or start the
-   server with `--lan` to use your home Wi-Fi (this turns on an access token).
-3. Open the address on the phone (or enter it in the Android app).
-4. For the YouTube Music remote, load the `extension/` folder from the source in Brave or Chrome
-   (`brave://extensions` → Developer mode → Load unpacked) and keep a music.youtube.com tab open.
-
 ### Status of this build
 
 - **Linux server**: built and smoke-tested automatically (starts and serves the web app). Volume and
   media control are covered by automated tests and were checked against a live PipeWire system.
+- **Discord status**: its engine follows YTM Beacon's and is covered by automated tests against a stand-in for Discord;
+  it has not yet been run with the Discord app itself. The Windows connection to Discord has not been run on Windows.
+- **Moving over**: the Linux installer was tested in a sandbox with stand-ins for systemd, Pocketfader and YTM Beacon,
+  not yet on a real installation. The Windows installers (`install-exe.ps1`, `install.ps1`) have not been run on Windows.
+- **Browser extension 2.0**: the toolbar button, the switches, the advert and album reporting and the goodbye on closing
+  a tab were tested on stand-in pages and against YTM Starcast's own server code, not yet with the extension installed in a
+  browser on the real YouTube Music. Chromium only; no Firefox version yet.
 - **Windows server**: built and smoke-tested automatically (starts and serves); the Windows audio and
   media code has not been run on a real Windows machine since a refactor. Voicemeeter support is optional.
-- **Android app**: built automatically; it compiles and packages but has not yet been run on a physical
-  device or emulator, so expect rough edges. The APK is signed with a throwaway debug key, so a later release
-  signed with a different key will need an uninstall first.
+- **Android app**: built automatically; this version has not been run on a phone yet. It keeps Pocketfader's app ID and
+  signing key, so it installs over the Pocketfader app.
 - **Lyrics**: the sources were checked live from a Linux machine for a few songs (including Japanese and
   Korean); they are third-party services and may change or have nothing for a song.
 - **Desktop window**: the Linux (GTK) window was rendered and its controller tested, but not driven through every
   button on many desktops; the Windows (Tk) window and its start-at-login entry have not been run on Windows.
-- **Word-by-word lyrics and the update installer** compile and were checked against the live services and with tests, but have not been run on a real Android device.
-- **Android settings and pixel shift** compile and are described above but haven't been run on a real device.
 - **Equalizer and output switching**: verified against an isolated PipeWire instance (measured gain per band),
   not yet across many hardware setups.
 - **Playlist editing**: the web app's editing screens were checked against a stand-in for the extension; the
@@ -139,5 +169,4 @@ recommendations, so playing on the phone feels the same whether or not YouTube M
 - **Cloudflare setup**: the guide has not been run end to end against a real Cloudflare account.
 - **macOS**: not supported yet.
 
-Native playlists in the Android app, push updates, QR pairing and a computer-statistics view are planned; see
-the roadmap in the repository.
+QR pairing, push updates and a computer-statistics view are planned; see the roadmap in the repository.

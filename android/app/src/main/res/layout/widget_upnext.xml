@@ -36,5 +36,5 @@
         </LinearLayout>
         <TextView android:id="@+id/u3_d" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:textColor="#FFA9ACB6" android:textSize="12sp" />
     </LinearLayout>
-    <TextView android:id="@+id/u_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:padding="8dp" android:textColor="#FFA9ACB6" android:textSize="13sp" android:text="Nothing queued. Tap to open Pocketfader." />
+    <TextView android:id="@+id/u_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:padding="8dp" android:textColor="#FFA9ACB6" android:textSize="13sp" android:text="Nothing queued. Tap to open YTM Starcast." />
 </LinearLayout>

@@ -236,7 +236,7 @@ fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics
     val r = ui.result
     when {
         !hasTrack -> item(key = "ly-none") { LyricsMessage("Nothing is playing.") }
-        !canLyrics -> item(key = "ly-old") { LyricsMessage("This server is too old for lyrics. Update Pocketfader on the computer.") }
+        !canLyrics -> item(key = "ly-old") { LyricsMessage("This server is too old for lyrics. Update YTM Starcast on the computer.") }
         ui.loading && r == null -> item(key = "ly-load") {
             Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         }

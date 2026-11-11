@@ -116,7 +116,7 @@ fun ConnectForm(
             style = MaterialTheme.typography.headlineSmall,
         )
         Text(
-            "Enter the address of the computer running Pocketfader.",
+            "Enter the address of the computer running YTM Starcast.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

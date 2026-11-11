@@ -1,20 +1,39 @@
 import http.client
 import json
+import os
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
 import threading
 
-from pocketfader.beacon import Beacon
-from pocketfader.opener import Opener
-from pocketfader.audio import AudioFetcher
-from pocketfader.config import JsonFile
-from pocketfader.server import App, Handler
+from starcast.opener import Opener
+from starcast.audio import AudioFetcher
+from starcast.config import JsonFile
+from starcast.server import App, Handler
+from starcast.updater import Updater
 
 from .fakes import FakeAudio, FakeEngine, FakeMedia, FakeToggleEQ
-from pocketfader.backends.base import NullEngine
+from .test_beacon import BeaconGuard, make_discord
+from .test_discord_fakes import DialGuard
+from starcast.backends.base import NullEngine
 import tempfile
 from pathlib import Path
+
+# Nothing here may reach the real YTM Beacon app or the real Discord: the guards fail the run if anything does.
+GUARDS = (BeaconGuard(), DialGuard())
+
+
+def setUpModule():
+    for g in GUARDS:
+        g.install()
+
+
+def tearDownModule():
+    for g in GUARDS:
+        g.uninstall()
+    for g in GUARDS:
+        g.check()
 
 
 class Base(unittest.TestCase):
@@ -24,10 +43,15 @@ class Base(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        # anything that asks for the settings folder gets a temporary one, never the real one
+        env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name})
+        env.start()
+        self.addCleanup(env.stop)
         self.audio, self.media, self.engine = FakeAudio(), FakeMedia(self.media_avail), self.engine_cls()
         self.app = App(self.audio, self.engine, self.media,
                        prefs=JsonFile(Path(self.tmp.name) / "prefs.json"), token=self.token,
-                       beacon=Beacon(ports=(), dry_run=True), opener=Opener(dry_run=True),
+                       beacon=make_discord(Path(self.tmp.name) / "ytm-starcast", dry_run=True),
+                       opener=Opener(dry_run=True), updater=Updater(cache=Path(self.tmp.name) / "updates"),
                        audio_fetcher=AudioFetcher(folder=Path(self.tmp.name) / 'audio', ytdlp=''))
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.app = self.app
@@ -104,7 +128,7 @@ class ApiTests(Base):
     def test_index_served(self):
         s, body, _ = self.req("GET", "/")
         self.assertEqual(s, 200)
-        self.assertIn(b"Pocketfader", body)
+        self.assertIn(b"<title>YTM Starcast</title>", body)
 
     def test_media_fallback_when_extension_offline(self):
         _, st, _ = self.req("GET", "/api/ytm/state")
@@ -182,7 +206,13 @@ class SecurityTests(Base):
     def test_public_paths_and_info(self):
         self.assertEqual(self.req("GET", "/manifest.json")[0], 200)
         s, info, _ = self.req("GET", "/api/info")
-        self.assertEqual((s, info["auth"]), (200, True))
+        self.assertEqual((s, info["auth"], info["name"]), (200, True, "YTM Starcast"))
+
+    def test_login_page_names_the_app(self):
+        s, body, _ = self.req("GET", "/", headers={"Accept": "text/html"})
+        self.assertEqual(s, 401)
+        self.assertIn(b"<title>YTM Starcast</title>", body)
+        self.assertNotIn(b"Pocketfader", body)
 
     def test_loopback_extension_endpoints_exempt(self):
         self.assertEqual(self.req("POST", "/ext/state", {"now": {}})[0], 200)
@@ -279,11 +309,20 @@ class ProxySafetyTests(Base):
         self.assertIn("Secure", r.getheader("Set-Cookie"))
 
 
+class CommandLineTests(unittest.TestCase):
+    def test_named_starcast(self):
+        from starcast.cli import build_parser
+        p = build_parser()
+        self.assertEqual(p.prog, "ytm-starcast")
+        self.assertIn("Discord", p.format_help())
+        self.assertTrue(p.parse_args(["--dry-run"]).dry_run)
+
+
 class TailscaleTests(unittest.TestCase):
     def test_missing_binary_returns_immediately(self):
         import time
         from unittest import mock
-        from pocketfader import server
+        from starcast import server
         with mock.patch.object(server.shutil, "which", return_value=None), \
                 mock.patch.object(server.sys, "platform", "linux"):
             t = time.time()

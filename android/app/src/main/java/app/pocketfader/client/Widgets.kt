@@ -78,11 +78,12 @@ class WidgetActions : BroadcastReceiver() {
                 val vid = n?.videoId
                 if (n != null && vid != null && isYtId(vid)) Remote.like(vid, !n.liked)
             }
+            // the computer's volume only while "Computer audio" is switched on there
             A_VOL_UP, A_VOL_DOWN -> {
                 val d = if (intent.action == A_VOL_UP) step else -step
-                if (Remote.local) LocalPlayer.setPhoneVolume(LocalPlayer.phoneVolume() + d) else Remote.adjustVolume(d)
+                if (Remote.local) LocalPlayer.setPhoneVolume(LocalPlayer.phoneVolume() + d) else if (s.audioOn) Remote.adjustVolume(d)
             }
-            A_MUTE -> if (Remote.local) LocalPlayer.togglePhoneMute() else Remote.setMuted(!s.volume.muted)
+            A_MUTE -> if (Remote.local) LocalPlayer.togglePhoneMute() else if (s.audioOn) Remote.setMuted(!s.volume.muted)
             A_LUCKY -> Remote.lucky()
             A_SLEEP -> Remote.setSleep(if (s.sleepLeft > 0) 0 else 30)     // on, or off again
             A_PAUSE_OTHERS -> Remote.pauseOthers()
@@ -152,7 +153,7 @@ object Widgets {
         val app = ctx.applicationContext
         scope.launch {
             Remote.state
-                .map { s -> listOf(s.now?.title, s.now?.artist, s.now?.art, s.now?.playing, s.now?.liked, s.volume.percent, s.volume.muted, s.source, s.online, s.ytm, Remote.local, s.queue) }
+                .map { s -> listOf(s.now?.title, s.now?.artist, s.now?.art, s.now?.playing, s.now?.liked, s.volume.percent, s.volume.muted, s.source, s.online, s.ytm, Remote.local, s.queue, s.parts) }
                 .distinctUntilChanged()
                 .collect { if (any(app)) render(app) }
         }
@@ -183,7 +184,7 @@ object Widgets {
         WidgetKind.UpNext to UpNextWidget::class.java,
     )
 
-    /** YTM Beacon's status as the computer reports it (null: not reachable or not asked yet). */
+    /** The Discord status as the computer reports it (null: not reachable or not asked yet). */
     @Volatile var beacon: BeaconStatus? = null
 
     fun refreshBeacon(ctx: Context) {
@@ -259,8 +260,9 @@ object Widgets {
             R.id.artist,
             when {
                 has -> now!!.artist
-                !s.configured && !Remote.local -> "Open Pocketfader to connect"
-                else -> "Tap to open Pocketfader"
+                !s.configured && !Remote.local -> "Open YTM Starcast to connect"
+                !Remote.local && !s.remoteOn -> "The YouTube Music remote is off"
+                else -> "Tap to open YTM Starcast"
             },
         )
         val c = art.cover
@@ -345,10 +347,19 @@ object Widgets {
 
     private fun volume(ctx: Context, v: RemoteViews, s: RemoteState) {
         val phone = Remote.local
-        val pct = if (phone) LocalPlayer.phoneVolume() else s.volume.percent
-        val muted = !phone && s.volume.muted
-        v.setTextViewText(R.id.label, if (phone) "Phone volume" else if (s.volume.device.isNotBlank()) s.volume.device else "Computer volume")
-        v.setTextViewText(R.id.percent, if (!phone && !s.volume.available) "–" else if (muted) "Muted" else "$pct%")
+        val off = !phone && !s.audioOn       // "Computer audio" is switched off on the computer
+        val pct = if (phone) LocalPlayer.phoneVolume() else if (off) 0 else s.volume.percent
+        val muted = !phone && !off && s.volume.muted
+        v.setTextViewText(
+            R.id.label,
+            when {
+                phone -> "Phone volume"
+                off -> "Computer audio is off"
+                s.volume.device.isNotBlank() -> s.volume.device
+                else -> "Computer volume"
+            },
+        )
+        v.setTextViewText(R.id.percent, if (!phone && (off || !s.volume.available)) "–" else if (muted) "Muted" else "$pct%")
         v.setProgressBar(R.id.level, 100, if (muted) 0 else pct, false)
         v.setImageViewResource(R.id.mute_icon, if (muted || pct == 0) R.drawable.ic_w_mute else R.drawable.ic_w_vol_up)
         v.setOnClickPendingIntent(R.id.mute, pi(ctx, WidgetActions.A_MUTE))

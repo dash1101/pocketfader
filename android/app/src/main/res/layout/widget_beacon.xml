@@ -2,10 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="10dp" android:paddingEnd="10dp">
     <FrameLayout android:layout_width="46dp" android:layout_height="46dp">
         <ImageView android:id="@+id/b_dot_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_circle" android:contentDescription="@null" />
-        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_w_discord" android:contentDescription="Discord presence" />
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_w_discord" android:contentDescription="Discord status" />
     </FrameLayout>
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="11.5sp" android:singleLine="true" android:text="Discord presence" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="11.5sp" android:singleLine="true" android:text="Discord status" />
         <TextView android:id="@+id/b_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFF2F3F7" android:textSize="15sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="end" android:text="Checking…" />
         <TextView android:id="@+id/b_song" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFA9ACB6" android:textSize="12sp" android:singleLine="true" android:ellipsize="end" />
     </LinearLayout>

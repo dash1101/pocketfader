@@ -15,3 +15,5 @@ config.json
 local.properties
 *.apk
 *.keystore
+*.jks
+*.p12

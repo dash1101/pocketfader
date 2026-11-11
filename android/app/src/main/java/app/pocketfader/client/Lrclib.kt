@@ -16,7 +16,7 @@ object Lrclib {
         return try {
             c.connectTimeout = 10000
             c.readTimeout = 12000
-            c.setRequestProperty("User-Agent", "Pocketfader (https://github.com/dash1101/pocketfader)")
+            c.setRequestProperty("User-Agent", "YTM Starcast (https://github.com/dash1101/ytm-starcast)")
             if (c.responseCode != 200) null else c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
         } catch (e: Exception) {
             null

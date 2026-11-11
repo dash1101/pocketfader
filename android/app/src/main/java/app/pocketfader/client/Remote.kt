@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
 
@@ -37,7 +38,13 @@ data class RemoteState(
     val canSleep: Boolean = false,
     val sleepLeft: Int = 0,               // seconds until playback is paused by the sleep timer (0 = none)
     val sleepAt: Long = 0L,               // SystemClock.elapsedRealtime() when sleepLeft was read
-)
+    val parts: Parts? = null,             // the computer's part switches; null: an older computer without them (all on)
+) {
+    /** The YouTube Music remote is switched on on the computer (always, for a computer without part switches). */
+    val remoteOn: Boolean get() = parts?.remote != false
+    /** The computer's volume, outputs and equalizer are switched on in the apps. */
+    val audioOn: Boolean get() = parts?.audio != false
+}
 
 /**
  * The one place that talks to the server. The Activity and the media service both observe
@@ -62,6 +69,7 @@ object Remote {
     @Volatile private var wantOutputs = false
     @Volatile private var fastUntil = 0L
     @Volatile private var settleUntil = 0L   // keep optimistic values for a moment so sliders don't jump back
+    @Volatile private var partsSettleUntil = 0L   // the same for a part just switched on or off
     private var tick = 0
     // Values you just changed (shuffle, loop, autoplay, like, play/pause) are held for a few seconds, so a poll that
     // lands before the computer has applied the change doesn't flip the button back and forth.
@@ -137,6 +145,12 @@ object Remote {
                 LocalPlayer.publish()
             }
         } else {
+            // The song can only go on there through the computer's YouTube Music remote. While that is switched off the
+            // computer would refuse it, so the phone keeps playing instead of stopping for nothing.
+            if (carryOver && !before.remoteOn) {
+                notify("The YouTube Music remote is switched off on the computer. Turn it on in Settings → Parts to continue the song there.")
+                return
+            }
             val cur = LocalPlayer.current()
             val at = LocalPlayer.position()
             LocalPlayer.pause()
@@ -232,28 +246,45 @@ object Remote {
         runCatching { pollOnce(a) }
     }
 
+    /**
+     * What plays on the computer. A computer whose YouTube Music remote is switched off may refuse to say; that counts as
+     * nothing playing (it is not a lost connection).
+     */
+    private fun ytmState(a: PfApi): JSONObject =
+        try {
+            a.get("/api/ytm/state")
+        } catch (e: ApiException) {
+            if (e.message == "part_off") JSONObject() else throw e
+        }
+
     private fun pollOnce(a: PfApi) {
         val t0 = SystemClock.elapsedRealtime()
+        // with the YouTube Music remote switched off there is nothing of it to show, so it isn't asked for
+        val wasOff = _state.value.parts?.remote == false
         val ytmStart = SystemClock.elapsedRealtime()
-        val ytm = a.get("/api/ytm/state")
+        val ytm = if (wasOff) JSONObject() else ytmState(a)
         // The server sampled the position about halfway through this request, not when it began.
         val sampled = (ytmStart + SystemClock.elapsedRealtime()) / 2
         // Volume, outputs and the equalizer change rarely, so ask for them every other poll
-        // (and always right after something was sent).
-        val full = tick++ % 2 == 0 || t0 < fastUntil
+        // (and always right after something was sent). With the remote off this is the poll's only request, so it is
+        // made every time: a poll that asks the computer nothing can't tell that it has gone away.
+        val full = tick++ % 2 == 0 || wasOff || t0 < fastUntil
         val st = if (full) a.get("/api/state") else null
         val outs = if (wantOutputs && full) runCatching { parseOutputs(a.get("/api/outputs")) }.getOrNull() else null
         val settling = SystemClock.elapsedRealtime() < settleUntil
-        val nowJson = ytm.optJSONObject("now")
+        val parts = if (st == null || SystemClock.elapsedRealtime() < partsSettleUntil) _state.value.parts else parseParts(st)
+        val remoteOn = parts?.remote != false
+        val nowJson = if (remoteOn) ytm.optJSONObject("now") else null
         val now = parseNow(nowJson)
         val loc = local
         if (!loc) _progress.value = Progress(parsePosition(nowJson), sampled)
-        if (!loc && ytm.str("source") == "ytm") Library.observeComputer(now, parsePosition(nowJson))
-        val queue = parseQueue(ytm)
-        val source = ytm.str("source")
-        val bridge = ytm.optBoolean("connected", false) && source == "ytm"
+        if (!loc && remoteOn && ytm.str("source") == "ytm") Library.observeComputer(now, parsePosition(nowJson))
+        val queue = if (remoteOn) parseQueue(ytm) else emptyList()
+        val source = if (remoteOn) ytm.str("source") else null
+        val bridge = remoteOn && ytm.optBoolean("connected", false) && source == "ytm"
         _state.update { cur ->
             cur.copy(
+                parts = parts,
                 configured = true,
                 online = true,
                 error = null,
@@ -267,7 +298,7 @@ object Remote {
                 eq = if (st == null) cur.eq else parseEq(st),
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
                 canLyrics = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
-                canBeacon = st?.optJSONObject("capabilities")?.optBoolean("beacon", false) ?: cur.canBeacon,
+                canBeacon = st?.optJSONObject("capabilities")?.let { it.optBoolean("beacon", false) || it.optBoolean("discord", false) } ?: cur.canBeacon,
                 canSleep = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
                 sleepLeft = if (loc) cur.sleepLeft else sleepFrom(st, cur).first,
                 sleepAt = if (loc) cur.sleepAt else sleepFrom(st, cur).second,
@@ -338,6 +369,44 @@ object Remote {
 
     fun setServerPref(key: String, value: Boolean) {
         runApi { it.post("/api/prefs", JSONObject().put(key, value)) }
+    }
+
+    // ---- parts (each part of YTM Starcast has its own switch on the computer)
+
+    /**
+     * Switches one part on or off on the computer. [key]: "remote", "discord", "refine" or "audio". The change shows at
+     * once; if the computer refuses it, the switch goes back and a short message says why.
+     */
+    suspend fun setPart(key: String, on: Boolean) {
+        val a = api ?: return
+        val before = _state.value.parts ?: Parts()
+        partsSettleUntil = SystemClock.elapsedRealtime() + 4000
+        _state.update { it.copy(parts = before.withPart(key, on)) }
+        // The request runs on this object's own scope, not the caller's: the change shows at once, and that can take away
+        // the screen that asked for it ("Turn it on" makes way for the player). Leaving that screen must not count as a
+        // failure, so only the wait below is given up then; the switch itself goes on.
+        scope.launch {
+            try {
+                val r = a.post("/api/parts", JSONObject().put(key, on), 8000)
+                parseParts(r)?.let { p -> _state.update { it.copy(parts = p) } }
+                // a poll that was already on its way could still carry the old value
+                partsSettleUntil = SystemClock.elapsedRealtime() + 1500
+            } catch (e: Exception) {
+                partsSettleUntil = 0L
+                _state.update { it.copy(parts = before) }
+                notify("Couldn't switch that: ${e.friendly()}")
+            }
+            boost()
+            scope.launch { runCatching { pollOnce(a) } }
+        }.join()
+    }
+
+    /** Asks the computer for its part switches now (an older computer has none; then nothing changes). */
+    suspend fun refreshParts() {
+        val a = api ?: return
+        val p = withContext(Dispatchers.IO) { runCatching { parseParts(a.get("/api/parts", 6000)) }.getOrNull() } ?: return
+        if (SystemClock.elapsedRealtime() < partsSettleUntil) return
+        _state.update { it.copy(parts = p) }
     }
 
     /** Pauses every other player that is playing on the computer. */
@@ -618,9 +687,23 @@ object Remote {
         return parseLyrics(need().get(q.toString(), 25000))
     }
 
-    // ---- Discord presence (YTM Beacon, relayed by the computer; the phone never talks to Beacon itself)
+    // ---- Discord status (the computer talks to Discord; the phone only asks the computer)
 
     fun beaconStatus(): BeaconStatus = parseBeacon(need().get("/api/beacon", 6000), SystemClock.elapsedRealtime())
+
+    /**
+     * Moves over from the old YTM Beacon app: the computer takes its settings, removes it and shows the status itself.
+     * Returns whether it worked and the computer's own words about it. (Can take a while: the computer waits for the old app
+     * to close.)
+     */
+    fun beaconMigrate(): Pair<Boolean, String> =
+        try {
+            val r = need().post("/api/beacon/migrate", JSONObject(), 120000)
+            val ok = r.optBoolean("ok", !r.has("error"))
+            ok to (r.str("message") ?: if (ok) "Done." else "Couldn't move over (${r.str("error") ?: "no reason given"}).")
+        } catch (e: ApiException) {
+            false to (e.body?.str("message") ?: "Couldn't move over: ${e.friendly()}")
+        }
 
     fun beaconVisibility(show: Boolean, minutes: Int? = null) {
         val body = JSONObject().put("action", if (show) "show" else "hide")
@@ -628,13 +711,18 @@ object Remote {
         need().post("/api/beacon/visibility", body, 8000)
     }
 
-    /** action: "install" | "update" | "start" (the computer downloads the latest release and installs it). */
+    /**
+     * action: "install" | "update" | "start". Only older computers (which relayed YTM Beacon) did this; nothing in the app
+     * offers it any more, and newer computers answer that there is nothing to install.
+     */
     fun beaconInstall(action: String) {
         need().post("/api/beacon/install", JSONObject().put("action", action), 8000)
     }
 
     fun beaconSetting(key: String, value: Any) {
-        need().post("/api/beacon/settings", JSONObject().put(key, value), 8000)
+        // a list (the never-show words) goes as a JSON array; org.json would otherwise write it as one string
+        val v: Any = if (value is List<*>) org.json.JSONArray(value) else value
+        need().post("/api/beacon/settings", JSONObject().put(key, v), 8000)
     }
 
     // ---- app updates (the computer finds the release, the phone just asks it)
@@ -719,7 +807,7 @@ object Remote {
         val a = PfApi(cfg)
         val info = a.get("/api/info", 6000)
         val st = a.get("/api/state", 6000)   // also proves the token / Access credentials are accepted
-        val name = info.optString("name", "Pocketfader")
+        val name = info.optString("name", "YTM Starcast").ifBlank { "YTM Starcast" }.replaceFirstChar { it.uppercase() }
         val v = info.optString("version")
         val dev = st.optJSONObject("volume")?.optString("device").orEmpty()
         return buildString {
@@ -737,7 +825,8 @@ internal fun ytmErrorText(code: String): String {
         c == "extension_offline" -> "YouTube Music isn't open on the computer."
         c == "extension_timeout" || c == "timeout" -> "YouTube Music didn't answer in time. Try again."
         c.startsWith("no_shuffle_button") || c.startsWith("no_repeat_button") ->
-            "Couldn't find that button on YouTube Music. In your browser, reload the Pocketfader extension, then refresh the YouTube Music tab."
+            "Couldn't find that button on YouTube Music. In your browser, reload the YTM Starcast extension, then refresh the YouTube Music tab."
+        c == "part_off" -> "The YouTube Music remote is switched off. Turn it on in Settings → Parts."
         c == "autoplay_off_while_looping" -> "Turn loop off first: YouTube Music ignores autoplay while the queue is looping."
         c == "autoplay_not_applied" -> "YouTube Music didn't change autoplay. Try once more, or switch it in the browser."
         c == "no_autoplay_toggle" -> "Couldn't find YouTube Music's autoplay switch."
@@ -756,7 +845,7 @@ internal fun ytmErrorText(code: String): String {
         c == "nothing_to_pick" -> "Couldn't find something to play."
         c == "artist_not_found" -> "Couldn't find that artist on YouTube Music."
         c == "no_lyrics" -> "No lyrics for this song."
-        c == "unknown_type" -> "The YouTube Music tab runs an older Pocketfader extension: reload it in the browser."
+        c == "unknown_type" -> "The YouTube Music tab runs an older version of the extension: reload it in the browser."
         c.isEmpty() -> "Something went wrong."
         else -> c.replace('_', ' ').replaceFirstChar { it.uppercase() }.take(160)
     }

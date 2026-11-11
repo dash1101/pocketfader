@@ -4,7 +4,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from pocketfader.audio import AudioFetcher, parse_range
+from starcast.audio import AudioFetcher, parse_range
 
 from .test_server import Base
 

@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from pocketfader import __version__
+from starcast import __version__
 
 
 class VersionTests(unittest.TestCase):

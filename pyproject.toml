@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pocketfader"
-version = "0.1.0a15"
-description = "Control your computer's volume and music from your phone. Includes a remote for YouTube Music."
+name = "ytm-starcast"
+version = "0.2.0a1"
+description = "YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -23,16 +23,16 @@ windows = [
 ]
 
 [project.scripts]
-pocketfader = "pocketfader.cli:main"
+ytm-starcast = "starcast.cli:main"
 
 [project.gui-scripts]
-pocketfader-gui = "pocketfader.gui:main"
+ytm-starcast-gui = "starcast.gui:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["pocketfader*"]
+include = ["starcast*"]
 
 [tool.setuptools.package-data]
-pocketfader = ["static/*"]
+starcast = ["static/*"]

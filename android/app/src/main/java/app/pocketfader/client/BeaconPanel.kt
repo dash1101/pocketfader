@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
@@ -48,18 +48,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * State of the Discord presence card. The computer (never the phone) talks to YTM Beacon; this just asks the
- * computer. What you tap is shown at once and kept for a few seconds so a poll that lands before the change has
- * been applied can't flip the control back; if the change fails, the old value returns with a short message.
+ * State of the Discord status card. The computer (never the phone) talks to Discord; this just asks the computer.
+ * What you tap is shown at once and kept for a few seconds so a poll that lands before the change has been applied
+ * can't flip the control back; if the change fails, the old value returns with a short message.
  */
 object BeaconModel {
     var status by mutableStateOf<BeaconStatus?>(null)
+        private set
+    /** The computer's answer to the last "Move over": whether it worked, and its message (shown in the card). */
+    var migrateResult by mutableStateOf<Pair<Boolean, String>?>(null)
+        private set
+    var migrating by mutableStateOf(false)
         private set
     private var failures = 0
     private var heldVisible: Triple<Boolean, Int, Long>? = null          // visible, snoozeSec, until
@@ -90,7 +97,7 @@ object BeaconModel {
         try {
             val s = withContext(Dispatchers.IO) { Remote.beaconStatus() }
             if (s.headline == "unreachable") failures++ else failures = 0
-            // A restart of Beacon makes it vanish for a moment; only call it unreachable after two misses in a row.
+            // A restart on the computer makes it vanish for a moment; only call it unreachable after two misses in a row.
             if (s.headline == "unreachable" && failures < 2 && status?.reachable == true) return
             status = applyHeld(s)
         } catch (e: Exception) {
@@ -106,13 +113,16 @@ object BeaconModel {
         try {
             withContext(Dispatchers.IO) { Remote.beaconVisibility(show, minutes) }
             refresh()
+            // "Show" also switches the Discord status part back on (one switch), so the Parts page follows
+            if (show && Remote.state.value.parts?.discord == false) Remote.refreshParts()
         } catch (e: Exception) {
             heldVisible = null
             status = prev
-            Remote.notify("Couldn't change Discord presence: ${e.friendly()}")
+            Remote.notify("Couldn't change your Discord status: ${e.friendly()}")
         }
     }
 
+    /** Only older computers could install anything; nothing in the app calls this any more. */
     suspend fun install(action: String) {
         val prev = status ?: return
         status = prev.copy(install = prev.install.copy(jobState = "running", jobMessage = "Working…"))
@@ -126,6 +136,26 @@ object BeaconModel {
     }
 
     val installing: Boolean get() = status?.install?.jobState == "running"
+
+    // Outlives the screens: the computer finishes a move even when the page that started it is left, and the answer
+    // shown afterwards has to be the computer's, not "cancelled".
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CrashLog.quiet)
+
+    /** Moves over from the old YTM Beacon app (the computer does the work) and keeps the computer's answer to show. */
+    fun migrate() {
+        if (migrating) return
+        migrating = true
+        migrateResult = null
+        scope.launch {
+            migrateResult = try {
+                withContext(Dispatchers.IO) { Remote.beaconMigrate() }
+            } catch (e: Exception) {
+                false to "Couldn't move over: ${e.friendly()}"
+            }
+            migrating = false
+            refresh()
+        }
+    }
 
     suspend fun setSetting(key: String, value: Any) {
         val prev = status ?: return
@@ -151,6 +181,7 @@ private fun BeaconSettings.withValue(key: String, value: Any): BeaconSettings = 
     "showAlbumArt" -> copy(showAlbumArt = value as Boolean)
     "pauseTimeoutMinutes" -> copy(pauseTimeoutMinutes = value as Int)
     "statusDisplay" -> copy(statusDisplay = value as String)
+    "hideMatching" -> copy(hideMatching = (value as? List<*>)?.filterIsInstance<String>() ?: hideMatching)
     else -> this
 }
 
@@ -159,6 +190,10 @@ fun beaconSummary(s: BeaconStatus): String = headlineText(s).first.substringBefo
 
 private enum class Tone { Good, Warn, Bad, Off }
 
+/**
+ * What the computer's headline means, in words. Older computers relayed the separate YTM Beacon app, so a few states read
+ * differently there ([BeaconStatus.builtIn] is false): the fix is then to update YTM Starcast on the computer.
+ */
 private fun headlineText(s: BeaconStatus): Pair<String, Tone> = when (s.headline) {
     "showing" -> "Showing on Discord." to Tone.Good
     "waiting" -> "Getting ready to show…" to Tone.Good
@@ -168,11 +203,17 @@ private fun headlineText(s: BeaconStatus): Pair<String, Tone> = when (s.headline
     "paused-hidden" -> "Not shown while paused. Turn on “Show when paused” to keep it." to Tone.Warn
     "paused-timeout" -> "Hidden because the song was paused a while. It returns when you press play." to Tone.Warn
     "filtered" -> "Not shown: this song matches one of your never-show words." to Tone.Warn
+    "ad" -> "An advert is playing. Nothing is shown until the music is back." to Tone.Warn
+    "beacon-running" -> "The old YTM Beacon app is still running on the computer, so YTM Starcast isn't showing your status." to Tone.Warn
     "extension-quiet" -> "The browser extension went quiet. Check that YouTube Music is open in your browser." to Tone.Warn
-    "extension-missing" -> "The YTM Beacon browser extension isn't set up yet. Install it on the computer." to Tone.Bad
+    "extension-missing" ->
+        (if (s.builtIn) "The YTM Starcast browser extension hasn't been heard from yet. Add it to your browser on the computer and open YouTube Music."
+        else "The YTM Beacon browser extension isn't set up yet. Install it on the computer.") to Tone.Bad
     "discord-down" -> "Can't reach Discord. Open the Discord app on the computer." to Tone.Bad
-    "unsupported" -> "YTM Beacon on the computer is out of date. Update it there." to Tone.Bad
-    else -> "YTM Beacon isn't running on the computer. Start it there." to Tone.Bad
+    "unsupported" -> "The YTM Beacon app on the computer is out of date. Update YTM Starcast on the computer: it shows your Discord status itself." to Tone.Bad
+    else ->
+        (if (s.builtIn) "Discord status isn't answering on the computer right now."
+        else "YTM Beacon isn't running on the computer. Update YTM Starcast on the computer: it shows your Discord status itself.") to Tone.Bad
 }
 
 private fun Context.lifecycleOwner(): LifecycleOwner? {
@@ -213,14 +254,15 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
     LaunchedEffect(resumed, online) {
         if (resumed && online) while (true) {
             BeaconModel.refresh()
-            delay(if (BeaconModel.installing) 1500 else 5000)
+            delay(if (BeaconModel.installing || BeaconModel.migrating) 1500 else 5000)
         }
     }
 
     val st = BeaconModel.status
     var showSettings by rememberSaveable { mutableStateOf(false) }
     val clock = rememberClock()
-    val usable = online && st != null && st.reachable && st.headline != "unsupported"
+    // while the old YTM Beacon app still runs, Discord is its job: the switches would change nothing, so they wait
+    val usable = online && st != null && st.reachable && st.headline != "unsupported" && !st.beaconApp.running
 
     Card(
         modifier.fillMaxWidth(),
@@ -230,7 +272,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Chat, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Text("Discord presence", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text("Discord status", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium)
                 if (st != null) Dot(headlineText(st).second)
             }
 
@@ -250,7 +292,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
                     )
                 }
 
-                InstallRow(st, online)
+                MoveOver(st, online)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
@@ -274,7 +316,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((label, mins) in listOf("30 min" to 30, "1 hour" to 60, "3 hours" to 180)) {
                             FilterChip(
-                                selected = false, enabled = usable,
+                                selected = false, shape = chipShape(false), enabled = usable,
                                 onClick = { scope.launch { BeaconModel.setVisibility(false, mins) } },
                                 label = { Text(label) },
                             )
@@ -292,10 +334,56 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
 
                 val ago = ((clock.value - st.receivedAt) / 1000).coerceAtLeast(0)
                 Text(
-                    if (!online) "Can't reach the computer. Last updated ${ago} s ago." else "Updated ${ago} s ago${if (st.version.isNotBlank()) " · YTM Beacon ${st.version}" else ""}",
+                    if (!online) "Can't reach the computer. Last updated ${ago} s ago." else "Updated ${ago} s ago",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/**
+ * The old YTM Beacon app is still on the computer: a short word about it and "Move over", which asks the computer to take
+ * its settings, remove it and show the status itself. The computer's answer stays in view afterwards.
+ */
+@Composable
+private fun MoveOver(st: BeaconStatus, online: Boolean) {
+    var confirm by remember { mutableStateOf(false) }
+    val app = st.beaconApp
+    val result = BeaconModel.migrateResult
+    val busy = BeaconModel.migrating
+    if (!app.canMigrate && !busy && result == null) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (app.canMigrate) {
+            Text(
+                "The old YTM Beacon app" + (app.version?.let { " ($it)" } ?: "") + " is still on the computer. YTM Starcast shows your " +
+                    "Discord status itself now. Move over to bring your YTM Beacon settings across and remove the old app.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (busy) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+        result?.let { (ok, message) ->
+            Text(
+                message, style = MaterialTheme.typography.bodySmall,
+                color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+        }
+        if (app.canMigrate || busy) {
+            Button(enabled = online && !busy && app.canMigrate, onClick = { confirm = true }) {
+                Text(if (busy) "Moving over…" else "Move over")
+            }
+        }
+    }
+    if (confirm) {
+        ConfirmDialog(
+            "Move over from YTM Beacon?",
+            "YTM Starcast takes your YTM Beacon settings, then removes the YTM Beacon app from the computer (its settings file is " +
+                "kept). From then on YTM Starcast shows your music on Discord itself.",
+            "Move over",
+            onDismiss = { confirm = false },
+        ) {
+            confirm = false
+            BeaconModel.migrate()
         }
     }
 }
@@ -354,6 +442,47 @@ private fun BeaconSettingsList(s: BeaconSettings, enabled: Boolean) {
                 )
             }
         }
+        // only when the computer sends the list: older ones neither show nor accept it
+        if (s.hideMatchingKnown) {
+            NeverShowWords(s.hideMatching, enabled) { words -> scope.launch { BeaconModel.setSetting("hideMatching", words) } }
+        }
+    }
+}
+
+/** Words that keep a song off Discord: tap a word to remove it, "Add a word" for a new one. The whole list is sent each time. */
+@Composable
+private fun NeverShowWords(words: List<String>, enabled: Boolean, onChange: (List<String>) -> Unit) {
+    var adding by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Never show songs matching", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "A song whose title, artist or album contains one of these words isn't shown on Discord.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (words.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (w in words) {
+                    FilterChip(
+                        selected = true, shape = chipShape(true), enabled = enabled,
+                        onClick = { onChange(words.filter { it != w }) },
+                        label = { Text(w) },
+                        trailingIcon = { Icon(Icons.Filled.Close, "Remove $w", Modifier.size(16.dp)) },
+                    )
+                }
+            }
+        }
+        TextButton(onClick = { adding = true }, enabled = enabled && words.size < 50) { Text("Add a word") }
+    }
+    if (adding) {
+        TextPrompt(
+            "Never show songs matching", "", "Word or phrase", "Add",
+            onDismiss = { adding = false },
+        ) { text ->
+            adding = false
+            // the same clean-up the computer does: trimmed, lower case, no repeats
+            val w = text.trim().lowercase().take(80)
+            if (w.isNotEmpty() && w !in words) onChange(words + w)
+        }
     }
 }
 
@@ -365,36 +494,5 @@ private fun BRow(title: String, subtitle: String?, checked: Boolean, enabled: Bo
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
-    }
-}
-
-/** Install, start or update YTM Beacon on the computer (always the newest release; the computer checks it). */
-@Composable
-private fun InstallRow(st: BeaconStatus, online: Boolean) {
-    val scope = rememberCoroutineScope()
-    val i = st.install
-    val running = i.jobState == "running"
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (running) {
-            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-        if (i.jobMessage.isNotBlank() && i.jobState != "idle") {
-            Text(i.jobMessage, style = MaterialTheme.typography.bodySmall,
-                color = if (i.jobState == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            when {
-                !st.reachable && !i.installed && i.canInstall ->
-                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("install") } }) {
-                        Text("Install YTM Beacon" + (i.latest?.let { " $it" } ?: ""))
-                    }
-                !st.reachable && i.installed && i.canStart ->
-                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("start") } }) { Text("Start YTM Beacon") }
-                st.reachable && (i.updateAvailable || st.headline == "unsupported") && i.canInstall ->
-                    Button(enabled = online && !running, onClick = { scope.launch { BeaconModel.install("update") } }) {
-                        Text("Update YTM Beacon" + (i.latest?.let { " to $it" } ?: ""))
-                    }
-            }
-        }
     }
 }
