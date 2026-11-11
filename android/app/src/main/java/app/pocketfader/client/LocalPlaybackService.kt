@@ -67,10 +67,20 @@ class LocalPlaybackService : MediaSessionService() {
         }
     }
 
-    /** Swiping the app away stops the service only when nothing is playing. */
+    /**
+     * Swiping the app away stops the music, as closing an app is expected to; the queue and the place in the song are
+     * kept. With "Keep playing when the app is swiped away" on, music that is playing carries on instead.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         val p = session?.player
-        if (p == null || !p.playWhenReady || p.mediaItemCount == 0) stopSelf()
+        val playing = p != null && p.playWhenReady && p.mediaItemCount > 0
+        if (playing && Settings.prefs.value.keepPlayingClosed) return
+        // no lingering in the foreground this time: the notification goes with the app
+        played = false
+        pausedAt = 0L
+        handler.removeCallbacks(letGo)
+        try { LocalPlayer.closedByUser() } catch (e: Exception) { CrashLog.note("stopping the music when the app was swiped away", e) }
+        stopSelf()
     }
 
     override fun onDestroy() {

@@ -56,6 +56,7 @@ data class Prefs(
     val volumeKeys: Boolean = true,          // phone volume buttons control the computer
     val volumeStep: Int = 5,                 // percent per press
     val haptics: Boolean = true,
+    val keepPlayingClosed: Boolean = false,  // music on this device carries on after the app is swiped away
     // lyrics
     val lyricsRoman: Boolean = false,
     val lyricsTranslation: Boolean = false,
@@ -118,6 +119,7 @@ object Settings {
             pixelShiftMin = i("pixelShiftMin", d.pixelShiftMin), pixelShiftDp = i("pixelShiftDp", d.pixelShiftDp),
             notification = b("notification", d.notification), volumeKeys = b("volumeKeys", d.volumeKeys),
             volumeStep = i("volumeStep", d.volumeStep), haptics = b("haptics", d.haptics),
+            keepPlayingClosed = b("keepPlayingClosed", d.keepPlayingClosed),
             lyricsRoman = b("lyricsRoman", d.lyricsRoman), lyricsTranslation = b("lyricsTranslation", d.lyricsTranslation),
             lyricsSize = i("lyricsSize", d.lyricsSize), lyricsSource = s("lyricsSource", d.lyricsSource), lyricsOffsetMs = i("lyricsOffsetMs", d.lyricsOffsetMs),
             lyricsAlign = s("lyricsAlign", d.lyricsAlign), lyricsSp = i("lyricsSp", d.lyricsSp),
@@ -144,6 +146,7 @@ object Settings {
             .putInt("pixelShiftMin", p.pixelShiftMin).putInt("pixelShiftDp", p.pixelShiftDp)
             .putBoolean("notification", p.notification).putBoolean("volumeKeys", p.volumeKeys)
             .putInt("volumeStep", p.volumeStep).putBoolean("haptics", p.haptics)
+            .putBoolean("keepPlayingClosed", p.keepPlayingClosed)
             .putBoolean("lyricsRoman", p.lyricsRoman).putBoolean("lyricsTranslation", p.lyricsTranslation)
             .putInt("lyricsSize", p.lyricsSize).putString("lyricsSource", p.lyricsSource)
             .putInt("lyricsOffsetMs", p.lyricsOffsetMs)

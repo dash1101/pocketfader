@@ -278,6 +278,15 @@ object LocalPlayer {
     }
 
     fun pause() { exo?.pause() }
+
+    /** The app was swiped away: the music stops, and the queue and the place in the song are kept for next time. */
+    fun closedByUser() {
+        exo?.pause()
+        save()
+        // our own link to the playback service would keep it alive
+        controller?.let { runCatching { androidx.media3.session.MediaController.releaseFuture(it) } }
+        controller = null
+    }
     fun next() { player().let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }
     fun prev() { player().seekToPrevious() }
     fun seek(sec: Double) { player().seekTo((sec * 1000).toLong().coerceAtLeast(0)) ; publish() }
