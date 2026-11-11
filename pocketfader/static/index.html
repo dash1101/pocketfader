@@ -860,7 +860,7 @@
     <button class="railclose" id="railclose" title="Close"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></button>
     <div id="npbar">
       <img id="npbar-art"><div class="t" id="npbar-t"></div>
-      <button id="npbar-pp"><svg id="npbar-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <button id="npbar-pp" aria-label="Play"><svg id="npbar-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
     </div>
     <div class="np">
       <div class="raildrag"></div>
@@ -884,9 +884,9 @@
         <div class="times"><span id="tpos">0:00</span><span id="tdur">0:00</span></div>
       </div>
       <div class="transport">
-        <button id="r-prev" disabled><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
-        <button id="r-pp" disabled><svg id="pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
-        <button id="r-next" disabled><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+        <button id="r-prev" aria-label="Previous" title="Previous" disabled><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+        <button id="r-pp" aria-label="Play" disabled><svg id="pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="r-next" aria-label="Next" title="Next" disabled><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
       </div>
       <div class="ytvol">
         <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.06A4.5 4.5 0 0016.5 12zM14 3.23v2.06a7 7 0 010 13.42v2.06a9 9 0 000-17.54z"/></svg>
@@ -910,9 +910,9 @@
   <img id="mini-art">
   <div class="mm"><div id="mini-t">Nothing playing</div><div id="mini-s"></div></div>
   <span id="mini-time"></span>
-  <button id="mini-prev" class="mbtn"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
-  <button id="mini-pp"><svg id="mini-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
-  <button id="mini-next" class="mbtn"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+  <button id="mini-prev" class="mbtn" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+  <button id="mini-pp" aria-label="Play"><svg id="mini-pp-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+  <button id="mini-next" class="mbtn" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
 </div>
 
 <div id="askwrap"><div class="ask">
@@ -3247,7 +3247,9 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
   // ---- play button shape follows play/pause ----
   const pp = $('#r-pp'), ppIcon = $('#pp-icon');
   const syncPlay = () => { const d = ppIcon.firstElementChild && ppIcon.firstElementChild.getAttribute('d'); const playing = d === PAUSE;
-    pp.classList.toggle('pl', playing); document.documentElement.dataset.playing = playing ? '1' : '0'; };
+    pp.classList.toggle('pl', playing); document.documentElement.dataset.playing = playing ? '1' : '0';
+    // the play / pause buttons say what pressing them does, for screen readers
+    for (const id of ['#r-pp', '#mini-pp', '#npbar-pp']) { const b = $(id); if (b) b.setAttribute('aria-label', playing ? 'Pause' : 'Play'); } };
   new MutationObserver(syncPlay).observe(ppIcon, { subtree: true, attributes: true, attributeFilter: ['d'] });
   syncPlay();
 
