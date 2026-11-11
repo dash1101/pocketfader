@@ -186,6 +186,12 @@
   .recentchip { height:34px; padding:0 14px; border-radius:17px; border:1px solid var(--line); background:var(--card); color:var(--text);
                 font-size:13.5px; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .recentchip:hover { border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  /* what a search looks for: one row that scrolls sideways on a narrow screen instead of wrapping */
+  .searchfilters { display:flex; gap:8px; margin:0 0 12px; overflow-x:auto; scrollbar-width:none; }
+  .searchfilters::-webkit-scrollbar { display:none; }
+  .searchfilters .recentchip { flex:none; }
+  .searchfilters .recentchip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:#0a0512; font-weight:700; }
+  .li.artist .art, .li.artist .thumb .playover { border-radius:50%; }
   .homeempty { grid-column:1 / -1; text-align:center; padding:48px 20px; max-width:460px; margin:0 auto; }
   .homeempty .t { font-size:20px; font-weight:800; margin-bottom:8px; }
   .homeempty .d { color:var(--dim); font-size:14px; line-height:1.5; margin-bottom:20px; }
@@ -1290,6 +1296,7 @@ function listItem(item, opts) {
   li.append(thumbBox(item.thumb), meta);
   li.addEventListener('click', () => activate(item));
   attachContext(li, item);
+  if (item.kind === 'artist') li.classList.add('artist');
   if (item.kind === 'song') {
     const more = el('button', 'more'); more.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
     more.addEventListener('click', e => { e.stopPropagation(); openSheet(item); });
@@ -1619,16 +1626,40 @@ function rememberSearch(q) {
   const k = q.toLowerCase();
   lsSet('vmr-recent', [q, ...recentSearches().filter(x => x.toLowerCase() !== k)].slice(0, 12));
 }
+// What a search looks for: everything, or one kind. The choice stays while you search for other things.
+const SEARCH_FILTERS = [['', 'All', 'results'], ['songs', 'Songs', 'songs'], ['artists', 'Artists', 'artists'],
+                        ['albums', 'Albums', 'albums'], ['playlists', 'Playlists', 'playlists']];
+const FILTER_KIND = { songs:'song', artists:'artist', albums:'album', playlists:'playlist' };
+let searchFilter = '', searchSeq = 0;
+function filterBar(q) {
+  const bar = el('div', 'searchfilters'); bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Show');
+  for (const [id, label] of SEARCH_FILTERS) {
+    const c = el('button', 'recentchip'); c.type = 'button'; c.textContent = label;
+    c.setAttribute('aria-pressed', String(searchFilter === id));
+    c.addEventListener('click', () => { if (searchFilter !== id) { searchFilter = id; doSearch(q); } });
+    bar.appendChild(c);
+  }
+  return bar;
+}
 async function doSearch(q) {
   if (!q) return; const res = $('#searchres'); if (!res) return;
   const box = $('#searchbox'); if (box && box.value.trim() !== q) box.value = q;
-  res.innerHTML = '<div class="spinner"></div>';
-  const r = await ytm({ type:'search', query:q }, true);
-  if (view !== 'search') return;
-  res.innerHTML = '';
-  const items = (r && r.items) || [];
+  const seq = ++searchSeq, filter = searchFilter;
+  res.innerHTML = ''; res.appendChild(filterBar(q));
+  const spin = el('div', 'spinner'); res.appendChild(spin);
+  const body = { type:'search', query:q }; if (filter) body.filter = filter;
+  const r = await ytm(body, true);
+  // a newer search (or another filter) was asked for meanwhile: this answer is out of date
+  if (view !== 'search' || seq !== searchSeq) return;
+  spin.remove();
+  let items = (r && r.items) || [];
+  // an older extension ignores the filter and answers with everything: keep the kind that was asked for
+  if (filter) items = items.filter(it => it.kind === FILTER_KIND[filter]);
   if (r && r.error) { res.appendChild(emptyMsg(ytmError(r.error) + '.')); return; }
-  if (!items.length) { res.appendChild(emptyMsg('No results for \u201c' + q + '\u201d.')); return; }
+  if (!items.length) {
+    const what = (SEARCH_FILTERS.find(f => f[0] === filter) || SEARCH_FILTERS[0])[2];
+    res.appendChild(emptyMsg('No ' + what + ' for \u201c' + q + '\u201d.')); return;
+  }
   rememberSearch(q);   // only searches that found something
   for (const it of items) res.appendChild(listItem(it));
 }
