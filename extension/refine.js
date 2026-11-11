@@ -30,7 +30,8 @@
   // ------------------------------------------------------------------ settings
   const PREFS_KEY = "pocketfader.refine.v1";
   const SPEEDS_KEY = "pocketfader.refine.speeds";
-  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, speedMenu: true, keepPitch: true, dice: true, lyrics: true };
+  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, speedMenu: true, keepPitch: true, dice: true, lyrics: true,
+    songMenu: true };
   const readJSON = (k, d) => {
     try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v && typeof v === "object" ? v : d; } catch (e) { return d; }
   };
@@ -317,6 +318,10 @@
   .pf-tip.pf-open { opacity: 1; }
   [data-pf-wave] { opacity: 0 !important; }
   .pf-dice .pf-ico, .pf-lyr-wrap .pf-ico { display: grid; place-items: center; }
+  .pf-menu-item { display: flex; align-items: center; gap: 16px; height: 48px; padding: 0 16px; cursor: pointer; font-size: 14px;
+    color: var(--ytmusic-text-primary, #fff); font-family: inherit; border-top: 1px solid rgba(255,255,255,.08); }
+  .pf-menu-item:hover, .pf-menu-item:focus-visible { background: rgba(255,255,255,.1); outline: none; }
+  .pf-menu-item .pf-ico { display: grid; place-items: center; color: var(--pf-accent); }
   .pf-dice button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
   @keyframes pf-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .pf-ui, .pf-ui *, .pf-nav-btn { transition: none !important; animation: none !important; } }
@@ -895,6 +900,42 @@
     lyr.raf = requestAnimationFrame(() => setTimeout(lyrTick, 60)); // about 15 times a second is plenty
   }
 
+  // ------------------------------------------------------------------ YouTube Music's own song menu
+  // When YouTube Music opens a song's menu, it gets a "Make a playlist from this song" item. The song is the one the
+  // menu's own "Start radio" item points at, so menus that aren't about a song are left alone.
+  function menuSong(popup) {
+    for (const it of popup.querySelectorAll("ytmusic-menu-navigation-item-renderer, ytmusic-menu-service-item-renderer")) {
+      const d = it.data || {};
+      const ep = d.navigationEndpoint || d.serviceEndpoint || {};
+      const we = ep.watchEndpoint || ep.watchPlaylistEndpoint || {};
+      const m = /^RDAMVM([\w-]{11})$/.exec(we.playlistId || "");
+      if (m) return m[1];
+      if (we.videoId && /^RDAMVM/.test(we.playlistId || "")) return we.videoId;
+    }
+    return null;
+  }
+  function addMenuItem() {
+    if (!on("songMenu")) return;
+    for (const popup of document.querySelectorAll("ytmusic-menu-popup-renderer")) {
+      if (!popup.getClientRects().length || popup.querySelector(".pf-menu-item")) continue; // hidden, or done already
+      const vid = menuSong(popup);
+      if (!vid) continue;
+      const list = popup.querySelector("tp-yt-paper-listbox, #items") || popup;
+      const go = () => {
+        document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+        setTimeout(() => openMaker({ videoId: vid }), 60);
+      };
+      const item = h("div", { class: "pf-menu-item", role: "menuitem", tabindex: "0", onclick: go,
+        onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } },
+        h("span", { class: "pf-ico" }, icon(ICON.playlistAdd)), h("span", { text: "Make a playlist from this song" }));
+      list.append(item);
+    }
+  }
+  // a menu opens after a click (or Enter); look for one a moment later, which costs nothing when there isn't one
+  for (const type of ["click", "keyup"]) {
+    window.addEventListener(type, () => { if (on("songMenu")) { setTimeout(addMenuItem, 250); setTimeout(addMenuItem, 700); } }, { capture: true, passive: true });
+  }
+
   // ------------------------------------------------------------------ toast
   let toastEl = null, toastTimer = 0;
   function toast(text) {
@@ -944,6 +985,7 @@
       h("div", { class: "pf-sec", text: "Controls" }),
       sw("dice", "Something-you-might-like button", "In the player, next to repeat"),
       sw("lyrics", "Live lyrics button", "Time-synced lyrics from the Pocketfader app, next to the player"),
+      sw("songMenu", "In song menus", "\u201cMake a playlist from this song\u201d in YouTube Music's own \u22ee menus"),
       h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),
       h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
         "switch off anything that misbehaves. Settings stay in this browser. Pocketfader extension " + VERSION + "." }));
@@ -1076,10 +1118,12 @@
     else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
-  function openMaker() {
+  // `song` ({ videoId }) starts it from that song instead of the one playing (YouTube Music's song menu).
+  function openMaker(song) {
     closeMaker();
-    makerFrom = navBtn;
-    const np = API.nowPlaying() || {};
+    makerFrom = song ? null : navBtn;
+    const picked = !!(song && song.videoId);
+    const np = picked ? { videoId: song.videoId, title: song.title || "", artist: song.artist || "" } : API.nowPlaying() || {};
     const queue = API.readQueue().filter((q) => q.section === "queue");
     const st = { source: np.videoId ? "now" : queue.length ? "queue" : "liked", playlist: null, length: 50, fresh: true,
       results: [], keep: new Set(), round: 0, shown: [], lists: null, seeds: null, mine: null, gen: 0 };
@@ -1129,7 +1173,8 @@
       fresh.addEventListener("change", () => { st.fresh = fresh.checked; });
       frame("Make a playlist", "Built from YouTube Music's own radio for each song it starts from, ranked by what they have in common.",
         [h("div", { class: "pf-label", text: "Start from" }),
-          choice("now", "The song playing now", np.title ? np.title + (np.artist ? " · " + np.artist : "") : "Nothing is playing", !np.videoId),
+          choice("now", picked ? "The song you picked" : "The song playing now",
+            np.title ? np.title + (np.artist ? " · " + np.artist : "") : picked ? "From YouTube Music's menu" : "Nothing is playing", !np.videoId),
           choice("queue", "Your queue", queue.length ? queue.length + " songs" : "The queue is empty", !queue.length),
           choice("playlist", "One of your playlists", null),
           st.source === "playlist" ? pickList : null,
@@ -1176,6 +1221,10 @@
           if (st.source === "now") {
             // one song: its radio, then the radios of a few songs from it, for a wider mix
             await fetchOne(seeds[0], 1);
+            if (!np.title && lists[0]) { // a song picked from a menu: its name comes from its own radio
+              const me = lists[0].rows.find((r) => r.videoId === np.videoId);
+              if (me) { np.title = me.title; np.artist = me.artist; seeds[0].title = me.title; seeds[0].artist = me.artist; }
+            }
             const top = (lists[0] ? lists[0].rows : []).filter((r) => r.videoId !== np.videoId).slice(0, 15);
             const more = pickSeeds(top, Math.min(st.length >= 100 ? 6 : 4, top.length), false);
             seeds = seeds.concat(more);
