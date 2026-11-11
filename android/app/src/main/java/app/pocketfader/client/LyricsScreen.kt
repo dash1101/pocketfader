@@ -1,6 +1,14 @@
 package app.pocketfader.client
 
 import android.os.SystemClock
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +49,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -241,6 +251,9 @@ fun LazyListScope.lyricsItems(ui: LyricsUi, active: Int, prefs: Prefs, canLyrics
     }
 }
 
+/** How much larger the line being sung is drawn (the layout doesn't change, so nothing wraps or shifts). */
+private const val LYRIC_GROW = 0.05f
+
 private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs, base: Int, playing: Boolean) {
     val lines = r.lines
     val align = when (prefs.lyricsAlign) { "center" -> TextAlign.Center; "end" -> TextAlign.End; else -> TextAlign.Start }
@@ -248,30 +261,47 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
         item(key = "ly-$i") {
             val ln = lines[i]
             val isActive = r.synced && i == active
+            // The line being sung is drawn larger, not set larger: every line keeps one size and weight, so its words
+            // never move to a new row (and the lines below never jump) when its turn comes. The emphasis is a scale
+            // from the side the text is aligned to, the colour and the brightness.
+            val reduce = LocalReduceMotion.current
+            val spec: AnimationSpec<Float> = if (reduce) snap() else tween(260)
+            val grow by animateFloatAsState(if (isActive) 1f else 0f, spec, label = "lyric")
+            val origin = when (prefs.lyricsAlign) { "center" -> TransformOrigin(0.5f, 0.5f); "end" -> TransformOrigin(1f, 0.5f); else -> TransformOrigin(0f, 0.5f) }
             if (ln.text.isBlank()) {
                 // an instrumental break: a big ♪ that lights up while it lasts
                 Text(
                     "♪",
-                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp).graphicsLayer { val k = 1f + 0.26f * grow; scaleX = k; scaleY = k },
                     textAlign = TextAlign.Center,
-                    fontSize = (if (isActive) 38 else 30).sp,
+                    fontSize = 30.sp,
                     color = if (isActive) (LocalAccent.current ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                 )
             } else {
+                val dim = if (r.synced) prefs.lyricsDim / 100f else 1f
                 Column(
                     Modifier.fillMaxWidth()
                         .clickable(enabled = r.synced && ln.t != null) { ln.t?.let { Remote.transport("seek", it) } }
                         .padding(horizontal = 20.dp, vertical = prefs.lyricsSpacing.dp)
-                        .alpha(if (!r.synced || isActive) 1f else prefs.lyricsDim / 100f),
+                        .graphicsLayer { alpha = dim + (1f - dim) * grow },
                     horizontalAlignment = when (prefs.lyricsAlign) { "center" -> Alignment.CenterHorizontally; "end" -> Alignment.End; else -> Alignment.Start },
                 ) {
-                    if (isActive && ln.words != null) {
-                        WordLine(ln, base + 2, playing, prefs.lyricsOffsetMs, align)
+                    val lift = Modifier.graphicsLayer {
+                        // never past the row's side padding, however wide the screen is
+                        val room = if (size.width > 0f) 16.dp.toPx() / size.width else LYRIC_GROW
+                        val k = 1f + minOf(LYRIC_GROW, room) * grow
+                        scaleX = k; scaleY = k; transformOrigin = origin
+                    }
+                    val words = ln.words
+                    if (isActive && words != null) {
+                        WordLine(ln, base, playing, prefs.lyricsOffsetMs, align, lift)
                     } else {
                         Text(
-                            ln.text,
-                            fontSize = (if (isActive) base + 2 else base).sp,
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+                            // a line with word timing is always written from its words, so both of its states wrap alike
+                            if (words != null) remember(ln) { words.joinToString("") { it.text } } else ln.text,
+                            modifier = lift,
+                            fontSize = base.sp,
+                            fontWeight = FontWeight.Bold,
                             color = if (isActive) (LocalAccent.current ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.onSurface,
                             style = if (isActive) LocalTextStyle.current.glow(LocalAccent.current ?: MaterialTheme.colorScheme.primary) else LocalTextStyle.current,
                             lineHeight = ((base + 6)).sp,
@@ -293,7 +323,7 @@ private fun LazyListScope.itemsLines(r: LyricsResult, active: Int, prefs: Prefs,
 
 /** The line being sung, filling in word by word (and letter by letter inside the current word). */
 @Composable
-private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, align: TextAlign) {
+private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, align: TextAlign, modifier: Modifier = Modifier) {
     val reduce = LocalReduceMotion.current
     val progress = Remote.progress.collectAsStateWithLifecycle()
     var tick by remember { mutableLongStateOf(0L) }
@@ -324,7 +354,7 @@ private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, 
             }
         }
     }
-    Text(text, style = LocalTextStyle.current.glow(on), fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp, textAlign = align)
+    Text(text, modifier, style = LocalTextStyle.current.glow(on), fontSize = size.sp, fontWeight = FontWeight.Bold, lineHeight = (size + 6).sp, textAlign = align)
 }
 
 @Composable
@@ -362,10 +392,15 @@ fun JumpToLine(state: LazyListState, firstLineIndex: Int, active: Int, modifier:
     val offscreen by remember(active) {
         derivedStateOf { active >= 0 && state.layoutInfo.visibleItemsInfo.none { it.index == firstLineIndex + active } }
     }
-    if (offscreen) {
+    val reduce = LocalReduceMotion.current
+    androidx.compose.animation.AnimatedVisibility(
+        visible = offscreen,
+        modifier = modifier,
+        enter = if (reduce) fadeIn(snap()) else fadeIn(tween(160)) + scaleIn(tween(200), initialScale = 0.85f),
+        exit = if (reduce) fadeOut(snap()) else fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.85f),
+    ) {
         androidx.compose.material3.ExtendedFloatingActionButton(
             onClick = onJump,
-            modifier = modifier,
             icon = { Icon(Icons.Filled.MyLocation, null) },
             text = { Text("Current line") },
         )
@@ -393,8 +428,8 @@ fun LyricsLayoutControls() {
     Text("Sample", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
     val align = when (p.lyricsAlign) { "center" -> TextAlign.Center; "end" -> TextAlign.End; else -> TextAlign.Start }
     Column(Modifier.fillMaxWidth().padding(vertical = p.lyricsSpacing.dp)) {
-        Text("This is the line being sung", fontSize = (p.lyricsSp + 2).sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = align, modifier = Modifier.fillMaxWidth())
-        Text("And this one comes next", fontSize = p.lyricsSp.sp, fontWeight = FontWeight.SemiBold, textAlign = align,
+        Text("This is the line being sung", fontSize = p.lyricsSp.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = align, lineHeight = (p.lyricsSp + 6).sp, modifier = Modifier.fillMaxWidth())
+        Text("And this one comes next", fontSize = p.lyricsSp.sp, fontWeight = FontWeight.Bold, textAlign = align, lineHeight = (p.lyricsSp + 6).sp,
             modifier = Modifier.fillMaxWidth().padding(top = p.lyricsSpacing.dp).alpha(p.lyricsDim / 100f))
     }
 }
