@@ -361,6 +361,8 @@
   .tile:hover .art { transform:translateY(-5px); box-shadow:0 16px 32px rgba(0,0,0,.5); }
   .tile:active { transform:scale(.95); }
   .li { transition:background .13s ease, transform .12s ease; cursor:pointer; }
+  .li.now { background:color-mix(in srgb, var(--accent) 10%, transparent); }
+  .li.now .t, .tile.now .t { color:var(--accent2); }
   .li:active { transform:scale(.99); }
   .pill { transition:transform .14s ease, filter .14s ease; }
   .pill:active { transform:scale(.95); }
@@ -426,9 +428,10 @@
   .widget { grid-column:span var(--cols,1); grid-row:span var(--rows,2); display:flex; flex-direction:column;
             background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:15px 16px 12px;
             animation:pop .3s ease; position:relative; overflow:hidden; }
+  /* the body fades at an edge only while there is more to scroll that way (--ft/--fb are set by fadeEdges) */
   .widget .wbody { flex:1; overflow:auto; min-height:0;
-    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%);
-    mask-image:linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%); }
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 var(--ft,0px), #000 calc(100% - var(--fb,0px)), transparent 100%);
+    mask-image:linear-gradient(to bottom, transparent 0, #000 var(--ft,0px), #000 calc(100% - var(--fb,0px)), transparent 100%); }
   .widget .wbody::-webkit-scrollbar { width:7px; height:7px; } .widget .wbody::-webkit-scrollbar-thumb { background:#2c2d38; border-radius:8px; }
   .whead { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
   .whead .wt { font-size:15px; font-weight:700; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
@@ -461,7 +464,21 @@
   .wctrl .meta { flex:1; min-width:0; }
   .wctrl .t { font-size:14px; font-weight:640; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .wctrl .s { font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .wcbtns { display:flex; gap:8px; margin-top:14px; }
+  /* the Controls widget fills its height: the picture grows with the room there is, the buttons sit at the bottom */
+  .wbody.wcbody { display:flex; flex-direction:column; container-type:size; }
+  .wcbody .wctrl { margin-bottom:auto; }
+  .wcbody .wctrl .t { white-space:normal; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
+  @supports (width:1cqh) {
+    .wcbody .wctrl .art { width:clamp(60px, calc(100cqh - 124px), 128px); height:clamp(60px, calc(100cqh - 124px), 128px); }
+  }
+  .wcprog { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:11.5px; color:var(--dim);
+            font-variant-numeric:tabular-nums; }
+  .wcprog[hidden] { display:none; }
+  .wcprog .bar { flex:1; height:4px; border-radius:4px; background:var(--card2); overflow:hidden; }
+  .wcprog .bar i { display:block; height:100%; width:0; border-radius:4px; background:var(--accent); transition:width .6s linear; }
+  @media (prefers-reduced-motion: reduce) { .wcprog .bar i { transition:none; } }
+  .wcbtns { display:flex; gap:8px; margin-top:12px; }
+  .wcbtns button:disabled { opacity:.45; }
   .wcbtns button { flex:1; height:46px; border-radius:11px; border:1px solid var(--line); background:var(--card2);
                    display:flex; align-items:center; justify-content:center; }
   .wcbtns button svg { width:22px; height:22px; fill:currentColor; }
@@ -1168,6 +1185,7 @@ window.addEventListener('resize', () => {
 });
 
 // The five tabs; every other view (a playlist, an artist, the theme picker...) belongs to the tab it was opened from.
+let onDetailRenamed = null;   // set by the open playlist page, so a rename shows there at once
 const TOP_VIEWS = new Set(['home', 'search', 'playlists', 'mixer', 'settings']);
 let topView = 'home';
 function setView(v, push = true) {
@@ -1179,7 +1197,13 @@ function setView(v, push = true) {
   render();
   hoistTopbar();
   // history entry so the browser / Android hardware back button works
-  if (push) history.pushState({ view: v, detail: v === 'detail' ? detailStack : null }, '');
+  // (the entry holds a plain copy of the page's item: history can't store anything that isn't plain data, and a
+  // failed pushState would leave Back skipping this page)
+  if (push) {
+    let detail = null;
+    if (v === 'detail') { try { detail = JSON.parse(JSON.stringify(detailStack)); } catch (e) { detail = null; } }
+    history.pushState({ view: v, detail }, '');
+  }
 }
 // Hardware / browser back → restore the previous view without pushing a new entry.
 window.addEventListener('popstate', e => {
@@ -1283,7 +1307,25 @@ function tile(item) {
   t.append(tb, tt, ss);
   t.addEventListener('click', () => activate(item));
   attachContext(t, item);
+  tagSong(t, item);
   return t;
+}
+// The song that is playing is marked wherever it is listed (search results, playlists, artist pages, Home).
+let nowMarkVid = '';
+function tagSong(node, item) {
+  if (item.kind !== 'song' || !item.videoId) return;
+  node.dataset.vid = item.videoId;
+  if (item.videoId === nowMarkVid) { node.classList.add('now'); node.setAttribute('aria-current', 'true'); }
+}
+function markNowPlaying() {
+  const vid = (lastNow && lastNow.videoId) || '';
+  if (vid === nowMarkVid) return;
+  nowMarkVid = vid;
+  document.querySelectorAll('[data-vid]').forEach(n => {
+    const on = !!vid && n.dataset.vid === vid;
+    n.classList.toggle('now', on);
+    if (on) n.setAttribute('aria-current', 'true'); else n.removeAttribute('aria-current');
+  });
 }
 
 function listItem(item, opts) {
@@ -1296,9 +1338,10 @@ function listItem(item, opts) {
   li.append(thumbBox(item.thumb), meta);
   li.addEventListener('click', () => activate(item));
   attachContext(li, item);
+  tagSong(li, item);
   if (item.kind === 'artist') li.classList.add('artist');
   if (item.kind === 'song') {
-    const more = el('button', 'more'); more.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
+    const more = el('button', 'more'); more.setAttribute('aria-label', 'More'); more.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z"/></svg>';
     more.addEventListener('click', e => { e.stopPropagation(); openSheet(item); });
     li.appendChild(more);
   }
@@ -1367,25 +1410,60 @@ requestAnimationFrame(vizTick);
 function wEq(body) { paintMixer(body); const n = body.querySelector('.mx'); if (n) n.classList.add('eqonly'); }
 // Compact transport/now-playing control panel widget
 function wControls(body) {
-  body.innerHTML = `<div class="wctrl"><img class="art" id="_wcart"><div class="meta"><div class="t" id="_wct">Nothing playing</div><div class="s" id="_wcs"></div></div></div>
+  body.classList.add('wcbody');
+  body.innerHTML = `<div class="wctrl"><img class="art" alt=""><div class="meta"><div class="t">Nothing playing</div><div class="s"></div></div></div>
+    <div class="wcprog" hidden><span class="pos">0:00</span><div class="bar"><i></i></div><span class="dur">0:00</span></div>
     <div class="wcbtns">
-      <button data-a="prev"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
-      <button class="pp" data-a="playpause"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
-      <button data-a="next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
+      <button data-a="prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3 6l9-6v12z"/></svg></button>
+      <button class="pp" data-a="playpause" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <button data-a="next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l9-6-9-6z"/></svg></button>
     </div>`;
   body.querySelectorAll('.wcbtns button').forEach(b => b.addEventListener('click', () => ytm({ type:'transport', action:b.dataset.a }, true)));
   updateControlWidgets();
 }
+// only writes what changed, so a poll that brings nothing new touches nothing
 function updateControlWidgets() {
-  const now = lastNow || {};
-  document.querySelectorAll('.wctrl').forEach(w => {
-    const art = w.querySelector('#_wcart'), t = w.querySelector('#_wct'), s = w.querySelector('#_wcs');
-    if (art) { art.src = now.art || ART_FALLBACK; art.onerror = () => art.src = ART_FALLBACK; }
-    if (t) t.textContent = now.title || 'Nothing playing';
-    if (s) s.textContent = now.artist || '';
-    const pp = w.parentNode.querySelector('.wcbtns .pp svg path');
-    if (pp) pp.setAttribute('d', now.playing ? PAUSE : PLAY);
+  const now = lastNow || {}, live = !!(now.title || now.videoId);
+  const put = (n, text) => { if (n && n.textContent !== text) n.textContent = text; };
+  document.querySelectorAll('.wcbody').forEach(w => {
+    const art = w.querySelector('.wctrl .art'), src = (live && now.art) || ART_FALLBACK;
+    if (art && art.dataset.src !== src) { art.dataset.src = src; art.onerror = () => { art.onerror = null; art.src = ART_FALLBACK; }; art.src = src; }
+    put(w.querySelector('.wctrl .t'), live ? (now.title || '') : 'Nothing playing');
+    put(w.querySelector('.wctrl .s'), live ? (now.artist || '') : '');
+    const prog = w.querySelector('.wcprog'), dur = (live && now.duration) || 0;
+    if (prog) {
+      prog.hidden = !dur;
+      const pos = Math.max(0, Math.min(dur, now.position || 0));
+      put(prog.querySelector('.pos'), fmt(pos)); put(prog.querySelector('.dur'), fmt(dur));
+      prog.querySelector('i').style.width = (dur ? pos / dur * 100 : 0).toFixed(2) + '%';
+    }
+    w.querySelectorAll('.wcbtns button').forEach(b => { b.disabled = !live; });
+    const pp = w.querySelector('.wcbtns .pp');
+    if (pp) { const d = now.playing ? PAUSE : PLAY, path = pp.querySelector('path');
+      if (path.getAttribute('d') !== d) { path.setAttribute('d', d); pp.setAttribute('aria-label', now.playing ? 'Pause' : 'Play'); } }
   });
+}
+// Widget bodies fade at an edge only while there is more to scroll that way: a fixed fade dimmed the first and
+// last row of every widget, also the ones that don't scroll at all.
+function fadeEdges(b) {
+  const below = b.scrollHeight - b.clientHeight - b.scrollTop;
+  b.style.setProperty('--ft', b.scrollTop > 2 ? '14px' : '0px');
+  b.style.setProperty('--fb', below > 2 ? '18px' : '0px');
+}
+const fadeRO = window.ResizeObserver ? new ResizeObserver(es => {
+  const seen = new Set();
+  es.forEach(e => { const b = e.target.closest('.wbody'); if (b && !seen.has(b)) { seen.add(b); fadeEdges(b); } });
+}) : null;
+const fadeMO = new MutationObserver(ms => {
+  const seen = new Set();
+  ms.forEach(m => { const b = m.target.closest && m.target.closest('.wbody'); if (!b || seen.has(b)) return;
+    seen.add(b); if (fadeRO) for (const c of b.children) fadeRO.observe(c); fadeEdges(b); });
+});
+function watchFade(b) {
+  b.addEventListener('scroll', () => fadeEdges(b), { passive:true });
+  if (fadeRO) { fadeRO.observe(b); for (const c of b.children) fadeRO.observe(c); }
+  fadeMO.observe(b, { childList:true, subtree:true });
+  fadeEdges(b);
 }
 
 async function homeSectionsCached() {
@@ -1505,6 +1583,7 @@ async function renderHome(m) {
     card.appendChild(rz);
     grid.appendChild(card);
     def.render(bodyEl);
+    watchFade(bodyEl);
     enableWidgetDrag(card, grid, m);
     enableWidgetResize(card, rz, grid);
   }
@@ -1738,7 +1817,7 @@ async function renderDetail(m, d) {
   const TICK = '<svg viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
   acts.append(playBtn, shufBtn, editBtn, pinBtn, moreBtn);
   info.appendChild(acts); head.append(img, info); m.appendChild(head);
-  d.onRenamed = name => { d.title = name; const t = info.querySelector('.t'); if (t) t.textContent = name; };
+  onDetailRenamed = name => { d.title = name; const t = info.querySelector('.t'); if (t && t.isConnected) t.textContent = name; };
 
   const list = el('div', 'list'); list.appendChild(el('div', 'spinner')); m.appendChild(list);
   const r = await ytm({ type:'playlistItems', playlistId: pid, browseId: d.browseId });
@@ -2123,7 +2202,7 @@ function openCollectionSheet(d, pid) {
     add('Rename', pen, async () => {
       const name = await askBox({ title:'Rename playlist', input:true, value:d.title, ok:'Rename' });
       if (!name || name === d.title) return;
-      if (await plOp({ type:'playlistRename', playlistId:pid, name }, 'Renamed')) { cache.playlists = null; if (d.onRenamed) d.onRenamed(name); }
+      if (await plOp({ type:'playlistRename', playlistId:pid, name }, 'Renamed')) { cache.playlists = null; if (onDetailRenamed) onDetailRenamed(name); }
     });
     add('Delete playlist', bin, async () => {
       const yes = await askBox({ title:'Delete this playlist?', text:'“' + d.title + '” will be removed from your YouTube Music library. This can’t be undone.', ok:'Delete', danger:true });
@@ -2738,6 +2817,7 @@ function paintNow(now, queue) {
   if (!holdSeek && Date.now() > seekSettleUntil) { $('#tpos').textContent = fmt((now && now.position) || 0);
     seek.value = dur ? Math.round(((now && now.position)||0)/dur*1000) : 0; }
   updateControlWidgets();
+  markNowPlaying();
   // Safety net: if the sheet is closed but still carries morph styles (an interrupted drag,
   // a cancelled pointer), drop them so it can never sit there half-open.
   if (!$('#app').classList.contains('railopen') && !railRaf && $('#rail').style.opacity !== '') railClearInline();
