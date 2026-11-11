@@ -308,21 +308,7 @@ object Remote {
             try {
                 val r = a.post("/api/ytm", body)
                 if (r.optBoolean("opened")) notify("Opening YouTube Music on the computer…")
-                if (r.has("error")) {
-                    val err = r.optString("error")
-                    notify(
-                        when {
-                            err == "extension_offline" -> "The YouTube Music extension isn't connected"
-                            err.startsWith("no_shuffle_button") || err.startsWith("no_repeat_button") ->
-                                "Couldn't find that button on YouTube Music. In your browser, reload the Pocketfader extension, then refresh the YouTube Music tab."
-                            err == "autoplay_off_while_looping" -> "Turn loop off first: YouTube Music ignores autoplay while the queue is looping."
-                            err == "autoplay_not_applied" -> "YouTube Music didn't change autoplay. Try once more, or switch it in the browser."
-                            err == "like_not_applied" || err.startsWith("like_failed") -> "YouTube Music didn't accept the like. Make sure you're signed in there."
-                            err == "order_mismatch" || err == "queue_changed" -> "The queue changed while moving that song. Try again."
-                            else -> err.take(160)
-                        }
-                    )
-                }
+                if (r.has("error")) notify(ytmErrorText(r.optString("error")))
                 onResult?.invoke(r)
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.friendly()) }
@@ -545,7 +531,7 @@ object Remote {
         if (r.has("error")) {
             throw ApiException(
                 200,
-                if (r.optString("error") == "extension_offline") "The YouTube Music extension isn't connected." else r.optString("error"),
+                ytmErrorText(r.optString("error")),
             )
         }
         return r
@@ -727,5 +713,37 @@ object Remote {
             if (v.isNotBlank()) append(" $v")
             if (dev.isNotBlank()) append(" · $dev")
         }
+    }
+}
+
+/** What went wrong with a YouTube Music command, in words (the extension and the server answer with short codes). */
+internal fun ytmErrorText(code: String): String {
+    val c = code.substringBefore(':').trim()
+    return when {
+        c == "extension_offline" -> "YouTube Music isn't open on the computer."
+        c == "extension_timeout" || c == "timeout" -> "YouTube Music didn't answer in time. Try again."
+        c.startsWith("no_shuffle_button") || c.startsWith("no_repeat_button") ->
+            "Couldn't find that button on YouTube Music. In your browser, reload the Pocketfader extension, then refresh the YouTube Music tab."
+        c == "autoplay_off_while_looping" -> "Turn loop off first: YouTube Music ignores autoplay while the queue is looping."
+        c == "autoplay_not_applied" -> "YouTube Music didn't change autoplay. Try once more, or switch it in the browser."
+        c == "no_autoplay_toggle" -> "Couldn't find YouTube Music's autoplay switch."
+        c == "like_not_applied" || c == "like_failed" -> "YouTube Music didn't accept the like. Make sure you're signed in there."
+        c == "no_like_button" -> "Couldn't find the like button on the YouTube Music page."
+        c == "order_mismatch" || c == "queue_changed" -> "The queue changed while moving that song. Try again."
+        c == "endpoint_not_accepted" -> "YouTube Music didn't start it. Try again."
+        c == "no_player" -> "YouTube Music's player isn't ready yet."
+        c == "no_app" -> "The YouTube Music page isn't ready yet."
+        c == "row_not_found" -> "Couldn't find that song on the YouTube Music page."
+        c == "not_in_queue" -> "That song isn't in the queue any more."
+        c == "move_too_large" -> "That move is too big to do in one go."
+        c == "cannot_move_played_or_current" -> "Songs already played (or playing) can't be moved."
+        c == "menu_item_missing" -> "YouTube Music's menu didn't offer that here."
+        c == "no_menu" || c == "no_menu_button" -> "Couldn't open that song's menu on the YouTube Music page."
+        c == "nothing_to_pick" -> "Couldn't find something to play."
+        c == "artist_not_found" -> "Couldn't find that artist on YouTube Music."
+        c == "no_lyrics" -> "No lyrics for this song."
+        c == "unknown_type" -> "The YouTube Music tab runs an older Pocketfader extension: reload it in the browser."
+        c.isEmpty() -> "Something went wrong."
+        else -> c.replace('_', ' ').replaceFirstChar { it.uppercase() }.take(160)
     }
 }

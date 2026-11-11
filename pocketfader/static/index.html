@@ -869,7 +869,7 @@
       </div>
       <div class="nptrow">
         <div id="np-t" class="t">Nothing playing</div>
-        <button id="np-like" class="npfav" title="Like on YT Music" style="display:none"><svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
+        <button id="np-like" class="npfav" title="Like on YouTube Music" style="display:none"><svg viewBox="0 0 24 24"><path d="M2 21h4V9H2v12zM23 10a2 2 0 00-2-2h-6.31l.95-4.57.03-.32a1.5 1.5 0 00-.44-1.06L14.17 1 7.59 7.59A2 2 0 007 9v10a2 2 0 002 2h9a2 2 0 001.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg></button>
         <button id="np-fav" class="npfav" title="Favorite" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 4.4l2.1 4.6 5 .4-3.8 3.3 1.2 4.9L12 15.4 7.5 17.6l1.2-4.9L4.9 9.4l5-.4z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></button>
         <button id="np-share" class="npfav" title="Share" style="display:none"><svg viewBox="0 0 24 24"><path d="M18 16a3 3 0 00-2.3 1.1l-6.1-3.5a3 3 0 000-1.2l6-3.5A3 3 0 1015 6l-6 3.5a3 3 0 100 5l6.1 3.6A3 3 0 1018 16z"/></svg></button>
       </div>
@@ -979,7 +979,7 @@ function askBox(o) {
 async function plOp(cmd, okMsg) {
   const r = await ytm(cmd, true);
   if (r && r.ok) { if (okMsg) toast(okMsg); return true; }
-  toast(r && r.error === 'extension_offline' ? 'YT Music bridge offline'
+  toast(r && r.error === 'extension_offline' ? "YouTube Music isn't open on the computer"
       : "Couldn't change the playlist" + (r && r.error ? ': ' + r.error : ''));
   return false;
 }
@@ -1627,7 +1627,7 @@ async function renderPlaylists(m) {
     if (!name) return;
     const r = await ytm({ type:'playlistCreate', title:name }, true);
     if (r && r.ok) { toast('Created “' + name + '”'); cache.playlists = null; render(); }
-    else toast(r && r.error === 'extension_offline' ? 'YT Music bridge offline' : "Couldn't create the playlist");
+    else toast(r && r.error === 'extension_offline' ? "YouTube Music isn't open on the computer" : "Couldn't create the playlist");
   });
   mkRow.appendChild(mkBtn); m.appendChild(mkRow);
   if (!cache.playlists) { m.appendChild(el('div','spinner'));
@@ -1817,7 +1817,7 @@ function renderSettingsTail(m) {
   // ---- Playback ----
   const pb = el('div', 'setsec'); pb.appendChild(Object.assign(el('h3'), { textContent:'Playback' }));
   const yv = el('div', 'setrow');
-  yv.innerHTML = `<div><div class="k">YT Music volume</div><div class="d">The player's own level, separate from the master.</div></div>`;
+  yv.innerHTML = `<div><div class="k">YouTube Music volume</div><div class="d">The player's own level, separate from the computer's volume.</div></div>`;
   const ytvIn = el('input'); ytvIn.type = 'range'; ytvIn.min = 0; ytvIn.max = 100; ytvIn.value = (lastNow && lastNow.volume != null) ? lastNow.volume : 100;
   let ytvT = null;
   ytvIn.addEventListener('input', () => { const lvl = parseInt(ytvIn.value, 10);
@@ -1865,7 +1865,7 @@ function renderSettingsTail(m) {
   const eng = mixerState && mixerState.engine && mixerState.engine.connected;
   const st = el('div', 'setsec'); st.appendChild(Object.assign(el('h3'), { textContent:'Status' }));
   st.innerHTML += `
-    <div class="setrow"><div><div class="k">YT Music bridge</div><div class="d">Full YouTube Music control (search, queue, mixes) through the Pocketfader extension in the computer's browser.</div></div><div class="val">${lastYtm ? 'Connected' : 'Not connected'}</div></div>
+    <div class="setrow"><div><div class="k">YouTube Music</div><div class="d">Full YouTube Music control (search, queue, mixes) through the Pocketfader extension in the computer's browser.</div></div><div class="val">${lastYtm ? 'Connected' : 'Not connected'}</div></div>
     <div class="setrow"><div><div class="k">Audio output</div><div class="d">The computer's current output &mdash; what the volume slider controls.</div></div><div class="val">${(mixerState && mixerState.volume && mixerState.volume.available) ? mixerState.volume.device : 'Not available'}</div></div>` +
     (caps.engine_label ? `<div class="setrow"><div><div class="k">${caps.engine_label} engine</div><div class="d">Master volume &amp; EQ.</div></div><div class="val">${eng ? 'Connected' : 'Not reachable'}</div></div>` : '');
   // When the bridge is down, say how to fix it instead of just reporting "Offline".
@@ -2143,7 +2143,7 @@ function openSheet(item) {
     add('Add to playlist…', I.q, () => openAddToPlaylist(item));
     add('Start radio', I.mix, () => { ytm({ type:'startMix', videoId:item.videoId }); toast('Starting radio'); setRailTab('queue'); });
     add(isPinned(item) ? 'Remove from favorites' : 'Favorite', I.star, () => { const on = togglePin(item); refreshFavoriteWidgets(); toast(on ? 'Added to favorites' : 'Removed'); });
-    add('Like on YT Music', I.like, async () => {
+    add('Like on YouTube Music', I.like, async () => {
       const r = await ytm({ type:'like', videoId:item.videoId, action:'like' }, true);
       toast(r && r.ok ? 'Liked' : "Couldn't like it" + (lastYtm ? '' : ': YouTube Music isn\'t open on the computer'));
     });
@@ -2211,7 +2211,7 @@ $('#np-like').addEventListener('click', () => {
   ytm({ type:'like', videoId:lastNow.videoId, action: liked ? 'remove' : 'like' }, true);
   lastNow.liked = liked ? 'INDIFFERENT' : 'LIKE';
   likeSettleUntil = Date.now() + 3000; likeSettleVid = lastNow.videoId;   // keep optimistic state
-  $('#np-like').classList.toggle('on', !liked); toast(liked ? 'Removed like' : 'Liked on YT Music');
+  $('#np-like').classList.toggle('on', !liked); toast(liked ? 'Removed like' : 'Liked on YouTube Music');
 });
 
 // Mobile mini-player → opens the full now-playing sheet; back / close button dismisses it.
@@ -2700,7 +2700,7 @@ function paintModes() {
 }
 function setMode(patch, cmd) {
   lastNow = Object.assign(lastNow || {}, patch); queueSettleUntil = Date.now() + 2500; queueSig = null; paintRailBody();
-  return ytm(cmd, true).then(r => { if (r && r.ok === false) toast('YT Music did not accept that'); return r; });
+  return ytm(cmd, true).then(r => { if (r && r.ok === false) toast("YouTube Music didn't accept that"); return r; });
 }
 $('#qm-shuffle').addEventListener('click', () => { const on = !(lastNow || {}).shuffle; setMode({ shuffle:on }, { type:'setShuffle', on }); });
 $('#qm-shuffle').addEventListener('dblclick', () => { ytm({ type:'reshuffle' }, true); toast('Reshuffled'); });

@@ -103,8 +103,8 @@ class PfApi(private val cfg: ServerConfig) {
 /** Human-readable text for whatever went wrong. */
 fun Throwable.friendly(): String = when (this) {
     is ApiException -> message.orEmpty()
-    is java.net.UnknownHostException -> "Can't find that host. Check the address."
-    is java.net.SocketTimeoutException -> "The server didn't answer in time."
+    is java.net.UnknownHostException -> "Can't find that computer. Check the address (and that Tailscale is on, if you use it)."
+    is java.net.SocketTimeoutException -> "The computer didn't answer in time."
     is java.net.ConnectException -> "Couldn't connect. Is Pocketfader running and reachable from this phone?"
     is javax.net.ssl.SSLException -> "Secure connection failed (${message.orEmpty().take(80)})."
     else -> message ?: javaClass.simpleName
