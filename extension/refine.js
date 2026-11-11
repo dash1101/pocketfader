@@ -501,8 +501,18 @@
     }
     if (moving) wave.raf = requestAnimationFrame(waveFrame);
   }
+  // The bar's position is measured about twice a second (and on resize or scroll), not on every frame: measuring
+  // can make the browser lay the whole page out again, and YouTube Music's page is big.
+  let rectEpoch = 0;
+  window.addEventListener("resize", () => { rectEpoch++; kickWave(); }, { passive: true });
+  window.addEventListener("scroll", () => { rectEpoch++; }, { capture: true, passive: true });
+  function hostRect(host, o) {
+    const now = performance.now();
+    if (!o.rect || o.rectEpoch !== rectEpoch || now - o.rectAt > 500) { o.rect = host.getBoundingClientRect(); o.rectAt = now; o.rectEpoch = rectEpoch; }
+    return o.rect;
+  }
   function drawWave(host, o, tm) {
-    const r = host.getBoundingClientRect();
+    const r = hostRect(host, o);
     if (!r.width || o.hidden || !on("wavy")) { o.canvas.style.display = "none"; return; }
     const H = 26, dpr = devicePixelRatio || 1, W = Math.round(r.width);
     if (o.W !== W || o.dpr !== dpr) {

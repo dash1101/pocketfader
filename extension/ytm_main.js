@@ -15,6 +15,7 @@
   const EXT_VERSION = "1.15.0";
   const mp = () => document.querySelector("#movie_player");
   const app = () => document.querySelector("ytmusic-app");
+  const media = () => document.querySelector("#movie_player video, video.html5-main-video");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ---------------------------------------------------------------- InnerTube
@@ -220,7 +221,7 @@
       shuffle: shuffleOn(),
       autoplay: autoplayOn(),                       // true | false | null (unknown)
       playlistId: (p.getPlaylistId && p.getPlaylistId()) || null,
-      speed: (p.getPlaybackRate && p.getPlaybackRate()) || 1,   // playback speed (1 = normal)
+      speed: (media() && Math.round(media().playbackRate * 100) / 100) || (p.getPlaybackRate && p.getPlaybackRate()) || 1,   // what it really plays at
       ext: EXT_VERSION,                             // which version of this script the page is running
       tickMs: Math.round(performance.now() - t0),   // how long reading this state took
     };
@@ -422,12 +423,15 @@
     };
   }
   /* --- refinements: playback speed, a random song, and turning a list of "title - artist" into a playlist --- */
+  // The player only knows a few speeds; anything in between is set on the media element itself (as Refine does).
   function setSpeed(rate) {
     const p = mp();
-    const r = Math.max(0.25, Math.min(2, Number(rate) || 1));
+    const r = Math.round(Math.max(0.25, Math.min(3, Number(rate) || 1)) * 100) / 100;
     if (!p || !p.setPlaybackRate) return { ok: false, error: "no_player" };
     p.setPlaybackRate(r);
-    return { ok: true, speed: p.getPlaybackRate ? p.getPlaybackRate() : r };
+    const v = media();
+    try { if (v && Math.abs(v.playbackRate - r) > 0.001) v.playbackRate = r; } catch (e) {}
+    return { ok: true, speed: v ? Math.round(v.playbackRate * 100) / 100 : (p.getPlaybackRate ? p.getPlaybackRate() : r) };
   }
   // Something you might like, picked at random from your home page (or, failing that, from a search).
   async function lucky() {
