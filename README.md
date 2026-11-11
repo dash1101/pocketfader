@@ -83,9 +83,14 @@ from your YouTube Music account, so they need the computer with the extension.
 
 ## The YouTube Music remote
 
-1. In Brave or Chrome open `brave://extensions` (or `chrome://extensions`), turn on **Developer mode**, click **Load unpacked** and pick the [`extension/`](extension/) folder.
+1. In a Chromium-based browser (Chrome, Brave, Edge...) open its extensions page (for example `chrome://extensions`), turn on **Developer mode**, click **Load unpacked** and pick the [`extension/`](extension/) folder.
 2. Keep a **music.youtube.com** tab open (pinning it is ideal).
-3. Pocketfader's Settings → Status shows **YT Music bridge: Connected**.
+3. Pocketfader's Settings → Status shows **YouTube Music: Connected**.
+
+The same extension also improves YouTube Music itself (**Refine**): a ✦ button in its top bar switches on a Material 3
+Expressive look with colours from the album art and a wavy progress bar, a richer speed menu (any speed, pitch, remembered
+per song or playlist), live lyrics next to the player, a random-song button, and a playlist maker that builds on YouTube
+Music's own radios. Each part has its own switch. See [docs/REFINE.md](docs/REFINE.md).
 
 The extension only talks to Pocketfader on the same computer (`127.0.0.1`); it opens no network port of its own.
 When the extension isn't connected, the app falls back to simple play/pause/next/seek for whatever
