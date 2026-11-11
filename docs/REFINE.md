@@ -28,12 +28,19 @@ snapshot (`~/.config/pocketfader/ytm-layout.json`, written a few seconds after e
 slider, the docked player, the top bar, the page's colour variable names and what Refine found (`refine`), so selectors can be
 corrected from real data when YouTube Music changes.
 
-Tested on a silent stand-in page with the same element names as the real one; not yet against the real YouTube Music.
+YouTube Music has two layouts of the player bar, and Refine supports both. What has been tried, and where:
+
+- **The classic bar, on the real YouTube Music** (signed out, in a muted browser, with the scripts loaded by hand): the ✦ menu
+  and every switch, the style layers, the wavy bar, the speed menu, the random-song and lyrics buttons, and the play button's
+  two shapes while playing and paused.
+- **The newer bar** (the one signed-in accounts usually get): only on a silent stand-in page with the same element names.
+- **Not tried on the real page:** anything that needs an account (the playlist maker saving a playlist, liked songs, your
+  playlists), and the lyrics panel filled by the Pocketfader app.
 
 ## Next, in this order
 
 1. ~~Lyrics in the tab~~ (done: the live lyrics panel; it needs the Pocketfader app running on the computer, whose lyrics
-   service it uses through the extension). Still to come: the apps' layout options (size, alignment, romanization on/off).
+   service it uses through the extension). Its options (text size, alignment, romanized line and translation on or off) open from the panel's own button.
 2. **A proper Material You look for the page.** The current theme only swaps colours. The next step is restyling the parts that
    look dated: the player bar and page (rounded shapes, tonal surfaces, the wavy seek bar and cover glow from the apps), and a
    dynamic accent taken from the album art. This is the biggest piece of work, and the most fragile: it depends on YouTube

@@ -83,6 +83,8 @@
     plus: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
     back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
     lyrics: "M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 6h12v2H6V6zm0 3h12v2H6V9zm0 3h8v2H6v-2z",
+    speed: "M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44zm-9.79 6.84a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z",
+    tune: "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
   };
 
   // ------------------------------------------------------------------ colours (Material You style tones from one hue)
@@ -177,24 +179,29 @@
 
   // ------------------------------------------------------------------ style layers
   const CSS_UI = `
-  :root { --pf-ease: cubic-bezier(.2,0,0,1); --pf-spring: cubic-bezier(.34,1.45,.64,1); }
+  /* the shared scale (docs/DESIGN.md): how things move, how long they take, how round they are */
+  :root { --pf-ease: cubic-bezier(.2,0,0,1); --pf-spring: cubic-bezier(.34,1.3,.64,1);
+    --pf-t-quick: .12s; --pf-t-short: .2s; --pf-t-medium: .3s; --pf-t-long: .45s;
+    --pf-r-xs: 8px; --pf-r-sm: 12px; --pf-r-md: 16px; --pf-r-lg: 24px; --pf-r-xl: 28px; --pf-r-full: 999px; }
   .pf-ui, .pf-ui * { box-sizing: border-box; }
-  .pf-ui { font-family: "YouTube Sans", Roboto, "Noto Sans", system-ui, sans-serif; color: var(--pf-text); -webkit-font-smoothing: antialiased; }
-  .pf-ui button { font: inherit; color: inherit; }
+  /* its own text size: the page's is small and differs between its layouts */
+  .pf-ui { font-family: "YouTube Sans", Roboto, "Noto Sans", system-ui, sans-serif; font-size: 14px; line-height: 1.35; color: var(--pf-text); -webkit-font-smoothing: antialiased; }
+  /* :where keeps this weaker than the button classes below, whose sizes and colours must win */
+  :where(.pf-ui) button { font: inherit; color: inherit; }
   .pf-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin: 0 6px; flex: none;
-    border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; transition: background-color .2s, border-radius .3s var(--pf-ease), color .2s; }
-  .pf-nav-btn:hover { background: rgba(255,255,255,.1); border-radius: 14px; }
-  .pf-nav-btn[aria-expanded="true"] { background: var(--pf-container); color: var(--pf-on-container); border-radius: 14px; }
+    border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; transition: background-color .2s, border-radius var(--pf-t-medium) var(--pf-ease), color .2s; }
+  .pf-nav-btn:hover { background: rgba(255,255,255,.1); border-radius: var(--pf-r-sm); }
+  .pf-nav-btn[aria-expanded="true"] { background: var(--pf-container); color: var(--pf-on-container); border-radius: var(--pf-r-sm); }
   .pf-nav-btn.pf-float { position: absolute; right: 120px; top: 50%; transform: translateY(-50%); }
-  .pf-sheet, .pf-pop { position: fixed; z-index: 2300; background: var(--pf-surface3); border-radius: 28px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
-    opacity: 0; transform: scale(.94); transition: opacity .18s var(--pf-ease), transform .32s var(--pf-spring); }
+  .pf-sheet, .pf-pop { position: fixed; z-index: 2300; background: var(--pf-surface3); border-radius: var(--pf-r-xl); box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    opacity: 0; transform: scale(.94); transition: opacity var(--pf-t-short) var(--pf-ease), transform var(--pf-t-medium) var(--pf-spring); }
   .pf-sheet.pf-open, .pf-pop.pf-open { opacity: 1; transform: none; }
-  .pf-sheet { width: 360px; max-height: calc(100vh - 88px); overflow: auto; padding: 18px 8px 14px; transform-origin: top right; scrollbar-width: thin; }
+  .pf-sheet { width: 360px; max-width: calc(100vw - 16px); box-sizing: border-box; max-height: calc(100vh - 152px); overflow: auto; padding: 18px 8px 14px; transform-origin: top right; scrollbar-width: thin; scrollbar-color: var(--pf-outline) transparent; }
   .pf-head { padding: 0 16px 6px; }
   .pf-title { font-size: 22px; font-weight: 600; line-height: 1.25; }
   .pf-sub { font-size: 13px; color: var(--pf-muted); margin-top: 2px; }
   .pf-sec { margin: 12px 0 2px; padding: 0 16px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pf-accent); }
-  .pf-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 20px; cursor: pointer; transition: background-color .2s; }
+  .pf-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: var(--pf-r-md); cursor: pointer; transition: background-color .2s; }
   .pf-row:hover { background: rgba(255,255,255,.05); }
   .pf-row-text { flex: 1; min-width: 0; font-size: 15px; }
   .pf-row-text small { display: block; font-size: 12.5px; color: var(--pf-muted); margin-top: 1px; }
@@ -202,14 +209,14 @@
   .pf-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
   .pf-switch i { position: absolute; inset: 0; border-radius: 16px; border: 2px solid var(--pf-outline); background: var(--pf-surface2); transition: background-color .2s, border-color .2s; pointer-events: none; }
   .pf-switch i::after { content: ""; position: absolute; left: 6px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--pf-outline);
-    transition: left .3s var(--pf-spring), top .3s var(--pf-spring), width .3s var(--pf-spring), height .3s var(--pf-spring), background-color .2s; }
+    transition: left var(--pf-t-medium) var(--pf-spring), top var(--pf-t-medium) var(--pf-spring), width var(--pf-t-medium) var(--pf-spring), height var(--pf-t-medium) var(--pf-spring), background-color .2s; }
   .pf-switch input:checked + i { background: var(--pf-accent); border-color: var(--pf-accent); }
   .pf-switch input:checked + i::after { left: 22px; top: 2px; width: 24px; height: 24px; background: var(--pf-on-accent); }
   .pf-switch input:focus-visible + i { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
   .pf-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 20px; border-radius: 20px; border: 0;
-    cursor: pointer; font-size: 14px; font-weight: 600; background: transparent; color: var(--pf-accent); transition: background-color .2s, border-radius .25s var(--pf-ease), transform .15s; }
+    cursor: pointer; font-size: 14px; font-weight: 600; background: transparent; color: var(--pf-accent); transition: background-color .2s, border-radius var(--pf-t-short) var(--pf-ease), transform .15s; }
   .pf-btn:hover { background: rgba(255,255,255,.07); }
-  .pf-btn:active { transform: scale(.96); border-radius: 12px; }
+  .pf-btn:active { transform: scale(.96); border-radius: var(--pf-r-sm); }
   .pf-btn:disabled { opacity: .45; cursor: default; transform: none; }
   .pf-ui button:focus-visible, .pf-ui select:focus-visible, .pf-nav-btn:focus-visible, .pf-ui .pf-range:focus-visible { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
   .pf-btn.pf-filled { background: var(--pf-accent); color: var(--pf-on-accent); }
@@ -220,19 +227,21 @@
   .pf-icon-btn { width: 40px; padding: 0; color: var(--pf-text); }
   .pf-foot { margin: 12px 16px 0; font-size: 12px; line-height: 1.45; color: var(--pf-muted); }
   .pf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pf-chip { height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--pf-outline); background: transparent; cursor: pointer; font-size: 13.5px;
-    transition: background-color .2s, border-radius .25s var(--pf-ease), border-color .2s; }
+  .pf-chip { height: 32px; padding: 0 14px; border-radius: var(--pf-r-xs); border: 1px solid var(--pf-outline); background: transparent; cursor: pointer; font-size: 13.5px;
+    transition: background-color .2s, border-radius var(--pf-t-short) var(--pf-ease), border-color .2s; }
   .pf-chip:hover { background: rgba(255,255,255,.06); }
   .pf-chip[aria-pressed="true"] { background: var(--pf-container); color: var(--pf-on-container); border-color: transparent; border-radius: 16px; }
   .pf-chip:disabled { opacity: .4; cursor: default; }
   /* speed menu */
-  .pf-pop { width: 340px; padding: 18px 18px 14px; transform-origin: bottom center; }
+  .pf-pop { width: 340px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 18px 18px 14px; transform-origin: bottom center; }
+  .pf-pop .pf-chips { flex-wrap: nowrap; gap: 6px; }
+  .pf-pop .pf-chips .pf-chip { flex: 1; padding: 0; font-variant-numeric: tabular-nums; }
   .pf-speed-top { display: flex; align-items: center; gap: 8px; }
   .pf-speed-val { flex: 1; text-align: center; font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
   .pf-step { width: 44px; height: 44px; border-radius: 22px; border: 0; background: var(--pf-surface2); color: var(--pf-text); cursor: pointer; display: grid; place-items: center;
-    transition: border-radius .25s var(--pf-ease), background-color .2s; }
+    transition: border-radius var(--pf-t-short) var(--pf-ease), background-color .2s; }
   .pf-step:hover { background: var(--pf-container); color: var(--pf-on-container); }
-  .pf-step:active { border-radius: 12px; }
+  .pf-step:active { border-radius: var(--pf-r-sm); }
   .pf-range { -webkit-appearance: none; appearance: none; width: 100%; height: 44px; margin: 8px 0 10px; background: transparent; cursor: pointer; --pf-fill: 27%; }
   .pf-range::-webkit-slider-runnable-track { height: 16px; border-radius: 8px;
     background: linear-gradient(90deg, var(--pf-accent) 0 var(--pf-fill), var(--pf-surface2) var(--pf-fill) 100%); }
@@ -251,34 +260,34 @@
   /* dialog */
   .pf-scrim { position: fixed; inset: 0; z-index: 2400; background: rgba(0,0,0,.55); display: grid; place-items: center; opacity: 0; transition: opacity .2s; }
   .pf-scrim.pf-open { opacity: 1; }
-  .pf-dialog { width: min(600px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: 28px;
-    box-shadow: 0 24px 60px rgba(0,0,0,.5); transform: translateY(16px) scale(.97); transition: transform .4s var(--pf-spring); overflow: hidden; }
+  .pf-dialog { width: min(600px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: var(--pf-r-xl);
+    box-shadow: 0 24px 60px rgba(0,0,0,.5); transform: translateY(16px) scale(.97); transition: transform var(--pf-t-long) var(--pf-spring); overflow: hidden; }
   .pf-scrim.pf-open .pf-dialog { transform: none; }
   .pf-dlg-head { display: flex; align-items: flex-start; gap: 8px; padding: 24px 20px 8px 24px; }
   .pf-dlg-head .pf-head { padding: 0; flex: 1; }
   .pf-dlg-body { padding: 8px 24px; overflow: auto; flex: 1; scrollbar-width: thin; }
   .pf-dlg-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 14px 20px 20px; }
   .pf-dlg-foot .pf-grow { flex: 1; }
-  .pf-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; margin: 0 0 6px; border-radius: 16px; border: 0; text-align: left;
-    background: var(--pf-surface2); cursor: pointer; transition: background-color .2s, border-radius .25s var(--pf-ease); }
+  .pf-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; margin: 0 0 6px; border-radius: var(--pf-r-md); border: 0; text-align: left;
+    background: var(--pf-surface2); cursor: pointer; transition: background-color .2s, border-radius var(--pf-t-short) var(--pf-ease); }
   .pf-choice:hover { background: rgba(255,255,255,.08); }
-  .pf-choice[aria-pressed="true"] { background: var(--pf-container); color: var(--pf-on-container); border-radius: 24px; }
+  .pf-choice[aria-pressed="true"] { background: var(--pf-container); color: var(--pf-on-container); border-radius: var(--pf-r-lg); }
   .pf-choice:disabled { opacity: .45; cursor: default; }
   .pf-choice b { display: block; font-size: 15px; font-weight: 600; }
   .pf-choice span { display: block; font-size: 12.5px; opacity: .78; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pf-choice .pf-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; }
   .pf-choice[aria-pressed="true"] .pf-dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
   .pf-choice .pf-txt { flex: 1; min-width: 0; }
-  .pf-select, .pf-field { width: 100%; height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--pf-outline); background: var(--pf-surface2);
+  .pf-select, .pf-field { width: 100%; height: 48px; padding: 0 14px; border-radius: var(--pf-r-sm); border: 1px solid var(--pf-outline); background: var(--pf-surface2);
     color: var(--pf-text); font: inherit; font-size: 15px; }
   .pf-select:focus, .pf-field:focus { outline: 2px solid var(--pf-accent); outline-offset: -1px; border-color: transparent; }
   .pf-progress { height: 6px; border-radius: 3px; background: var(--pf-surface2); overflow: hidden; margin: 18px 0 10px; }
-  .pf-progress i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--pf-accent); transition: width .4s var(--pf-ease); }
+  .pf-progress i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--pf-accent); transition: width var(--pf-t-long) var(--pf-ease); }
   .pf-status { font-size: 14px; color: var(--pf-muted); }
   .pf-list { list-style: none; margin: 10px 0 0; padding: 0; }
-  .pf-song { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 14px; cursor: pointer; }
+  .pf-song { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: var(--pf-r-sm); cursor: pointer; }
   .pf-song:hover { background: rgba(255,255,255,.05); }
-  .pf-song img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex: none; background: var(--pf-surface2); }
+  .pf-song img { width: 44px; height: 44px; border-radius: var(--pf-r-xs); object-fit: cover; flex: none; background: var(--pf-surface2); }
   .pf-song .pf-txt { flex: 1; min-width: 0; }
   .pf-song .pf-txt div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pf-song .pf-t { font-size: 14.5px; }
@@ -286,43 +295,65 @@
   .pf-song.pf-off { opacity: .45; }
   .pf-check { flex: none; width: 20px; height: 20px; accent-color: var(--pf-accent); cursor: pointer; }
   .pf-summary { font-size: 13px; color: var(--pf-muted); margin-top: 6px; }
-  .pf-toast { position: fixed; left: 50%; bottom: 104px; z-index: 2500; max-width: min(520px, 90vw); padding: 12px 18px; border-radius: 14px;
+  .pf-toast { position: fixed; left: 50%; bottom: 104px; z-index: 2500; max-width: min(520px, 90vw); padding: 12px 18px; border-radius: var(--pf-r-sm);
     background: var(--pf-on-container); color: var(--pf-surface); font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
-    transform: translate(-50%, 20px); opacity: 0; transition: transform .35s var(--pf-spring), opacity .2s; pointer-events: none; }
+    transform: translate(-50%, 20px); opacity: 0; transition: transform var(--pf-t-medium) var(--pf-spring), opacity .2s; pointer-events: none; }
   .pf-toast.pf-open { transform: translate(-50%, 0); opacity: 1; }
   /* live lyrics */
   .pf-lyr { position: fixed; right: 16px; bottom: 104px; z-index: 2200; width: min(400px, calc(100vw - 32px)); height: min(64vh, 580px);
-    display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: 28px; box-shadow: 0 16px 48px rgba(0,0,0,.5);
-    opacity: 0; transform: translateY(14px) scale(.97); transform-origin: bottom right; transition: opacity .18s var(--pf-ease), transform .35s var(--pf-spring); }
+    display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: var(--pf-r-xl); box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    opacity: 0; transform: translateY(14px) scale(.97); transform-origin: bottom right; transition: opacity var(--pf-t-short) var(--pf-ease), transform var(--pf-t-medium) var(--pf-spring); }
   .pf-lyr.pf-open { opacity: 1; transform: none; }
   .pf-lyr-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 8px 22px; }
   .pf-lyr-head .pf-head { flex: 1; padding: 0; min-width: 0; }
   .pf-lyr-head .pf-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pf-lyr-body { position: relative; flex: 1; overflow-y: auto; padding: 18vh 18px 22vh; scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent); }
+  .pf-lyr-opts { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 14px; padding: 2px 18px 12px 22px; }
+  .pf-lyr-opts[hidden] { display: none; }
+  .pf-lyr-opts .pf-label { margin: 0; }
+  .pf-lyr-body { position: relative; flex: 1; min-height: 0; box-sizing: border-box; overflow-y: auto; padding: min(18vh, 150px) 18px min(22vh, 180px); scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent); }
   .pf-lyr-body::-webkit-scrollbar { display: none; }
-  .pf-ln { font-size: 22px; font-weight: 700; line-height: 1.3; padding: 7px 8px; margin: 2px 0; border-radius: 14px; color: var(--pf-text);
-    opacity: .38; cursor: pointer; transition: opacity .3s, transform .35s var(--pf-spring), background-color .2s; transform-origin: left center; }
+  /* with the options open there is less room: the lines start right under them */
+  .pf-lyr-opts:not([hidden]) + .pf-lyr-body { padding-top: 20px; padding-bottom: 64px; }
+  .pf-lyr.pf-lyr-s { --pf-ln: 18px; }
+  .pf-lyr.pf-lyr-l { --pf-ln: 27px; }
+  .pf-ln { font-size: var(--pf-ln, 22px); font-weight: 700; line-height: 1.3; padding: 7px 8px; margin: 2px 0; border-radius: var(--pf-r-sm); color: var(--pf-text);
+    opacity: .38; cursor: pointer; transition: opacity .3s, transform var(--pf-t-medium) var(--pf-spring), background-color .2s; transform-origin: left center; }
   .pf-ln:hover { background: rgba(255,255,255,.05); opacity: .7; }
   .pf-ln.pf-now { opacity: 1; transform: scale(1.03); }
-  .pf-ln.pf-plain { cursor: default; opacity: .9; font-size: 18px; }
+  .pf-ln.pf-plain { cursor: default; opacity: .9; font-size: calc(var(--pf-ln, 22px) * .82); }
   .pf-ln.pf-plain:hover { background: none; }
-  .pf-ln small { display: block; font-size: 14px; font-weight: 500; color: var(--pf-muted); margin-top: 2px; }
+  .pf-ln small { display: block; font-size: calc(var(--pf-ln, 22px) * .64); font-weight: 500; color: var(--pf-muted); margin-top: 2px; }
+  .pf-lyr-center .pf-ln { text-align: center; transform-origin: center; }
+  .pf-lyr-norom .pf-ln small.pf-rom { display: none; }
+  .pf-lyr-notr .pf-ln small.pf-tr { display: none; }
   .pf-ln .pf-wd { background: linear-gradient(90deg, var(--pf-accent) var(--p, 0%), currentColor var(--p, 0%)); -webkit-background-clip: text;
     background-clip: text; color: transparent; }
+  /* only the line being sung shows how far the singing is: after a jump back, later lines must not stay coloured */
+  .pf-ln:not(.pf-now) .pf-wd { background: none; color: inherit; }
   .pf-ln .pf-gap { letter-spacing: .3em; }
   .pf-lyr-msg { color: var(--pf-muted); font-size: 15px; line-height: 1.5; text-align: center; padding: 0 12px; }
   /* the wavy progress bar is drawn over YouTube Music's own, which stays underneath (invisible) for seeking */
   .pf-wave { position: fixed; left: 0; top: 0; pointer-events: none; }
-  .pf-tip { position: fixed; left: 0; top: 0; z-index: 2300; pointer-events: none; padding: 4px 9px; border-radius: 10px; font-size: 12px; font-weight: 600;
+  .pf-tip { position: fixed; left: 0; top: 0; z-index: 2300; pointer-events: none; padding: 4px 9px; border-radius: var(--pf-r-xs); font-size: 12px; font-weight: 600;
     font-variant-numeric: tabular-nums; background: var(--pf-on-container); color: var(--pf-surface); opacity: 0; transition: opacity .12s; }
   .pf-tip.pf-open { opacity: 1; }
   [data-pf-wave] { opacity: 0 !important; }
-  .pf-dice .pf-ico, .pf-lyr-wrap .pf-ico { display: grid; place-items: center; }
+  .pf-dice .pf-ico, .pf-lyr-wrap .pf-ico, .pf-bar-btn .pf-ico { display: grid; place-items: center; }
+  /* Refine's buttons in the classic player bar, sized and spaced like its own round ones (the newer bar lends its button looks instead) */
+  .pf-bar-btn { flex: none; margin: 4px 8px 4px 4px; }
+  .pf-bar-btn button { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    color: var(--ytmusic-text-secondary, #909090); transition: border-radius var(--pf-t-medium) var(--pf-ease), background-color .2s, color .2s, transform .15s; }
+  .pf-bar-btn button:hover { color: var(--ytmusic-text-primary, #fff); background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent); border-radius: var(--pf-r-sm); }
+  .pf-bar-btn button:active { transform: scale(.9); }
+  .pf-bar-btn button:focus-visible { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
+  .pf-bar-btn button[aria-pressed="true"] { background-color: var(--pf-container); color: var(--pf-on-container); border-radius: var(--pf-r-sm); }
   .pf-menu-item { display: flex; align-items: center; gap: 16px; height: 48px; padding: 0 16px; cursor: pointer; font-size: 14px;
     color: var(--ytmusic-text-primary, #fff); font-family: inherit; border-top: 1px solid rgba(255,255,255,.08); }
   .pf-menu-item:hover, .pf-menu-item:focus-visible { background: rgba(255,255,255,.1); outline: none; }
   .pf-menu-item .pf-ico { display: grid; place-items: center; color: var(--pf-accent); }
-  .pf-dice button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
+  /* one more row can make a long menu scroll; its scrollbar must not start a sideways one too */
+  ytmusic-menu-popup-renderer:has(.pf-menu-item) { overflow-x: hidden !important; scrollbar-width: thin; scrollbar-color: var(--pf-outline) transparent; }
+  .pf-dice button.pf-busy .pf-ico, .pf-bar-btn button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
   @keyframes pf-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .pf-ui, .pf-ui *, .pf-nav-btn { transition: none !important; animation: none !important; } }
   `;
@@ -330,29 +361,33 @@
     shapes: `
     ytmusic-two-row-item-renderer .image-wrapper, ytmusic-two-row-item-renderer ytmusic-thumbnail-renderer,
     ytmusic-two-row-item-renderer #thumbnail, ytmusic-two-row-item-renderer img,
-    ytmusic-two-row-item-renderer ytmusic-item-thumbnail-overlay-renderer { border-radius: 18px !important; }
+    ytmusic-two-row-item-renderer ytmusic-item-thumbnail-overlay-renderer { border-radius: var(--pf-r-md) !important; }
     ytmusic-two-row-item-renderer[has-circle-cropped-thumbnail] img, ytmusic-two-row-item-renderer[has-circle-cropped-thumbnail] ytmusic-thumbnail-renderer { border-radius: 50% !important; }
     ytmusic-responsive-list-item-renderer ytmusic-thumbnail-renderer, ytmusic-responsive-list-item-renderer .left-items img,
-    ytmusic-responsive-list-item-renderer ytmusic-item-thumbnail-overlay-renderer { border-radius: 10px !important; }
-    ytmusic-responsive-list-item-renderer { border-radius: 14px; }
-    ytmusic-player-queue-item { border-radius: 14px; overflow: hidden; }
-    ytmusic-player-queue-item img, ytmusic-player-queue-item .thumbnail { border-radius: 8px !important; }
-    ytmusic-player #song-image, ytmusic-player #thumbnail, ytmusic-player #song-image img, ytmusic-player .image { border-radius: 28px !important; overflow: hidden; }
-    ytmusic-miniplayer img, ytmusic-player-bar .image, ytmusic-player-bar img.image { border-radius: 10px !important; }
-    ytmusic-search-box #input-box, ytmusic-search-box .search-box, ytmusic-search-box #suggestion-list { border-radius: 24px !important; }
-    ytmusic-chip-cloud-chip-renderer a, ytmusic-chip-cloud-chip-renderer .gradient-box, ytmusic-chip-cloud-chip-renderer { border-radius: 10px !important; }
-    tp-yt-iron-dropdown ytmusic-menu-popup-renderer, ytmusic-menu-popup-renderer, ytmusic-multi-page-menu-renderer, tp-yt-paper-listbox { border-radius: 20px !important; overflow: hidden; }
-    tp-yt-paper-dialog, ytmusic-dialog-renderer, ytmusic-add-to-playlist-renderer { border-radius: 28px !important; overflow: hidden; }
-    ytmusic-carousel-shelf-renderer yt-button-shape button, ytmusic-shelf-renderer yt-button-shape button { border-radius: 20px !important; }`,
+    ytmusic-responsive-list-item-renderer ytmusic-item-thumbnail-overlay-renderer { border-radius: var(--pf-r-xs) !important; }
+    ytmusic-responsive-list-item-renderer { border-radius: var(--pf-r-sm); }
+    ytmusic-player-queue-item { border-radius: var(--pf-r-sm); overflow: hidden; }
+    ytmusic-player-queue-item img, ytmusic-player-queue-item .thumbnail { border-radius: var(--pf-r-xs) !important; }
+    ytmusic-player #song-image, ytmusic-player #thumbnail, ytmusic-player #song-image img, ytmusic-player .image { border-radius: var(--pf-r-xl) !important; overflow: hidden; }
+    ytmusic-miniplayer img, ytmusic-player-bar .image, ytmusic-player-bar img.image { border-radius: var(--pf-r-xs) !important; }
+    ytmusic-search-box #input-box, ytmusic-search-box .search-box, ytmusic-search-box #suggestion-list { border-radius: var(--pf-r-lg) !important; }
+    ytmusic-chip-cloud-chip-renderer a, ytmusic-chip-cloud-chip-renderer .gradient-box, ytmusic-chip-cloud-chip-renderer { border-radius: var(--pf-r-xs) !important; }
+    tp-yt-iron-dropdown ytmusic-menu-popup-renderer, ytmusic-menu-popup-renderer, ytmusic-multi-page-menu-renderer, tp-yt-paper-listbox { border-radius: var(--pf-r-md) !important; overflow: hidden; }
+    tp-yt-paper-dialog, ytmusic-dialog-renderer, ytmusic-add-to-playlist-renderer { border-radius: var(--pf-r-xl) !important; overflow: hidden; }
+    ytmusic-carousel-shelf-renderer yt-button-shape button, ytmusic-shelf-renderer yt-button-shape button { border-radius: var(--pf-r-full) !important; }`,
     colors: `
     html, ytmusic-app, ytmusic-app-layout {
       --ytmusic-general-background-a: var(--pf-surface) !important; --ytmusic-general-background-b: var(--pf-surface1) !important;
       --ytmusic-general-background-c: var(--pf-surface2) !important; --ytmusic-nav-bar-background: var(--pf-surface) !important;
+      /* the page fades its header picture into this colour: it has to be the page's own background, or the fade ends in a hard edge */
+      --ytmusic-background: var(--pf-surface) !important;
       --ytmusic-player-bar-background: var(--pf-surface2) !important; --ytmusic-brand-background-solid: var(--pf-surface) !important;
       --yt-spec-base-background: var(--pf-surface) !important; --yt-spec-raised-background: var(--pf-surface2) !important;
       --yt-spec-menu-background: var(--pf-surface3) !important; --yt-spec-call-to-action: var(--pf-accent) !important;
       --yt-spec-themed-blue: var(--pf-accent) !important; --ytmusic-color-red: var(--pf-accent) !important; }
     html, body, ytmusic-app-layout, ytmusic-app-layout > #layout { background-color: var(--pf-surface) !important; }
+    /* that fade is half a screen tall and repeats down the page: unseen on black, a dark band on any other colour */
+    .background-gradient.ytmusic-browse-response { background-repeat: no-repeat !important; }
     ytmusic-nav-bar #nav-bar-background { background: var(--pf-surface) !important; }
     ytmusic-miniplayer, ytmusic-player-bar { background-color: var(--pf-surface2) !important; transition: background-color .6s; }
     ytmusic-player-page { background: linear-gradient(180deg, var(--pf-surface2), var(--pf-surface) 60%) !important; }
@@ -366,15 +401,24 @@
     .ytmusicPlayerControlsPlayPauseButton button, ytmusic-player-bar #play-pause-button {
       width: 56px !important; height: 56px !important; min-width: 56px !important; padding: 0 !important;
       background: var(--pf-accent) !important; color: var(--pf-on-accent) !important; --yt-spec-icon-inactive: var(--pf-on-accent);
-      border-radius: 50% !important; transition: border-radius .45s var(--pf-spring), transform .15s, background-color .5s !important; }
+      border-radius: 30% !important; transition: border-radius var(--pf-t-long) var(--pf-spring), transform .15s, background-color .5s !important; }
     .ytmusicPlayerControlsPlayPauseButton button *, ytmusic-player-bar #play-pause-button * { color: var(--pf-on-accent) !important; fill: var(--pf-on-accent) !important; }
-    html[data-pf-playing] .ytmusicPlayerControlsPlayPauseButton button, html[data-pf-playing] ytmusic-player-bar #play-pause-button { border-radius: 18px !important; }
+    html[data-pf-playing] .ytmusicPlayerControlsPlayPauseButton button, html[data-pf-playing] ytmusic-player-bar #play-pause-button { border-radius: 50% !important; }
     .ytmusicPlayerControlsPlayPauseButton button:active, ytmusic-player-bar #play-pause-button:active { transform: scale(.9); }
-    .ytmusicPlayerControlsControlButton button { border-radius: 50% !important; transition: border-radius .3s var(--pf-ease), background-color .2s, transform .15s !important; }
-    .ytmusicPlayerControlsControlButton button:hover { border-radius: 14px !important; background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent) !important; }
-    .ytmusicPlayerControlsControlButton button:active { transform: scale(.9); }
-    .ytmusicPlayerControlsControlButton button[aria-pressed="true"] { background-color: var(--pf-container) !important; color: var(--pf-on-container) !important; border-radius: 14px !important; }
-    .ytmusicPlayerControlsControlButton button[aria-pressed="true"] * { color: var(--pf-on-container) !important; fill: var(--pf-on-container) !important; }`,
+    /* the newer player bar's round buttons (the play button keeps its own shape, above) */
+    .ytmusicPlayerControlsControlButton:not(.ytmusicPlayerControlsPlayPauseButton) button { border-radius: 50% !important; transition: border-radius var(--pf-t-medium) var(--pf-ease), background-color .2s, transform .15s !important; }
+    .ytmusicPlayerControlsControlButton:not(.ytmusicPlayerControlsPlayPauseButton) button:hover { border-radius: var(--pf-r-sm) !important; background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent) !important; }
+    .ytmusicPlayerControlsControlButton:not(.ytmusicPlayerControlsPlayPauseButton) button:active { transform: scale(.9); }
+    .ytmusicPlayerControlsControlButton:not(.ytmusicPlayerControlsPlayPauseButton) button[aria-pressed="true"] { background-color: var(--pf-container) !important; color: var(--pf-on-container) !important; border-radius: var(--pf-r-sm) !important; }
+    .ytmusicPlayerControlsControlButton:not(.ytmusicPlayerControlsPlayPauseButton) button[aria-pressed="true"] * { color: var(--pf-on-container) !important; fill: var(--pf-on-container) !important; }
+    /* the classic player bar's round buttons */
+    ytmusic-player-bar .left-controls-buttons yt-icon-button:not(#play-pause-button), ytmusic-player-bar .right-controls-buttons yt-icon-button,
+    ytmusic-player-bar yt-icon-button.toggle-player-page-button {
+      border-radius: 50%; transition: border-radius var(--pf-t-medium) var(--pf-ease), background-color .2s, transform .15s; }
+    ytmusic-player-bar .left-controls-buttons yt-icon-button:not(#play-pause-button):hover, ytmusic-player-bar .right-controls-buttons yt-icon-button:hover,
+    ytmusic-player-bar yt-icon-button.toggle-player-page-button:hover {
+      border-radius: var(--pf-r-sm) !important; background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent) !important; }
+    ytmusic-player-bar .left-controls-buttons yt-icon-button:not(#play-pause-button):active, ytmusic-player-bar .right-controls-buttons yt-icon-button:active { transform: scale(.9); }`,
     glow: `
     ytmusic-player #song-image, ytmusic-player #thumbnail { box-shadow: 0 30px 110px -16px var(--pf-glow) !important; transition: box-shadow .9s; }
     ytmusic-miniplayer img, ytmusic-player-bar .image { box-shadow: 0 6px 22px -6px var(--pf-glow); }`,
@@ -504,7 +548,8 @@
   // The bar's position is measured about twice a second (and on resize or scroll), not on every frame: measuring
   // can make the browser lay the whole page out again, and YouTube Music's page is big.
   let rectEpoch = 0;
-  window.addEventListener("resize", () => { rectEpoch++; kickWave(); }, { passive: true });
+  let resizeT = 0;
+  window.addEventListener("resize", () => { rectEpoch++; kickWave(); clearTimeout(resizeT); resizeT = setTimeout(syncWave, 200); }, { passive: true });
   window.addEventListener("scroll", () => { rectEpoch++; }, { capture: true, passive: true });
   function hostRect(host, o) {
     const now = performance.now();
@@ -624,6 +669,7 @@
     try { if (p && p.setPlaybackRate) p.setPlaybackRate(r); } catch (e) {}
     try { if (v && Math.abs(v.playbackRate - r) > 0.001) v.playbackRate = r; } catch (e) {}
     applyPitch();
+    setTimeout(syncSpeedButton, 0); // the classic bar's speed button shows when the speed isn't the usual one
     return r;
   }
   function ruleFor(vid, pl) {
@@ -750,14 +796,26 @@
   }, true);
 
   // ------------------------------------------------------------------ "something you might like" button
+  // Where Refine's own player buttons go. YouTube Music has two player bars: the newer one keeps its controls in one
+  // group and lends its button looks; the classic one (still shown to many people) has a row of round buttons on the right.
+  function barHost() {
+    const main = document.querySelector(".ytmusicPlayerControlsMainControls");
+    if (main) {
+      const look = main.querySelector(".ytmusicPlayerControlsRepeatButton button, .ytmusicPlayerControlsShuffleButton button");
+      return { el: main, classic: false, look: look ? look.className + " " : "", repeat: main.querySelector(".ytmusicPlayerControlsRepeatButton") };
+    }
+    const row = document.querySelector("ytmusic-player-bar .right-controls-buttons");
+    return row ? { el: row, classic: true, look: "", repeat: row.querySelector("yt-icon-button.repeat") } : null;
+  }
+  const barWrap = (host, cls, btn) => h("div", { class: (host.classic ? "pf-bar-btn " : "ytmusicPlayerControlsControlButton ") + cls }, btn);
+
   let dice = null;
   function syncDice() {
     if (!on("dice")) { if (dice) { dice.remove(); dice = null; } return; }
     if (dice && dice.isConnected) return;
-    const main = document.querySelector(".ytmusicPlayerControlsMainControls");
-    if (!main) return;
-    const look = main.querySelector(".ytmusicPlayerControlsRepeatButton button, .ytmusicPlayerControlsShuffleButton button");
-    const btn = h("button", { class: (look ? look.className + " " : "") + "pf-dice-btn", "aria-label": "Play something you might like",
+    const host = barHost();
+    if (!host) return;
+    const btn = h("button", { class: host.look + "pf-dice-btn", "aria-label": "Play something you might like",
       title: "Play something you might like" }, h("span", { class: "pf-ico" }, icon(ICON.dice)));
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -768,9 +826,23 @@
         toast(r && r.ok ? "Playing " + (r.picked || "something new") : "Couldn't find something to play right now");
       } catch (err) { toast("Couldn't find something to play right now"); } finally { btn.classList.remove("pf-busy"); }
     });
-    dice = h("div", { class: "ytmusicPlayerControlsControlButton pf-dice" }, btn);
-    const after = main.querySelector(".ytmusicPlayerControlsRepeatButton");
-    if (after) after.after(dice); else main.append(dice);
+    dice = barWrap(host, "pf-dice", btn);
+    if (host.repeat) host.repeat.after(dice); else host.el.append(dice);
+  }
+
+  // The classic player bar shows no speed button for music: Refine adds one there. (The newer bar has its own, which opens this menu.)
+  let speedBtn = null;
+  function syncSpeedButton() {
+    const host = on("speedMenu") ? barHost() : null;
+    if (!host || !host.classic) { if (speedBtn) { speedBtn.remove(); speedBtn = null; } return; }
+    if (!speedBtn || !speedBtn.isConnected) {
+      // its label marks it as a speed button: the clicks are picked up where YouTube Music's own speed button is
+      speedBtn = barWrap(host, "pf-speed-wrap", h("button", { class: "pf-speed-btn", "aria-label": "Playback speed" }, h("span", { class: "pf-ico" }, icon(ICON.speed))));
+      if (host.repeat) host.repeat.before(speedBtn); else host.el.prepend(speedBtn);
+    }
+    const r = getRate(), changed = Math.abs(r - 1) > 0.001, b = speedBtn.firstChild;
+    const label = "Playback speed" + (changed ? ": " + fmtRate(r) : "");
+    if (b.title !== label) { b.title = label; b.setAttribute("aria-label", label); b.setAttribute("aria-pressed", String(changed)); }
   }
 
   // ------------------------------------------------------------------ live lyrics
@@ -790,20 +862,62 @@
       setTimeout(() => { if (lyrWaiting.delete(id)) res({ error: "timeout" }); }, 20000);
     });
   }
-  const lyr = { panel: null, body: null, sub: null, key: "", lines: [], els: [], idx: -1, synced: false, userAt: 0, raf: 0, retry: 0, timer: 0 };
+  const lyr = { panel: null, body: null, sub: null, key: "", lines: [], els: [], idx: -1, synced: false, userAt: 0, raf: 0, retry: 0, timer: 0,
+    optBtns: [], hasRom: false, hasTr: false, run: 0 };
   let lyrBtn = null;
+  // how the lyrics look: text size, alignment, and whether the romanized line is shown. Kept apart from the on/off settings.
+  const LYR_KEY = "pocketfader.refine.lyrics";
+  const LYR_SIZES = ["s", "m", "l"], LYR_ALIGNS = ["left", "center"];
+  const lyrOpts = (() => {
+    const o = readJSON(LYR_KEY, {});
+    return { size: LYR_SIZES.includes(o.size) ? o.size : "m", align: LYR_ALIGNS.includes(o.align) ? o.align : "left", rom: o.rom !== false, tr: o.tr === true };
+  })();
+  function applyLyrOpts() {
+    if (!lyr.panel) return;
+    const c = lyr.panel.classList;
+    c.toggle("pf-lyr-s", lyrOpts.size === "s");
+    c.toggle("pf-lyr-l", lyrOpts.size === "l");
+    c.toggle("pf-lyr-center", lyrOpts.align === "center");
+    c.toggle("pf-lyr-norom", !lyrOpts.rom);
+    c.toggle("pf-lyr-notr", !lyrOpts.tr);
+    for (const [btn, k, v] of lyr.optBtns) {
+      btn.setAttribute("aria-pressed", String(lyrOpts[k] === v));
+      if (k === "rom") { btn.disabled = !lyr.hasRom; btn.title = lyr.hasRom ? "" : "This song's lyrics have no romanized line"; }
+      if (k === "tr") { btn.disabled = !lyr.hasTr; btn.title = lyr.hasTr ? "" : "This song's lyrics have no translation"; }
+    }
+  }
+  function setLyrOpt(k, v) {
+    lyrOpts[k] = v;
+    writeJSON(LYR_KEY, lyrOpts);
+    applyLyrOpts();
+    // the lines changed height: bring the one being sung back to its place
+    const el = lyr.els[lyr.idx];
+    if (el && lyr.body) lyr.body.scrollTop = el.offsetTop - lyr.body.clientHeight * 0.4;
+  }
+  function lyrOptions() {
+    lyr.optBtns = [];
+    const seg = (k, choices) => h("div", { class: "pf-seg" }, choices.map(([v, label]) => {
+      const btn = h("button", { class: "pf-chip", text: label, onclick: () => setLyrOpt(k, v) });
+      lyr.optBtns.push([btn, k, v]);
+      return btn;
+    }));
+    return h("div", { class: "pf-lyr-opts", id: "pf-lyr-opts", hidden: true },
+      h("div", { class: "pf-label", text: "Size" }), seg("size", [["s", "Small"], ["m", "Medium"], ["l", "Large"]]),
+      h("div", { class: "pf-label", text: "Align" }), seg("align", [["left", "Left"], ["center", "Centre"]]),
+      h("div", { class: "pf-label", text: "Romanized" }), seg("rom", [[true, "Show"], [false, "Hide"]]),
+      h("div", { class: "pf-label", text: "Translation" }), seg("tr", [[true, "Show"], [false, "Hide"]]));
+  }
   function syncLyricsButton() {
     if (!on("lyrics")) { if (lyrBtn) { lyrBtn.remove(); lyrBtn = null; } if (lyr.panel) closeLyrics(); return; }
     if (lyrBtn && lyrBtn.isConnected) return;
-    const main = document.querySelector(".ytmusicPlayerControlsMainControls");
-    if (!main) return;
-    const look = main.querySelector(".ytmusicPlayerControlsRepeatButton button, .ytmusicPlayerControlsShuffleButton button");
-    const btn = h("button", { class: (look ? look.className + " " : "") + "pf-lyr-btn", "aria-label": "Live lyrics", title: "Live lyrics",
+    const host = barHost();
+    if (!host) return;
+    const btn = h("button", { class: host.look + "pf-lyr-btn", "aria-label": "Live lyrics", title: "Live lyrics",
       "aria-pressed": String(!!lyr.panel), onclick: (e) => { e.stopPropagation(); if (lyr.panel) closeLyrics(); else openLyrics(); } },
       h("span", { class: "pf-ico" }, icon(ICON.lyrics)));
-    lyrBtn = h("div", { class: "ytmusicPlayerControlsControlButton pf-lyr-wrap" }, btn);
-    const after = main.querySelector(".pf-dice") || main.querySelector(".ytmusicPlayerControlsRepeatButton");
-    if (after) after.after(lyrBtn); else main.append(lyrBtn);
+    lyrBtn = barWrap(host, "pf-lyr-wrap", btn);
+    const after = host.el.querySelector(".pf-dice") || host.repeat;
+    if (after) after.after(lyrBtn); else host.el.append(lyrBtn);
   }
   function placeLyrics() {
     if (!lyr.panel) return;
@@ -815,10 +929,14 @@
     closeLyrics();
     lyr.sub = h("div", { class: "pf-sub", text: "" });
     lyr.body = h("div", { class: "pf-lyr-body", "aria-live": "off" });
+    const opts = lyrOptions();
+    const optsBtn = h("button", { class: "pf-btn pf-icon-btn", "aria-label": "Lyrics options", title: "Lyrics options", "aria-expanded": "false",
+      "aria-controls": "pf-lyr-opts", onclick: () => { opts.hidden = !opts.hidden; optsBtn.setAttribute("aria-expanded", String(!opts.hidden)); } }, icon(ICON.tune));
     lyr.panel = h("div", { class: "pf-lyr pf-ui", role: "dialog", "aria-label": "Lyrics" },
-      h("div", { class: "pf-lyr-head" }, h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: "Lyrics" }), lyr.sub),
+      h("div", { class: "pf-lyr-head" }, h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: "Lyrics" }), lyr.sub), optsBtn,
         h("button", { class: "pf-btn pf-icon-btn", "aria-label": "Close lyrics", onclick: closeLyrics }, icon(ICON.close))),
-      lyr.body);
+      opts, lyr.body);
+    applyLyrOpts();
     for (const ev of ["wheel", "touchmove", "pointerdown"]) lyr.body.addEventListener(ev, () => { lyr.userAt = Date.now(); }, { passive: true });
     document.body.append(lyr.panel);
     placeLyrics();
@@ -831,6 +949,7 @@
     if (!lyr.panel) return;
     const el = lyr.panel;
     lyr.panel = lyr.body = null;
+    lyr.run++;
     clearTimeout(lyr.timer);
     cancelAnimationFrame(lyr.raf); lyr.raf = 0;
     el.classList.remove("pf-open");
@@ -843,6 +962,7 @@
     lyr.body.style.paddingTop = "30%";
     lyr.body.append(h("div", { class: "pf-lyr-msg", text }));
     lyr.lines = []; lyr.els = []; lyr.idx = -1;
+    lyr.hasRom = lyr.hasTr = false; applyLyrOpts();
   }
   async function loadLyrics() {
     const np = API.nowPlaying() || {};
@@ -877,18 +997,22 @@
       else if (L.synced && Array.isArray(ln.w) && ln.w.length) {
         for (const [, , word] of ln.w) el.append(h("span", { class: "pf-wd", text: word }));
       } else el.append(ln.text);
-      if (ln.rom) el.append(h("small", { text: ln.rom }));
-      if (ln.tr) el.append(h("small", { text: ln.tr }));
+      if (ln.rom) el.append(h("small", { class: "pf-rom", text: ln.rom }));
+      if (ln.tr) el.append(h("small", { class: "pf-tr", text: ln.tr }));
       if (L.synced && ln.t != null) el.addEventListener("click", () => { try { API.mp().seekTo(ln.t, true); lyr.userAt = 0; } catch (e) {} });
       lyr.body.append(el);
       return el;
     });
     lyr.idx = -1;
-    if (L.synced) lyrTick(); else lyr.body.scrollTop = 0;
+    lyr.hasRom = L.lines.some((ln) => !!ln.rom);
+    lyr.hasTr = L.lines.some((ln) => !!ln.tr);
+    applyLyrOpts();
+    // one loop at a time: lyrics can be drawn again (a better source arrived) while the last loop is still waiting
+    if (L.synced) lyrTick(++lyr.run); else { lyr.run++; lyr.body.scrollTop = 0; }
   }
-  function lyrTick() {
+  function lyrTick(run) {
     lyr.raf = 0;
-    if (!lyr.panel || !lyr.synced || !lyr.lines.length) return;
+    if (run !== lyr.run || !lyr.panel || !lyr.synced || !lyr.lines.length) return;
     if (!document.hidden) {
       const pos = times().pos + 0.15; // a touch early, as the eye reads ahead
       let i = -1;
@@ -908,11 +1032,11 @@
         ln.w.forEach(([a, b], k) => { if (spans[k]) spans[k].style.setProperty("--p", (b > a ? clamp((pos - a) / (b - a), 0, 1) * 100 : pos >= a ? 100 : 0) + "%"); });
       }
     }
-    lyr.raf = requestAnimationFrame(() => setTimeout(lyrTick, 60)); // about 15 times a second is plenty
+    lyr.raf = requestAnimationFrame(() => setTimeout(() => lyrTick(run), 60)); // about 15 times a second is plenty
   }
 
   // ------------------------------------------------------------------ YouTube Music's own song menu
-  // When YouTube Music opens a song's menu, it gets a "Make a playlist from this song" item. The song is the one the
+  // When YouTube Music opens a song's menu, it gets a "Playlist from this song" item. The song is the one the
   // menu's own "Start radio" item points at, so menus that aren't about a song are left alone.
   function menuSong(popup) {
     for (const it of popup.querySelectorAll("ytmusic-menu-navigation-item-renderer, ytmusic-menu-service-item-renderer")) {
@@ -938,7 +1062,7 @@
       };
       const item = h("div", { class: "pf-menu-item", role: "menuitem", tabindex: "0", onclick: go,
         onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } },
-        h("span", { class: "pf-ico" }, icon(ICON.playlistAdd)), h("span", { text: "Make a playlist from this song" }));
+        h("span", { class: "pf-ico" }, icon(ICON.playlistAdd)), h("span", { text: "Playlist from this song" }));
       list.append(item);
     }
   }
@@ -996,7 +1120,7 @@
       h("div", { class: "pf-sec", text: "Controls" }),
       sw("dice", "Something-you-might-like button", "In the player, next to repeat"),
       sw("lyrics", "Live lyrics button", "Time-synced lyrics from the Pocketfader app, next to the player"),
-      sw("songMenu", "In song menus", "\u201cMake a playlist from this song\u201d in YouTube Music's own \u22ee menus"),
+      sw("songMenu", "In song menus", "\u201cPlaylist from this song\u201d in YouTube Music's own \u22ee menus"),
       h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),
       h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
         "switch off anything that misbehaves. Settings stay in this browser. Pocketfader extension " + VERSION + "." }));
@@ -1353,6 +1477,7 @@
     syncWave();
     syncDice();
     syncLyricsButton();
+    syncSpeedButton();
     applyPitch();
   }
   let lastVid = null, tick = 0;
@@ -1368,7 +1493,7 @@
         updateColors(false);
         if (lyr.panel) loadLyrics();
       } else if (tick % 4 === 0) updateColors(false); // the cover can arrive a moment after the song
-      if (tick % 3 === 0) { syncNav(); syncDice(); syncLyricsButton(); syncWave(); placeLyrics(); }
+      if (tick % 3 === 0) { syncNav(); syncDice(); syncLyricsButton(); syncSpeedButton(); syncWave(); placeLyrics(); }
       kickWave();
     } catch (e) {}
     setTimeout(loop, document.hidden ? 2500 : 700);
@@ -1378,7 +1503,8 @@
     report: () => ({
       version: VERSION, killed: KILL, prefs: { ...prefs },
       nav: navBtn ? (navBtn.isConnected ? (navBtn.classList.contains("pf-float") ? "floating" : "top bar") : "removed") : "not placed",
-      dice: !!(dice && dice.isConnected), speedButton: !!document.querySelector(".ytmusicPlayerControlsPlaybackRateButton"),
+      dice: !!(dice && dice.isConnected), speedButton: !!document.querySelector(".ytmusicPlayerControlsPlaybackRateButton") || !!(speedBtn && speedBtn.isConnected),
+      lyricsButton: !!(lyrBtn && lyrBtn.isConnected), bar: (() => { const b = barHost(); return b ? (b.classic ? "classic" : "newer") : "none"; })(),
       sliders: [...overlays.keys()].map((el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")),
       color: lastColor ? { h: Math.round(lastColor.h), vivid: Math.round(lastColor.s * 100) / 100 } : null, colorNote,
       speedRules: { songs: Object.keys(speeds.s).length, playlists: Object.keys(speeds.p).length },
