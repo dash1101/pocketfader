@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
  * playlist kept on the phone, smart downloads) finishes even when the app is in the background.
  */
 class DownloadService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CrashLog.quiet)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -116,7 +116,7 @@ class DownloadService : Service() {
  * are never touched.
  */
 object AutoDownload {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private var job: Job? = null
     private const val ESTIMATE = 4_500_000L      // a typical song, before it's downloaded
 
@@ -175,7 +175,7 @@ object AutoDownload {
         val (list, complete) = wanted()
         val ids = list.mapNotNull { it.videoId }.toHashSet()
         if (complete) {
-            val playing = LocalPlayer.current()?.videoId
+            val playing = LocalPlayer.currentVideoId      // not current(): this isn't the player's thread
             for (d in autos) if (d.videoId !in ids && d.videoId != playing) Downloads.delete(d.videoId)
         }
         if (p.dlWifiOnly && Downloads.metered()) return

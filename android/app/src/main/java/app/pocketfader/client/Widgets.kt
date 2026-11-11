@@ -137,7 +137,7 @@ class WidgetActions : BroadcastReceiver() {
 }
 
 object Widgets {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CrashLog.quiet)
     private var started = false
 
     /** The cover, rounded, for the current song (made once per song). */

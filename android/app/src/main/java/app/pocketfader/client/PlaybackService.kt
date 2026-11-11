@@ -40,7 +40,7 @@ class PlaybackService : Service() {
 
     private lateinit var session: MediaSessionCompat
     private lateinit var volume: VolumeProviderCompat
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CrashLog.quiet)
     private var artUrl: String? = null
     private var art: Bitmap? = null
     private var lastKey = ""
@@ -80,7 +80,7 @@ class PlaybackService : Service() {
                 if (Math.abs(it.position - expected) > 2.5 || t - lastPosUpdate > 30000) publish(Remote.state.value, force = true)
             }
         }
-        showForeground()
+        if (!showForeground()) stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -93,15 +93,41 @@ class PlaybackService : Service() {
         return START_STICKY
     }
 
-    private fun showForeground() {
-        if (started) return
-        started = true
-        val n = buildNotification(RemoteState())
-        if (Build.VERSION.SDK_INT >= 29) {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTIFICATION_ID, n)
+    /**
+     * False when Android won't let the notification start now. That happens when Android restarts this service by itself
+     * while the app is in the background (Android 12 and later forbid it): the service then stops quietly, and starts
+     * again the next time the app is opened, instead of closing the whole app with an error.
+     */
+    private fun showForeground(): Boolean {
+        if (started) return true
+        return try {
+            val n = buildNotification(RemoteState())
+            if (Build.VERSION.SDK_INT >= 29) {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(NOTIFICATION_ID, n)
+            }
+            started = true
+            true
+        } catch (e: Exception) {
+            CrashLog.note("starting the playback notification", e)
+            false
         }
+    }
+
+    /** The cover, read at a size a notification can use (a full-size one costs memory an old device doesn't have). */
+    private fun loadArt(url: String): Bitmap? = try {
+        val c = URL(url).openConnection()
+        c.connectTimeout = 6000
+        c.readTimeout = 8000
+        val bytes = c.getInputStream().use { it.readBytes() }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 640) sample *= 2
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    } catch (_: Throwable) {       // including running out of memory
+        null
     }
 
     private var lastPosUpdate = 0L
@@ -115,14 +141,25 @@ class PlaybackService : Service() {
         else session.setPlaybackToLocal(android.media.AudioManager.STREAM_MUSIC)
     }
 
+    private var publishFailed = false
+
+    /** A failure here must not end the app (or stop later updates): it's written down once and the next update tries again. */
     private fun publish(s: RemoteState, force: Boolean = false) {
+        try {
+            publishNow(s, force)
+        } catch (e: Exception) {
+            if (!publishFailed) { publishFailed = true; CrashLog.note("updating the playback notification", e) }
+        }
+    }
+
+    private fun publishNow(s: RemoteState, force: Boolean) {
         val now = s.now
         val url = now?.art
         if (url != artUrl) {
             artUrl = url
             art = null
             if (url != null) scope.launch(Dispatchers.IO) {
-                val bm = try { BitmapFactory.decodeStream(URL(url).openStream()) } catch (_: Exception) { null }
+                val bm = loadArt(url)
                 scope.launch { if (artUrl == url) { art = bm; lastKey = ""; publish(Remote.state.value) } }
             }
         }

@@ -9,7 +9,9 @@ import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.channel.ChannelInfoItem
 import org.schabi.newpipe.extractor.playlist.PlaylistInfo
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -162,8 +164,19 @@ object Streams {
 
     fun forget(videoId: String) { cache.remove(videoId) }
 
-    fun fromPhone(videoId: String): Resolved {
+    /**
+     * Runs a lookup so that an Error inside it (YouTube's own script running out of stack or memory, which happens on old
+     * devices) becomes an ordinary failure with a message, instead of closing the whole app.
+     */
+    private inline fun <T> safely(block: () -> T): T = try {
         init()
+        block()
+    } catch (e: Error) {
+        CrashLog.note("a YouTube lookup on this device", e)
+        throw IOException("This device couldn't finish the YouTube lookup", e)
+    }
+
+    fun fromPhone(videoId: String): Resolved = safely {
         val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
         val streams = info.audioStreams.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
         // AAC (m4a) plays and saves everywhere; Opus only if there's nothing else
@@ -171,7 +184,7 @@ object Streams {
             ?: streams.maxByOrNull { it.averageBitrate }
             ?: throw IOException("No audio for this song")
         val ext = if (best.format == NpFormat.M4A) "m4a" else "webm"
-        return Resolved(best.content, mime = best.format?.mimeType, ext = ext)
+        Resolved(best.content, mime = best.format?.mimeType, ext = ext)
     }
 
     /** The computer fetches the song with yt-dlp and hands it over (only when a computer is set up and supports it). */
@@ -199,19 +212,46 @@ object Streams {
     /** Songs, not hour-long mixes or live streams: what belongs in a queue that plays on its own. */
     private fun StreamInfoItem.isSong(): Boolean = duration in 1..900 && streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM
 
-    fun search(query: String): List<SearchItem> {
-        init()
-        val ex = ServiceList.YouTube.getSearchExtractor(query, listOf("music_songs"), "")
+    private val LIST_ID = Regex("[?&]list=([A-Za-z0-9_-]+)")
+    private val CHANNEL_ID = Regex("/channel/([A-Za-z0-9_-]+)")
+
+    /** A search result of any kind as a row: a song, an artist, an album or a playlist. */
+    private fun rowOf(item: InfoItem, albums: Boolean): SearchItem? = when (item) {
+        is StreamInfoItem -> item.toSearchItem()
+        is PlaylistInfoItem -> LIST_ID.find(item.url)?.groupValues?.get(1)?.let { id ->
+            val by = item.uploaderName.orEmpty()
+            val count = if (item.streamCount > 0) "${item.streamCount} songs" else ""
+            SearchItem(
+                title = item.name,
+                subtitle = listOf(if (albums) "Album" else "Playlist", by, count).filter { it.isNotBlank() }.joinToString(" · "),
+                thumb = bestThumb(item), videoId = null, playlistId = id, kind = if (albums) "album" else "playlist",
+            )
+        }
+        is ChannelInfoItem -> CHANNEL_ID.find(item.url)?.groupValues?.get(1)?.let { id ->
+            SearchItem(title = item.name, subtitle = "Artist", thumb = bestThumb(item), videoId = null, playlistId = null, kind = "artist", browseId = id)
+        }
+        else -> null
+    }
+
+    /** Search YouTube Music from the phone. [filter]: "songs", "videos", "artists", "albums" or "playlists". */
+    fun search(query: String, filter: String = "songs"): List<SearchItem> = safely {
+        val f = when (filter) {
+            "artists" -> "music_artists"
+            "albums" -> "music_albums"
+            "playlists" -> "music_playlists"
+            "videos" -> "music_videos"
+            else -> "music_songs"
+        }
+        val ex = ServiceList.YouTube.getSearchExtractor(query, listOf(f), "")
         ex.fetchPage()
-        return ex.initialPage.items.mapNotNull { (it as? StreamInfoItem)?.toSearchItem() }
+        ex.initialPage.items.mapNotNull { rowOf(it, filter == "albums") }
     }
 
     /**
      * YouTube Music's own radio for a song (the "RDAMVM" mix it plays when you start a radio): about 25 songs per page,
      * the song itself first. This is what autoplay and the recommendations are built from.
      */
-    fun radio(videoId: String, pages: Int = 1): List<LocalItem> {
-        init()
+    fun radio(videoId: String, pages: Int = 1): List<LocalItem> = safely {
         val url = "https://www.youtube.com/watch?v=$videoId&list=RDAMVM$videoId"
         val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
         val all = ArrayList<StreamInfoItem>(info.relatedItems)
@@ -224,26 +264,25 @@ object Streams {
             n++
         }
         val seen = HashSet<String>()
-        return all.filter { it.isSong() }.mapNotNull { it.toLocalItem() }.filter { seen.add(it.videoId!!) }
+        all.filter { it.isSong() }.mapNotNull { it.toLocalItem() }.filter { seen.add(it.videoId!!) }
     }
 
     /** Songs to continue with after this one: its radio, or (if that fails) what YouTube relates to it. */
     fun related(videoId: String): List<LocalItem> {
         runCatching { radio(videoId) }.getOrNull()?.filter { it.videoId != videoId }?.takeIf { it.isNotEmpty() }?.let { return it }
-        init()
-        val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
-        return info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.takeIf { s -> s.isSong() }?.toLocalItem() }
+        return safely {
+            val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
+            info.relatedItems.mapNotNull { (it as? StreamInfoItem)?.takeIf { s -> s.isSong() }?.toLocalItem() }
+        }
     }
 
     /** What people search for, as you type (works without the computer). */
-    fun suggestions(query: String): List<String> {
-        init()
-        return ServiceList.YouTube.suggestionExtractor.suggestionList(query).take(8)
+    fun suggestions(query: String): List<String> = safely {
+        ServiceList.YouTube.suggestionExtractor.suggestionList(query).take(8)
     }
 
     /** A public playlist's songs (private ones, like your liked music, need the computer, or a synced copy). */
-    fun playlist(playlistId: String): List<LocalItem> {
-        init()
+    fun playlist(playlistId: String): List<LocalItem> = safely {
         val url = "https://www.youtube.com/playlist?list=$playlistId"
         val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
         val all = ArrayList<StreamInfoItem>(info.relatedItems)
@@ -255,14 +294,13 @@ object Streams {
             page = more.nextPage
             n++
         }
-        return all.mapNotNull { it.toLocalItem() }
+        all.mapNotNull { it.toLocalItem() }
     }
 
     /** Title, artist and cover of a song, when all we have is its id. */
-    fun details(videoId: String): LocalItem {
-        init()
+    fun details(videoId: String): LocalItem = safely {
         val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
         val (t, a) = cleanSong(info.name, info.uploaderName.orEmpty())
-        return LocalItem(videoId, null, t, a, info.thumbnails.maxByOrNull { it.height }?.url, info.duration.toDouble())
+        LocalItem(videoId, null, t, a, info.thumbnails.maxByOrNull { it.height }?.url, info.duration.toDouble())
     }
 }

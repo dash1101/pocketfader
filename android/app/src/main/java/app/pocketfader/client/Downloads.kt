@@ -42,7 +42,7 @@ data class Download(
 object Downloads {
     private lateinit var dir: File
     private lateinit var app: Context
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private val gate = Semaphore(2)    // two at a time is plenty on a phone
 
     private val _items = MutableStateFlow<List<Download>>(emptyList())

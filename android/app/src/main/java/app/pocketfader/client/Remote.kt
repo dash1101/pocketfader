@@ -55,7 +55,7 @@ object Remote {
     val messages: SharedFlow<String> = _messages
 
     @Volatile private var api: PfApi? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private var job: Job? = null
     private var holders = 0
     @Volatile private var visible = false
@@ -185,6 +185,7 @@ object Remote {
 
     /** True while the UI is on screen: polls faster. */
     fun setVisible(v: Boolean) { visible = v }
+    val isVisible: Boolean get() = visible
 
     /** The mixer screen is open: also keep the output list fresh. */
     fun setWantOutputs(v: Boolean) { wantOutputs = v }

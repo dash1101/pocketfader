@@ -89,7 +89,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
     if (current == "sound") {
         MixerScreen(s, Modifier.weight(1f).fillMaxWidth())
     } else {
-    CompositionLocalProvider(LocalInPage provides true) {
+    CompositionLocalProvider(LocalPageTitle provides (allCats.firstOrNull { it.key == current }?.title ?: "")) {
     val pageScroll = rememberScrollState()
     Column(
         Modifier.weight(1f).edgeFade(pageScroll).verticalScroll(pageScroll).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -383,6 +383,48 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             OutlinedButton(onClick = { confirmReset = true }) { Text("Reset all settings") }
         }
+        if (page == "about") Section("If the app closed by itself") {
+            // what Android says about the last times the app stopped (Android 11 and later), and errors the app wrote down
+            val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+            val exits = remember { CrashLog.exits(ctx) }
+            var errors by remember { mutableStateOf(CrashLog.read()) }
+            if (exits.isEmpty() && errors == null) {
+                Text(
+                    if (Build.VERSION.SDK_INT >= 30) "Nothing has gone wrong that the app knows of."
+                    else "No errors written down. (Android only tells apps why they were closed from Android 11 on.)",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (exits.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("The last times it stopped", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    for (e in exits.take(4)) Text(e, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            errors?.let { text ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Errors written down", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text.lineSequence().filter { it.isNotBlank() }.take(5).joinToString("\n"),
+                        style = MaterialTheme.typography.bodySmall, maxLines = 8,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(
+                "When Android closes the app to free memory, that isn't an error in the app, but it is why the music's place can be " +
+                    "lost; switching off battery optimisation for Pocketfader in Android's settings helps on devices that do it often. " +
+                    "This report stays on this device unless you copy it somewhere.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilledTonalButton(onClick = {
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(CrashLog.report(ctx)))
+                    Remote.notify("Report copied")
+                }) { Text("Copy report") }
+                if (errors != null) OutlinedButton(onClick = { CrashLog.clear(); errors = null }) { Text("Clear") }
+            }
+        }
         Spacer(Modifier.height(24.dp))
     }
     }
@@ -400,13 +442,19 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    val inPage = LocalInPage.current
+    // the page's header already names its first card; the cards after it get their own small heading
+    val pageTitle = LocalPageTitle.current
     Column {
-        if (!inPage) {
+        if (pageTitle == null) {
             Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(allCats.firstOrNull { it.title == title }?.icon ?: Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
+        } else if (title in SUBHEADS) {
+            Text(
+                title, Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp), style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+            )
         }
         Card(
             Modifier.fillMaxWidth(),
@@ -465,7 +513,10 @@ object SettingsNav {
     var deepLink by mutableStateOf<String?>(null)
 }
 
-private val LocalInPage = androidx.compose.runtime.compositionLocalOf { false }
+private val LocalPageTitle = androidx.compose.runtime.compositionLocalOf<String?> { null }
+
+/** Cards that come after a page's first one, and so need a heading of their own. */
+private val SUBHEADS = setOf("Automatic downloads", "Recommendations", "If the app closed by itself")
 
 private class Cat(val key: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 

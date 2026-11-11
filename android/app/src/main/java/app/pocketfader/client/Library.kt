@@ -53,7 +53,7 @@ data class Play(
  */
 object Library {
     private lateinit var dir: File
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private val lock = Any()
 
     private val _playlists = MutableStateFlow<List<SyncedList>>(emptyList())

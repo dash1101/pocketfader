@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 class PocketfaderApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashLog.init(this)       // first, so an error while starting is written down too
         Settings.init(this)
         Downloads.init(this)
         Library.init(this)

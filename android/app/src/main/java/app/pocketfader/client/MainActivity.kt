@@ -181,7 +181,12 @@ class MainActivity : ComponentActivity() {
 
     private fun startPlayback() {
         val i = Intent(this, PlaybackService::class.java)
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (e: Exception) {
+            // Android refuses this now and then (the app isn't quite in front yet); the next time the app shows tries again
+            CrashLog.note("starting the playback notification", e)
+        }
     }
 }
 

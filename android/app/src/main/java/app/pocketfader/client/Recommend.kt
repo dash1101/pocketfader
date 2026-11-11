@@ -30,7 +30,7 @@ import kotlin.math.ln
  */
 object Recommend {
     private lateinit var cacheFile: File
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private val gate = Semaphore(3)
 
     private val _feed = MutableStateFlow<List<Shelf>?>(null)

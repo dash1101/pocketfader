@@ -44,7 +44,7 @@ object LocalPlayer {
     private var ctx: Context? = null
     private var exo: ExoPlayer? = null
     private val items = ArrayList<LocalItem>()           // the queue, in the order it plays
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CrashLog.quiet)
     private var ticker: Job? = null
     private var extending = false
     var autoplay = true
@@ -82,7 +82,10 @@ object LocalPlayer {
                     Streams.resolve(u.schemeSpecificPart)
                 } catch (e: java.io.IOException) {
                     throw e
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
+                    // Throwable, not Exception: the lookup runs YouTube's own script, which can run out of stack or
+                    // memory on an old device, and an Error on this thread would close the whole app
+                    if (e is Error) CrashLog.note("looking up a song's audio", e)
                     throw java.io.IOException(e.message ?: "Couldn't get this song", e)
                 }
                 var s = spec.withUri(Uri.parse(r.url))
@@ -358,6 +361,10 @@ object LocalPlayer {
         save()
     }
 
+    /** The song in the player now, readable from any thread (the player itself may only be asked on the main one). */
+    @Volatile var currentVideoId: String? = null
+        private set
+
     fun current(): LocalItem? = exo?.let { items.getOrNull(it.currentMediaItemIndex) } ?: restored?.let { it.items.getOrNull(it.index) }
     fun position(): Double = exo?.let { it.currentPosition / 1000.0 } ?: ((restored?.positionMs ?: 0L) / 1000.0)
     fun queue(): List<LocalItem> = items.toList()
@@ -473,6 +480,7 @@ object LocalPlayer {
             // not started yet this time: show the saved queue, paused, so the app opens where you left off
             val r = restored
             val cur = r?.items?.getOrNull(r.index)
+            currentVideoId = cur?.videoId
             Remote.applyLocal(
                 cur?.let { Now(title = it.title, artist = it.artist, art = it.art, playing = false, duration = it.durationSec, videoId = it.videoId ?: it.key, liked = Library.isLiked(it.videoId), shuffle = shuffled, autoplay = autoplay) },
                 r?.items.orEmpty().mapIndexed { i, it -> trackOf(it, i, i == r?.index) },
@@ -482,6 +490,7 @@ object LocalPlayer {
         }
         val idx = p.currentMediaItemIndex
         val cur = items.getOrNull(idx)
+        currentVideoId = cur?.videoId
         if (cur != null) track(p)
         val now = if (cur == null) null else Now(
             title = cur.title, artist = cur.artist, art = cur.art,
