@@ -854,6 +854,7 @@
     if (!lyr.panel || lyr.key !== key) return; // closed, or the song changed meanwhile
     if (r.error) {
       lyrMessage(r.error === "offline" ? "Live lyrics come from the Pocketfader app on this computer. Start it, then open lyrics again."
+        : r.error === "old_app" ? "Live lyrics need a newer Pocketfader app on this computer. Update it, then open lyrics again."
         : "The Pocketfader app didn't answer in time. Try again in a moment.");
       return;
     }

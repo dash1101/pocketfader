@@ -38,7 +38,8 @@
     let data;
     try {
       const r = await fetch(BASE + "/ext/lyrics?" + params, { method: "GET" });
-      data = await r.json();
+      // an app from before live lyrics answers "not found"
+      data = r.status === 404 ? { error: "old_app" } : await r.json();
     } catch (e) {
       data = { error: "offline" };
     }
