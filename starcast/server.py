@@ -614,6 +614,8 @@ class Handler(BaseHTTPRequestHandler):
             if resend:
                 reply["resend"] = True
             return self._json(200, reply)
+        if path == "/ext/discord":   # every Discord status option, for the extension's popup and Refine's panel
+            return self._json(200, app.beacon.status())
         if path == "/ext/status":   # the extension's toolbar popup and Refine's panel
             parts = app.parts()
             return self._json(200, {"app": APP_NAME, "version": __version__, "parts": parts,
@@ -740,10 +742,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.ytm_command(body))
 
         # ---- Discord status (the routes keep the names they had when YTM Beacon was a separate app) ----
-        if path in ("/api/beacon/visibility", "/api/beacon/settings", "/api/beacon/install"):
+        if path in ("/ext/discord/visibility", "/ext/discord/settings", "/ext/discord/test"):
+            path = "/api/beacon/" + path.rsplit("/", 1)[1]     # the extension's copies: the same checks and replies
+        if path in ("/api/beacon/visibility", "/api/beacon/settings", "/api/beacon/install", "/api/beacon/test"):
             before = app.parts()["discord"]
             try:
-                if path.endswith("visibility"):
+                if path.endswith("test"):
+                    out = app.beacon.test()
+                elif path.endswith("visibility"):
                     out = app.beacon.set_visibility(body)     # "show" also switches the Discord part back on
                 elif path.endswith("install"):
                     out = app.beacon.start_install(body)      # nothing to install any more: always an error

@@ -1102,6 +1102,11 @@
         in: chain(el).slice(1, 6).join(" < ") }));
     const mini = document.querySelector("ytmusic-miniplayer");
     out.miniplayer = mini ? { attrs: attrs(mini), box: box(mini), kids: kids(mini), z: getComputedStyle(mini).zIndex } : null;
+    // the newer bar's progress line (no slider element): its first levels, to see where Refine's wave can sit
+    const pw = mini && mini.querySelector("[class*='ProgressBarWrapper']");
+    const tree = (el, d) => d > 3 ? null : { tag: el.tagName.toLowerCase(), cls: (typeof el.className === "string" ? el.className : "").slice(0, 120),
+      role: el.getAttribute("role"), box: box(el), kids: [...el.children].slice(0, 6).map((c) => tree(c, d + 1)) };
+    out.progressWrap = pw ? tree(pw, 0) : null;
     const nav = document.querySelector("ytmusic-nav-bar");
     out.navBar = nav ? { kids: kids(nav), right: (nav.querySelector("#right-content, .right-content") ? kids(nav.querySelector("#right-content, .right-content")) : null) } : null;
     try {

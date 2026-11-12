@@ -33,6 +33,12 @@ Beacon in Firefox has no replacement here yet: keep it there.)
 Click YTM Starcast's button in the browser's toolbar to see whether YTM Starcast is running (and its version), switch the YouTube
 Music remote, Discord status and Refine on or off, see what Discord status is doing, and open YTM Starcast's web app.
 
+**Discord status options** (in the toolbar button and in Refine's ✦ menu) have everything YTM Beacon had: show or hide, hide
+for 30 minutes, an hour or three hours, private mode, album art, the progress bar, the play/pause icon, the "Listen on YouTube
+Music" button, paused songs (and how long they stay), what the member list shows after "Listening to", never-show words and a
+30-second test song, with a live preview of the card. **Alt+Shift+M** shows or stops showing your music on Discord from
+anywhere in the browser (change it on the browser's keyboard shortcuts page).
+
 The button reaches YTM Starcast through an open YouTube Music tab, so it can show:
 
 - **Open YouTube Music**, when no tab is open;
@@ -45,7 +51,7 @@ The button reaches YTM Starcast through an open YouTube Music tab, so it can sho
 `refine.js` adds a ✦ button to YouTube Music's top bar. From there you can switch each part on or off:
 a Material 3 Expressive look (rounder shapes, colours from the album art, expressive player controls, a wavy progress bar,
 a glow behind the cover), a richer speed menu on the player's own speed button (any speed, pitch on/off, remembered per song
-or playlist; Shift+. and Shift+, from the keyboard), a "play something you might like" button and live lyrics in the player,
+or playlist; Shift+. and Shift+, from the keyboard), a "play something you might like" button on the home page, live lyrics in the player,
 and a playlist maker. Live lyrics come from YTM Starcast on this computer (route `/ext/lyrics`). Settings stay in this browser.
 
 The ✦ menu's **YTM Starcast** section has the same three switches as the toolbar button. Switching Refine off there (or in

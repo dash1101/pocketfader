@@ -78,3 +78,12 @@ footer { margin-top: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::after { transition: none !important; }
 }
+
+/* Discord status options (drawn by discord_ui.js, which uses these colours) */
+#dc { padding: 4px 16px 12px; --pf-text: var(--text); --pf-muted: var(--dim); --pf-accent: var(--accent2); --pf-on-accent: #1d1430;
+  --pf-outline: #5f5d6a; --pf-container: #3b2f63; --pf-on-container: #eaddff; --pf-surface2: var(--card2); }
+#dc[hidden] { display: none; }
+#dc summary { cursor: pointer; padding: 10px 0; font-weight: 600; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+#dc summary::-webkit-details-marker { display: none; }
+#dc summary::after { content: "\203A"; font-size: 20px; color: var(--dim); transition: transform var(--t-short) var(--ease); }
+#dc[open] summary::after { transform: rotate(90deg); }

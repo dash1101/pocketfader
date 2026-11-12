@@ -9,7 +9,8 @@ through a server of ours.
 
 The first part is built (extension 2.0, `extension/refine.js`). It lives in YouTube Music's own page rather than in a
 separate panel: a ✦ button in the top bar opens its settings, the speed menu opens from the player's own speed button, and the
-"something you might like" button sits among the player controls.
+"something you might like" button sits beside the home page's first shelf (Listen again), where starting something new is
+a deliberate choice rather than a slip next to the player.
 
 | Done | Where | Switch |
 |---|---|---|

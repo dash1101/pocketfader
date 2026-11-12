@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTM Starcast",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music.",
   "host_permissions": [
     "http://127.0.0.1:8777/*",
@@ -25,6 +25,7 @@
       ],
       "js": [
         "ytm_main.js",
+        "discord_ui.js",
         "refine.js"
       ],
       "world": "MAIN",
@@ -46,5 +47,16 @@
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "toggle-discord": {
+      "suggested_key": {
+        "default": "Alt+Shift+M"
+      },
+      "description": "Show or stop showing your music on Discord"
+    }
   }
 }

@@ -1192,10 +1192,12 @@ class RouteTests(TempCase):
         self.assertEqual(self.ran, [])
 
     def test_nothing_else_is_reachable(self):
+        # (/api/beacon/test exists on purpose: the built-in engine's 30-second test song; it never reaches the old app)
         for path in ("/api/beacon/update", "/api/beacon/clear", "/api/beacon/quit", "/api/beacon/logs",
-                     "/api/beacon/config", "/api/beacon/test", "/api/beacon/v1/status"):
+                     "/api/beacon/config", "/api/beacon/v1/status", "/ext/discord/quit", "/ext/discord/clear"):
             self.assertEqual(self.req("POST", path, {})[0], 404, path)
             self.assertEqual(self.req("GET", path)[0], 404, path)
+        self.assertEqual(self.req("GET", "/api/beacon/test")[0], 404)
         self.assertFalse([c for c in self.old.calls if c[1] != "/v1/ping"])
 
     def test_migrate_route(self):

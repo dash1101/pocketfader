@@ -6,6 +6,25 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.3
+
+**Discord status: everything YTM Beacon had, and more**
+- The extension's toolbar button and Refine's ✦ menu have every Discord status option again: show or hide, hide for 30
+  minutes, an hour or three hours, private mode, album art, the progress bar, the play/pause icon, the "Listen on YouTube
+  Music" button, paused songs and how long they stay, what the member list shows, never-show words and a 30-second test song.
+- A live preview of the card shows what Discord shows, in the extension and in the apps.
+- **Alt+Shift+M** shows or stops showing your music on Discord from anywhere in the browser.
+
+**Refine**
+- The wavy progress bar works with YouTube Music's newer player bar.
+- The big cover and the floating mini player no longer show grey corners, and the glow behind the cover is back.
+- Live lyrics: the rest of a line is readable before it is sung (it used to appear only as it was sung), and more of what
+  comes next is visible.
+- YouTube Music's menus open above the lyrics panel, and a second click on ⋮ closes its menu.
+- The "something you might like" button moved from the player to the home page, next to the first shelf (Listen again),
+  so a slip can't replace the song that plays.
+- More of YouTube Music's buttons take the Material You look ("More", "Play all", the shelf arrows).
+
 ### What's new in 0.2.0-alpha.2
 
 **Adding the browser extension, step by step**

@@ -319,13 +319,16 @@
     display: flex; flex-direction: column; background: var(--pf-surface3); border-radius: var(--pf-r-xl); box-shadow: 0 16px 48px rgba(0,0,0,.5);
     opacity: 0; transform: translateY(14px) scale(.97); transform-origin: bottom right; transition: opacity var(--pf-t-short) var(--pf-ease), transform var(--pf-t-medium) var(--pf-spring); }
   .pf-lyr.pf-open { opacity: 1; transform: none; }
+  /* YouTube Music's menus (z-index about 103) and dialogs open above the lyrics panel, never behind it */
+  ytmusic-popup-container tp-yt-iron-dropdown, tp-yt-iron-dropdown.ytmusic-popup-container { z-index: 2250 !important; }
+  tp-yt-iron-overlay-backdrop { z-index: 2239 !important; } tp-yt-paper-dialog { z-index: 2240 !important; }
   .pf-lyr-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 8px 22px; }
   .pf-lyr-head .pf-head { flex: 1; padding: 0; min-width: 0; }
   .pf-lyr-head .pf-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pf-lyr-opts { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 14px; padding: 2px 18px 12px 22px; }
   .pf-lyr-opts[hidden] { display: none; }
   .pf-lyr-opts .pf-label { margin: 0; }
-  .pf-lyr-body { position: relative; flex: 1; min-height: 0; box-sizing: border-box; overflow-y: auto; padding: min(18vh, 150px) 18px min(22vh, 180px); scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent); }
+  .pf-lyr-body { position: relative; flex: 1; min-height: 0; box-sizing: border-box; overflow-y: auto; padding: min(18vh, 150px) 18px min(22vh, 180px); scrollbar-width: none; mask-image: linear-gradient(transparent, #000 9%, #000 90%, transparent); }
   .pf-lyr-body::-webkit-scrollbar { display: none; }
   /* with the options open there is less room: the lines start right under them */
   .pf-lyr-opts:not([hidden]) + .pf-lyr-body { padding-top: 20px; padding-bottom: 64px; }
@@ -341,7 +344,9 @@
   .pf-lyr-center .pf-ln { text-align: center; transform-origin: center; }
   .pf-lyr-norom .pf-ln small.pf-rom { display: none; }
   .pf-lyr-notr .pf-ln small.pf-tr { display: none; }
-  .pf-ln .pf-wd { background: linear-gradient(90deg, var(--pf-accent) var(--p, 0%), currentColor var(--p, 0%)); -webkit-background-clip: text;
+  /* the part still to be sung keeps the text colour (not "currentColor": that is the transparent fill itself, which
+     made the rest of the line invisible until it was sung) */
+  .pf-ln .pf-wd { background: linear-gradient(90deg, var(--pf-accent) var(--p, 0%), var(--pf-text) var(--p, 0%)); -webkit-background-clip: text;
     background-clip: text; color: transparent; }
   /* only the line being sung shows how far the singing is: after a jump back, later lines must not stay coloured */
   .pf-ln:not(.pf-now) .pf-wd { background: none; color: inherit; }
@@ -356,6 +361,20 @@
   .pf-dice .pf-ico, .pf-lyr-wrap .pf-ico, .pf-bar-btn .pf-ico { display: grid; place-items: center; }
   /* Refine's buttons in the classic player bar, sized and spaced like its own round ones (the newer bar lends its button looks instead) */
   .pf-bar-btn { flex: none; margin: 4px 8px 4px 4px; }
+  /* the dice, beside the home page's first shelf: a tonal round button like the shelf's own arrows (Material You) */
+  .pf-shelf-btn { display: inline-flex; flex: none; margin-right: 8px; }
+  .pf-dc-toggle { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-radius: var(--pf-r-md); transition: background-color .2s; }
+  .pf-dc-toggle:hover { background: rgba(255,255,255,.06); } .pf-dc-toggle:focus-visible { outline: 2px solid var(--pf-accent); }
+  .pf-dc-toggle .pf-chev { font-size: 22px; color: var(--pf-muted); transition: transform var(--pf-t-short) var(--pf-ease); }
+  .pf-dc-toggle[aria-expanded="true"] .pf-chev { transform: rotate(90deg); }
+  .pf-dc { padding: 4px 16px 12px; } .pf-dc[hidden] { display: none; }
+  .pf-shelf-btn button { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+    cursor: pointer; color: var(--pf-on-container, #eaddff); background: var(--pf-container, #4f378b);
+    transition: border-radius var(--pf-t-medium) var(--pf-ease), transform var(--pf-t-quick), background-color var(--pf-t-short); }
+  .pf-shelf-btn button:hover { border-radius: var(--pf-r-sm); }
+  .pf-shelf-btn button:active { transform: scale(.9); }
+  .pf-shelf-btn button:focus-visible { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
   .pf-bar-btn button { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
     color: var(--ytmusic-text-secondary, #909090); transition: border-radius var(--pf-t-medium) var(--pf-ease), background-color .2s, color .2s, transform .15s; }
   .pf-bar-btn button:hover { color: var(--ytmusic-text-primary, #fff); background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent); border-radius: var(--pf-r-sm); }
@@ -384,6 +403,10 @@
     ytmusic-player-queue-item { border-radius: var(--pf-r-sm); overflow: hidden; }
     ytmusic-player-queue-item img, ytmusic-player-queue-item .thumbnail { border-radius: var(--pf-r-xs) !important; }
     ytmusic-player #song-image, ytmusic-player #thumbnail, ytmusic-player #song-image img, ytmusic-player .image { border-radius: var(--pf-r-xl) !important; overflow: hidden; }
+    /* the frame around the cover had its own grey background and smaller corners, which showed as grey corners
+       around the picture (in the player page and in the floating mini player) */
+    ytmusic-player#player, ytmusic-player { border-radius: var(--pf-r-xl) !important; background-color: transparent !important; }
+    ytmusic-player #song-media-window, ytmusic-player .html5-video-player { border-radius: inherit; }
     ytmusic-miniplayer img, ytmusic-player-bar .image, ytmusic-player-bar img.image { border-radius: var(--pf-r-xs) !important; }
     ytmusic-search-box #input-box, ytmusic-search-box .search-box, ytmusic-search-box #suggestion-list { border-radius: var(--pf-r-lg) !important; }
     ytmusic-chip-cloud-chip-renderer a, ytmusic-chip-cloud-chip-renderer .gradient-box, ytmusic-chip-cloud-chip-renderer { border-radius: var(--pf-r-xs) !important; }
@@ -411,7 +434,23 @@
     ytmusic-player-queue-item[selected] { background-color: var(--pf-container) !important; }
     ytmusic-player-queue-item[selected] .song-title, ytmusic-player-queue-item[selected] yt-formatted-string { color: var(--pf-on-container) !important; }
     ytmusic-chip-cloud-chip-renderer[is-selected] a, ytmusic-chip-cloud-chip-renderer[chip-style="STYLE_PRIMARY"] a { background-color: var(--pf-container) !important; color: var(--pf-on-container) !important; }
-    ytmusic-search-box #input-box, ytmusic-search-box .search-box { background-color: var(--pf-surface2) !important; }`,
+    ytmusic-search-box #input-box, ytmusic-search-box .search-box { background-color: var(--pf-surface2) !important; }
+    /* Material You buttons: outlined pills ("More", "Play all", "Shuffle"...) are tonal, filled ones take the accent */
+    button.ytSpecButtonShapeNextOutline, button.yt-spec-button-shape-next--outline {
+      background-color: var(--pf-container) !important; color: var(--pf-on-container) !important; border-color: transparent !important; }
+    button.ytSpecButtonShapeNextOutline:hover, button.yt-spec-button-shape-next--outline:hover {
+      background-color: color-mix(in srgb, var(--pf-container) 82%, var(--pf-on-container)) !important; }
+    button.ytSpecButtonShapeNextFilled, button.yt-spec-button-shape-next--filled {
+      background-color: var(--pf-accent) !important; color: var(--pf-on-accent) !important; }
+    button.ytSpecButtonShapeNextOutline *, button.yt-spec-button-shape-next--outline * { color: inherit !important; fill: currentColor !important; }
+    button.ytSpecButtonShapeNextFilled *, button.yt-spec-button-shape-next--filled * { color: inherit !important; fill: currentColor !important; }
+    ytmusic-carousel-shelf-renderer #previous-items-button, ytmusic-carousel-shelf-renderer #next-items-button {
+      background-color: var(--pf-surface3) !important; border-radius: 50%; color: var(--pf-text); --iron-icon-fill-color: var(--pf-text);
+      transition: border-radius var(--pf-t-medium) var(--pf-ease), background-color var(--pf-t-short) !important; }
+    ytmusic-carousel-shelf-renderer #previous-items-button:not([disabled]):hover, ytmusic-carousel-shelf-renderer #next-items-button:not([disabled]):hover {
+      background-color: var(--pf-container) !important; border-radius: var(--pf-r-sm); }
+    ytmusic-carousel-shelf-renderer #previous-items-button[disabled], ytmusic-carousel-shelf-renderer #next-items-button[disabled] { opacity: .45; }
+    ytmusic-carousel-shelf-renderer #previous-items-button yt-interaction, ytmusic-carousel-shelf-renderer #next-items-button yt-interaction { display: none; }`,
     controls: `
     .ytmusicPlayerControlsPlayPauseButton button, ytmusic-player-bar #play-pause-button {
       width: 56px !important; height: 56px !important; min-width: 56px !important; padding: 0 !important;
@@ -435,7 +474,7 @@
       border-radius: var(--pf-r-sm) !important; background-color: color-mix(in srgb, var(--pf-accent) 16%, transparent) !important; }
     ytmusic-player-bar .left-controls-buttons yt-icon-button:not(#play-pause-button):active, ytmusic-player-bar .right-controls-buttons yt-icon-button:active { transform: scale(.9); }`,
     glow: `
-    ytmusic-player #song-image, ytmusic-player #thumbnail { box-shadow: 0 30px 110px -16px var(--pf-glow) !important; transition: box-shadow .9s; }
+    ytmusic-player#player, ytmusic-player { box-shadow: 0 30px 110px -16px var(--pf-glow) !important; transition: box-shadow .9s; }
     ytmusic-miniplayer img, ytmusic-player-bar .image { box-shadow: 0 6px 22px -6px var(--pf-glow); }`,
   };
   const styleEls = {};
@@ -505,6 +544,13 @@
         !!host.closest("ytmusic-player-bar, ytmusic-miniplayer, ytmusic-player-page, ytmusic-wiz-player-controls");
       if (known || (dur > 0 && Math.abs(max - dur) < 3)) out.push(host);
     }
+    // The newer bar (ytmusic-miniplayer) draws its progress line in a plain wrapper, with no slider element at all.
+    if (!out.length) {
+      for (const w of document.querySelectorAll("ytmusic-miniplayer .ytMusicMiniPlayerProgressBarWrapper, ytmusic-miniplayer [class*='ProgressBarWrapper']")) {
+        const r = w.getBoundingClientRect();
+        if (r.width >= 120 && r.height <= 64 && !out.includes(w)) { w.__pfLoose = true; out.push(w); }
+      }
+    }
     return out.slice(0, 3);
   }
   // The canvas sits in the page's top layer just above the player it belongs to (not above menus and dialogs).
@@ -535,8 +581,10 @@
       // Covered by something (the full player page opening over the docked one, a dialog)? Then the wave isn't drawn,
       // and YouTube Music's own bar is left visible, so there is never no bar at all.
       const r = host.getBoundingClientRect();
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      o.hidden = !!top && !(top === host || host.contains(top) || top.contains(host));
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + Math.max(1, r.height / 2));
+      // the newer bar's wrapper can be a hairline: anything of the same player at that point counts as itself
+      const home = host.__pfLoose ? host.closest("ytmusic-miniplayer") : null;
+      o.hidden = !!top && !(top === host || host.contains(top) || top.contains(host) || (home && home.contains(top)));
       host.toggleAttribute("data-pf-wave", !o.hidden);
     }
     kickWave();
@@ -834,13 +882,23 @@
   }
   const barWrap = (host, cls, btn) => h("div", { class: (host.classic ? "pf-bar-btn " : "ytmusicPlayerControlsControlButton ") + cls }, btn);
 
+  // On the home page, next to the first shelf's arrows ("Listen again" when signed in): starting something new is a
+  // choice made there, not a button next to the player where a slip would replace the song that plays.
+  function diceShelf() {
+    if (location.pathname !== "/") return null;
+    const shelves = [...document.querySelectorAll("ytmusic-browse-response ytmusic-carousel-shelf-renderer, ytmusic-section-list-renderer ytmusic-carousel-shelf-renderer")]
+      .filter((s) => s.getClientRects().length);
+    const title = (s) => ((s.querySelector("ytmusic-carousel-shelf-basic-header-renderer .title") || {}).textContent || "").trim();
+    const s = shelves.find((x) => /listen again/i.test(title(x))) || shelves[0];
+    return s ? s.querySelector(":scope .button-group.ytmusic-carousel-shelf-renderer, :scope #header-group .button-group:last-child") : null;
+  }
   let dice = null;
   function syncDice() {
-    if (!on("dice")) { if (dice) { dice.remove(); dice = null; } return; }
-    if (dice && dice.isConnected) return;
-    const host = barHost();
-    if (!host) return;
-    const btn = h("button", { class: host.look + "pf-dice-btn", "aria-label": "Play something you might like",
+    const where = on("dice") ? diceShelf() : null;
+    if (!where) { if (dice) { dice.remove(); dice = null; } return; }
+    if (dice && dice.isConnected && dice.parentElement === where) return;
+    if (dice) dice.remove();
+    const btn = h("button", { class: "pf-dice-btn", "aria-label": "Play something you might like",
       title: "Play something you might like" }, h("span", { class: "pf-ico" }, icon(ICON.dice)));
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -851,8 +909,8 @@
         toast(r && r.ok ? "Playing " + (r.picked || "something new") : "Couldn't find something to play right now");
       } catch (err) { toast("Couldn't find something to play right now"); } finally { btn.classList.remove("pf-busy"); }
     });
-    dice = barWrap(host, "pf-dice", btn);
-    if (host.repeat) host.repeat.after(dice); else host.el.append(dice);
+    dice = h("div", { class: "pf-dice pf-shelf-btn" }, btn);
+    where.prepend(dice);
   }
 
   // The classic player bar shows no speed button for music: Refine adds one there. (The newer bar has its own, which opens this menu.)
@@ -941,7 +999,7 @@
       "aria-pressed": String(!!lyr.panel), onclick: (e) => { e.stopPropagation(); if (lyr.panel) closeLyrics(); else openLyrics(); } },
       h("span", { class: "pf-ico" }, icon(ICON.lyrics)));
     lyrBtn = barWrap(host, "pf-lyr-wrap", btn);
-    const after = host.el.querySelector(".pf-dice") || host.repeat;
+    const after = host.repeat;
     if (after) after.after(lyrBtn); else host.el.append(lyrBtn);
   }
   function placeLyrics() {
@@ -1048,7 +1106,7 @@
         const el = lyr.els[i];
         if (el) {
           el.classList.add("pf-now");
-          if (Date.now() - lyr.userAt > 4000) lyr.body.scrollTo({ top: el.offsetTop - lyr.body.clientHeight * 0.4, behavior: REDUCED.matches ? "auto" : "smooth" });
+          if (Date.now() - lyr.userAt > 4000) lyr.body.scrollTo({ top: el.offsetTop - lyr.body.clientHeight * 0.28, behavior: REDUCED.matches ? "auto" : "smooth" });
         }
       }
       const ln = lyr.lines[i], el = lyr.els[i];
@@ -1091,6 +1149,36 @@
       list.append(item);
     }
   }
+  // A second click on the ⋮ that opened YouTube Music's menu closes it. On its own, YouTube Music closes the menu
+  // as the button is pressed and then opens it again on the click, so it never closes.
+  let menuBtn = null, closing = null;
+  const menuButtonOf = (t) => {
+    const r = t && t.closest ? t.closest("ytmusic-menu-renderer") : null;
+    return r ? (t.closest("button, yt-icon-button") || null) : null;
+  };
+  const openMenu = () => [...document.querySelectorAll("ytmusic-popup-container tp-yt-iron-dropdown")]
+    .find((d) => d.opened !== false && d.getClientRects().length && getComputedStyle(d).display !== "none");
+  window.addEventListener("pointerdown", (e) => {
+    closing = null;
+    if (!partOn || e.button !== 0) return;
+    const b = menuButtonOf(e.target);
+    const dd = b && menuBtn && (b === menuBtn || b.contains(menuBtn) || menuBtn.contains(b)) ? openMenu() : null;
+    if (dd) { closing = { b, dd }; e.stopImmediatePropagation(); }
+  }, true);
+  for (const type of ["pointerup", "mousedown", "mouseup"]) {
+    window.addEventListener(type, (e) => { if (closing && menuButtonOf(e.target) === closing.b) e.stopImmediatePropagation(); }, true);
+  }
+  window.addEventListener("click", (e) => {
+    const b = menuButtonOf(e.target);
+    if (closing && b === closing.b) {
+      e.stopImmediatePropagation(); e.preventDefault();
+      const dd = closing.dd; closing = null; menuBtn = null;
+      try { if (typeof dd.close === "function") dd.close(); else document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true })); } catch (err) {}
+      return;
+    }
+    closing = null;
+    menuBtn = b || (openMenu() ? menuBtn : null);
+  }, true);
   // a menu opens after a click (or Enter); look for one a moment later, which costs nothing when there isn't one
   for (const type of ["click", "keyup"]) {
     window.addEventListener(type, () => { if (on("songMenu")) { setTimeout(addMenuItem, 250); setTimeout(addMenuItem, 700); } }, { capture: true, passive: true });
@@ -1212,11 +1300,24 @@
       rows[key] = { input, small, sub };
     }
     refresh();
+    // Every Discord status option (what YTM Beacon had, and a preview of the card), opened from one row
+    const dcBox = h("div", { class: "pf-dc", hidden: "" });
+    const dcBtn = h("button", { class: "pf-row pf-dc-toggle", type: "button", "aria-expanded": "false" },
+      h("span", { class: "pf-row-text" }, "Discord status options", h("small", { text: "What the card shows, hiding it for a while, a preview" })),
+      h("span", { class: "pf-chev", "aria-hidden": "true", text: "\u203a" }));
+    dcBtn.addEventListener("click", () => {
+      const open = dcBox.hidden;
+      dcBox.hidden = !open;
+      dcBtn.setAttribute("aria-expanded", String(open));
+      if (open && !dcBox.firstChild && window.__starcastDiscordPanel) {
+        dcBox.append(window.__starcastDiscordPanel({ ask: (op, extra) => askStarcast(op, extra) }));
+      }
+    });
     // one flat list: h() flattens its children only one level deep
     return [h("div", { class: "pf-sec", text: "YTM Starcast" }),
       ...PART_ROWS.map(([key, label]) => h("label", { class: "pf-row" },
         h("span", { class: "pf-row-text" }, label, rows[key].small), h("span", { class: "pf-switch" }, rows[key].input, h("i")))),
-      note];
+      dcBtn, dcBox, note];
   }
   function sheetOutside(e) { if (sheet && !sheet.contains(e.target) && e.target !== navBtn && !navBtn.contains(e.target)) closeSheet(); }
   function sheetKey(e) { if (e.key === "Escape") { closeSheet(); closeSpeed(); if (lyr.panel && lyr.panel.contains(document.activeElement)) closeLyrics(); } }
@@ -1235,7 +1336,7 @@
       sw("speedMenu", "Richer speed menu", "Opens from the player's own speed button"),
       sw("keepPitch", "Keep the pitch at other speeds", null),
       h("div", { class: "pf-sec", text: "Controls" }),
-      sw("dice", "Something-you-might-like button", "In the player, next to repeat"),
+      sw("dice", "Something-you-might-like button", "On the home page, next to the first shelf (Listen again)"),
       sw("lyrics", "Live lyrics button", "Time-synced lyrics from the YTM Starcast app, next to the player"),
       sw("songMenu", "In song menus", "\u201cPlaylist from this song\u201d in YouTube Music's own \u22ee menus"),
       h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),

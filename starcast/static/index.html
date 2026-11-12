@@ -1172,6 +1172,36 @@ function remoteOffNote() {
   b.appendChild(btn); return b;
 }
 
+/* ==================== the Discord card as Discord shows it, from the activity the computer would send now ==================== */
+function discordCard(act) {
+  const wrap = el('div', 'dcwrap');
+  if (!act) { wrap.appendChild(Object.assign(el('div', 'd'), { textContent: 'No card right now: nothing would be shown on Discord at this moment.' })); return wrap; }
+  const img = (u) => (typeof u === 'string' && /^https:\/\//.test(u) ? u : '');
+  const a = act.assets || {}, card = el('div', 'dccard');
+  card.appendChild(Object.assign(el('div', 'dch'), { textContent: 'Listening to YouTube Music' }));
+  const b = el('div', 'dcb'), art = el('div', 'dcart');
+  const pic = el('img'); pic.alt = ''; if (img(a.large_image)) pic.src = img(a.large_image); art.appendChild(pic);
+  if (img(a.small_image)) { const s = el('i'); s.style.backgroundImage = 'url("' + img(a.small_image) + '")'; art.appendChild(s); }
+  const lines = el('div', 'dcl');
+  const line = (txt, cls) => { if (txt) lines.appendChild(Object.assign(el('div', cls || ''), { textContent: txt })); };
+  line(act.details, 't'); line(act.state); if (a.large_text && a.large_text !== act.details) line(a.large_text);
+  if (!act.details && !act.state) line('YouTube Music', 't');
+  const ts = act.timestamps || {};
+  if (ts.start && ts.end && ts.end > ts.start) {
+    const tot = ts.end - ts.start, done = Math.min(tot, Math.max(0, Date.now() - ts.start));
+    const fmt = (ms) => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+    const p = el('div', 'dcp'); p.innerHTML = '<span></span><i><b></b></i><span></span>';
+    p.children[0].textContent = fmt(done); p.children[2].textContent = fmt(tot); p.querySelector('b').style.width = (done / tot * 100) + '%';
+    lines.appendChild(p);
+  }
+  b.appendChild(art); b.appendChild(lines); card.appendChild(b);
+  for (const bt of act.buttons || []) card.appendChild(Object.assign(el('div', 'dcbtn'), { textContent: bt.label || 'Listen' }));
+  const shown = act.status_display_type === 1 ? (act.state || 'YouTube Music') : act.status_display_type === 2 ? (act.details || 'YouTube Music') : 'YouTube Music';
+  card.appendChild(Object.assign(el('div', 'dclist'), { textContent: 'In the member list: Listening to ' + shown }));
+  wrap.appendChild(card);
+  return wrap;
+}
+
 /* ==================== the browser extension: is it there, and a step-by-step guide to add it ==================== */
 // Browsers only take this extension by hand ("Load unpacked"), so Settings walks through it. The computer keeps a copy
 // of the extension in a fixed folder and can open that folder, or a browser's extensions page, on its own screen.
@@ -3242,6 +3272,7 @@ function beaconSection() {
       box.appendChild(r);
     } else if (moveMsg) box.appendChild(row(moveMsg, ''));
     if (st.nowPlaying) box.appendChild(row((st.nowPlaying.state === 'playing' ? '▶ ' : '⏸ ') + st.nowPlaying.title, st.nowPlaying.artist));
+    if ('preview' in st) box.appendChild(discordCard(st.preview));
     // while the old YTM Beacon app still runs, Discord is its job: the switches would change nothing, so they wait
     const usable = st.reachable && st.headline !== 'unsupported' && !A.running;
     box.appendChild(row('Show on Discord', st.discord && st.discord.user ? 'as ' + st.discord.user : '',
@@ -3280,6 +3311,18 @@ function beaconSection() {
     box.appendChild(row('Name next to your username', 'What the member list shows next to your name.',
       choice(STATUS_NAME, S.statusDisplay || 'name', val => setting('statusDisplay', val)), 'stack'));
     if (Array.isArray(S.hideMatching)) box.appendChild(wordsRow(S.hideMatching.filter(w => typeof w === 'string')));
+    // as YTM Beacon's dashboard had: a test song on Discord for 30 seconds, to see the card for real
+    if ('preview' in st) {
+      const tb = el('button', 'pill ghost'); tb.textContent = 'Show a test song'; tb.style.height = '38px';
+      tb.addEventListener('click', async () => {
+        tb.disabled = true;
+        const r = await post('/api/beacon/test', {});
+        tb.disabled = false;
+        toast(r && r.ok ? (r.dryRun ? 'Trial run: nothing was sent to Discord' : 'A test song shows on Discord for 30 seconds')
+          : ((r && (r.message || r.error)) || "Couldn't reach the computer"));
+      });
+      box.appendChild(row('Test', 'Shows a test song on Discord for 30 seconds.', tb));
+    }
   }
   // "Never show songs matching": a list of words; a song whose title, artist or album contains one stays off Discord.
   function wordsRow(words) {
@@ -3691,6 +3734,19 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
 .partnote .pill { height:38px; }
 .extsec .setrow .d[data-tone=ok] { color:var(--ok, #3ecf8e); } .extsec .setrow .d[data-tone=warn] { color:var(--warn, #f5b14c); }
 .extsec .setrow .d[data-tone=bad] { color:var(--bad, #ff6b6b); }
+.dcwrap { padding:4px 0 10px; } .dcwrap > .d { font-size:12.5px; color:var(--dim); }
+.dccard { background:#232428; border-radius:var(--r-sm); padding:12px; color:#dbdee1; max-width:420px; }
+.dccard .dch { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; color:#b5bac1; margin-bottom:8px; }
+.dccard .dcb { display:flex; gap:12px; align-items:center; }
+.dccard .dcart { position:relative; flex:none; width:64px; height:64px; }
+.dccard .dcart img { width:64px; height:64px; border-radius:var(--r-xs); object-fit:cover; background:#111; display:block; }
+.dccard .dcart i { position:absolute; right:-4px; bottom:-4px; width:22px; height:22px; border-radius:50%; border:3px solid #232428; background:#111 center/cover no-repeat; }
+.dccard .dcl { min-width:0; flex:1; font-size:13px; } .dccard .dcl > div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dccard .dcl .t { font-weight:600; color:#f2f3f5; }
+.dccard .dcp { display:flex; align-items:center; gap:6px; font-size:11px; color:#b5bac1; margin-top:4px; }
+.dccard .dcp i { flex:1; height:4px; border-radius:2px; background:#4e5058; overflow:hidden; } .dccard .dcp b { display:block; height:100%; background:#f2f3f5; }
+.dccard .dcbtn { margin-top:10px; text-align:center; font-size:13px; padding:6px; border-radius:6px; background:#4e5058; color:#f2f3f5; }
+.dccard .dclist { font-size:12px; color:#b5bac1; margin-top:8px; }
 .extsteps { list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
 .extstep { display:flex; gap:12px; background:var(--card); border-radius:var(--r-md); padding:12px 14px; }
 .extstep .n { flex:none; width:26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-weight:700; font-size:13px; }

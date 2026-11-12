@@ -134,6 +134,7 @@ function show(r) {
     }
   }
   $("parts").hidden = !showParts;
+  $("dc").hidden = !(s && ok);
   paintParts();
 }
 
@@ -171,4 +172,13 @@ for (const input of document.querySelectorAll("input[data-part]")) {
     }
   });
 }
+// Discord status options: built when first opened, through the same YouTube Music tab as the switches
+const dc = $("dc");
+dc.addEventListener("toggle", () => {
+  if (!dc.open || $("dcPanel").firstChild || !globalThis.__starcastDiscordPanel) return;
+  $("dcPanel").append(globalThis.__starcastDiscordPanel({
+    ask: (op, extra) => ask({ starcast: op, ...(extra || {}) }).then((r) =>
+      r && (r.noTab || r.noAccess || r.noScript) ? { error: "offline" } : r),
+  }));
+});
 refresh();

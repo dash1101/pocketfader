@@ -168,9 +168,51 @@
     }
     return ok;
   }
+  // ---- Discord status: every option, for Refine's panel and the toolbar popup ----
+  async function discord() {
+    try {
+      const r = await call("/ext/discord", { method: "GET" });
+      if (r.status === 404) return { error: "old_app", app: await appInfo() };
+      const j = await r.json().catch(() => null);
+      return r.ok && j && typeof j === "object" ? { discord: j } : { error: "failed" };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+  // kind: "settings" (any of the Discord options), "visibility" ({action, minutes}) or "test". The app checks every value.
+  async function discordSet(kind, body) {
+    if (!["settings", "visibility", "test"].includes(kind)) return { error: "bad_request" };
+    const b = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+    try {
+      const r = await call("/ext/discord/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+      if (r.status === 404) return { error: "old_app", app: await appInfo() };
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return { error: (j && (j.message || j.error)) || "failed" };
+      return { ok: true, reply: j };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+  // From the page, a Discord change only goes through right after a real press inside Refine's Discord options
+  // (the same rule as the switches above): a script in the page can't change what Discord shows on its own.
+  let dcPressAt = 0;
+  function noteDcPress(ev) {
+    if (!ev.isTrusted) return;
+    if (ev.type === "keyup" && !["Enter", " ", "Spacebar"].includes(ev.key)) return;
+    try { if (ev.target && ev.target.closest && ev.target.closest("[data-pf-dc]")) dcPressAt = performance.now(); } catch (e) {}
+  }
+  document.addEventListener("pointerup", noteDcPress, true);
+  document.addEventListener("keyup", noteDcPress, true);
+  function dcPressed() {
+    const ok = dcPressAt && performance.now() - dcPressAt < 3000;
+    dcPressAt = 0;
+    return !!ok;
+  }
   async function starcastForPage(id, d) {
     const data = d.op === "status" ? await status()
       : d.op === "parts" ? (pressedFor(d.parts) ? await setParts(d.parts) : { error: "needs_press" })
+      : d.op === "discord" ? await discord()
+      : d.op === "discordSet" ? (dcPressed() ? await discordSet(d.kind, d.body) : { error: "needs_press" })
       : { error: "bad_request" };
     window.postMessage({ __vmr: "starcast-result", id, data }, "*");
   }
@@ -181,6 +223,8 @@
       if (!msg || typeof msg !== "object" || (sender && sender.id && sender.id !== rt.id)) return;
       if (msg.starcast === "status") { status().then(reply, () => reply({ error: "failed" })); return true; }
       if (msg.starcast === "parts") { setParts(msg.parts).then(reply, () => reply({ error: "failed" })); return true; }
+      if (msg.starcast === "discord") { discord().then(reply, () => reply({ error: "failed" })); return true; }
+      if (msg.starcast === "discordSet") { discordSet(msg.kind, msg.body).then(reply, () => reply({ error: "failed" })); return true; }
     });
   }
 

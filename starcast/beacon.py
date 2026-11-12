@@ -611,6 +611,11 @@ class DiscordStatus:
         out["settings"] = discord_settings(raw.get("config") or {})
         out["beaconApp"] = app
         out["install"] = {**INSTALL_INFO, "job": dict(INSTALL_INFO["job"])}
+        # the card Discord would show right now (Discord's activity format), for the apps' preview; None = no card
+        try:
+            out["preview"] = self.presence.preview() if not app["running"] else None
+        except Exception:
+            out["preview"] = None
         if self.dry_run:
             out["dryRun"] = True
         return out
@@ -635,6 +640,13 @@ class DiscordStatus:
             raise BadRequest(str(e)) from None
         except OSError as e:
             raise BeaconError("SAVE_FAILED", "Couldn't save the Discord status settings: " + str(e)[:160], 500) from None
+
+    # ---- POST /api/beacon/test: a test song on Discord for 30 seconds (as YTM Beacon's dashboard had) ----
+    def test(self):
+        self._refuse_while_beacon_runs()
+        if self.dry_run:
+            return {"ok": True, "dryRun": True}
+        return self.presence.test()
 
     # ---- POST /api/beacon/install: nothing to install any more ----
     def start_install(self, body=None):

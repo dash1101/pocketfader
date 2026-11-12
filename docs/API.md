@@ -148,6 +148,9 @@ connection itself is reachable through them.
                "clientId": ""},             // new in 0.2.0, read-only: "" = the built-in Discord application
   "fetchedAt": 1762800000000,
   "beaconApp": {"running": false, "installed": false, "canMigrate": false, "version": null},  // new in 0.2.0
+  "preview": {"type": 2, "details": "…", "state": "…", "timestamps": {"start": 0, "end": 0},
+              "assets": {"large_image": "https://…", "large_text": "…", "small_image": "https://…"},
+              "buttons": [{"label": "…", "url": "https://…"}]},   // new in 0.2.0a3: the card Discord would show now (or null)
   "install": {"installed": true, "canInstall": false, "canStart": false, "latest": null,
               "updateAvailable": false, "job": {"state": "idle", "message": ""}},   // kept so older apps offer nothing
   "dryRun": true                            // only under --dry-run
@@ -182,6 +185,7 @@ leaves Discord to it), `installed` and `canMigrate` (its program is where its in
 | `POST /api/beacon/visibility` | `{"action":"show"}`, `{"action":"hide"}` or `{"action":"hide","minutes":60}` | `show` switches Discord status on (also `parts.discord`) and ends a timed hide. `hide` without minutes switches it off. `minutes` is a whole number from 1 to 1440 and only goes with `hide`: the card comes back by itself (a restart of YTM Starcast also ends it). Replies `{enabled, snoozeSec, visible}`. Both can safely be repeated. |
 | `POST /api/beacon/settings` | any of `privateMode`, `showPaused`, `showProgress`, `showStateIcon`, `showButtons`, `showAlbumArt` (true/false), `pauseTimeoutMinutes` (0–1440, 0 = never), `statusDisplay` (`name`\|`state`\|`details`), `hideMatching` (a list of words) | Only the keys you send change. `hideMatching` replaces the whole list; it is kept as at most 50 words of up to 80 characters, lower-cased, without repeats. `clientId`, `enabled`, anything else or a wrong type: `400`. Replies with the new `settings`. |
 | `POST /api/beacon/migrate` | `{}` | Moves over from the separate YTM Beacon app: takes over its settings (the ones it uses now, else its settings file), runs its own `ytm-beacon uninstall` (which keeps its settings file and log), waits up to 5 s for it to stop, then starts YTM Starcast's Discord status. Replies `{"ok": true, "message": "…"}`. Under `--dry-run` it changes nothing and replies `{"ok": true, "dryRun": true, "message": "…"}`. Errors below. |
+| `POST /api/beacon/test` | `{}` | Shows a test song on Discord for 30 seconds. Under `--dry-run` nothing is sent (`{"ok": true, "dryRun": true}`); `409 beacon_running` while the old app runs. |
 | `POST /api/beacon/install` | anything | Always `409 {"error": "built_in", "message": "…"}`: there is nothing to install any more. |
 
 `POST /api/beacon/migrate` errors, each with a `message` in plain words:
@@ -213,6 +217,8 @@ times out is dropped, not run later.
 | `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. |
 | `POST /ext/result` | `{id, data}` | The answer to a command. |
 | `POST /ext/bye` | `{"instance": "<tab>"}` | The tab is closing or leaving the page (sent on `pagehide`, as `text/plain`). The server forgets that tab at once, and clears its Discord card. Replies `{"ok": true}`; `400` without `instance`. |
+| `GET /ext/discord` | — | For the extension's Discord status options: the same reply as `GET /api/beacon`. |
+| `POST /ext/discord/settings`, `/ext/discord/visibility`, `/ext/discord/test` | as `/api/beacon/settings`, `/visibility`, `/test` | The extension's copies of those routes (YouTube Music's origin, loopback only), with the same checks and replies. |
 | `GET /ext/status` | — | For the extension's toolbar button and Refine's panel: `{"app": "YTM Starcast", "version", "parts": {...all four}, "discord": {"headline", "visible", "state"}}`. `headline` uses the values above; it is `off` while `parts.discord` is off. |
 | `POST /ext/parts` | any subset of `remote`, `discord`, `refine` (booleans) | Same as `POST /api/parts`; replies `{"parts": {...}}`. The extension may not switch `audio` (`400`). |
 | `GET /ext/lyrics` | — | `/api/lyrics` for the extension's live lyrics inside YouTube Music (same parameters and answer). |
