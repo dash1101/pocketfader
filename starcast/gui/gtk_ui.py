@@ -131,7 +131,7 @@ class Window(Gtk.Window):
 
         # --- buttons
         btns = Gtk.Box(spacing=10)
-        for label, fn in (("Open the web app", self.on_open), ("Show log", self.on_log)):
+        for label, fn in (("Open the web app", self.on_open), ("Browser extension", self.on_extension), ("Show log", self.on_log)):
             btn = Gtk.Button(label=label)
             btn.connect("clicked", fn)
             btns.pack_start(btn, True, True, 0)
@@ -300,6 +300,10 @@ class Window(Gtk.Window):
 
     def on_open(self, _btn):
         webbrowser.open(f"http://127.0.0.1:{self.ctl.settings()['port']}/")
+
+    def on_extension(self, _btn):
+        """The web app's step-by-step setup of the browser extension."""
+        webbrowser.open(f"http://127.0.0.1:{self.ctl.settings()['port']}/#extension")
 
     def on_log(self, _btn):
         dlg = Gtk.Dialog(title="YTM Starcast log", transient_for=self, modal=True)

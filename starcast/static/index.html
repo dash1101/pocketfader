@@ -1172,6 +1172,124 @@ function remoteOffNote() {
   b.appendChild(btn); return b;
 }
 
+/* ==================== the browser extension: is it there, and a step-by-step guide to add it ==================== */
+// Browsers only take this extension by hand ("Load unpacked"), so Settings walks through it. The computer keeps a copy
+// of the extension in a fixed folder and can open that folder, or a browser's extensions page, on its own screen.
+let extGuideOpen = false, extKey = null, extScroll = false;
+function extBrief() { return (mixerState && mixerState.extension) || null; }
+function extStatusText(s) {
+  if (!s) return ['Checking…', ''];
+  if (s.connected && s.outdated) return ['An older version is running in the browser. Reload it (steps below).', 'warn'];
+  if (s.connected) return ['Connected' + (s.version ? ' · version ' + s.version : ''), 'ok'];
+  if (s.everConnected) return ["Not connected right now. Open YouTube Music in the computer's browser.", 'warn'];
+  return ['Not added to a browser yet.', 'bad'];
+}
+function extensionSection() {
+  const sec = el('div', 'setsec extsec'); sec.appendChild(Object.assign(el('h3'), { textContent:'Browser extension' }));
+  const head = el('div', 'setrow');
+  head.innerHTML = '<div><div class="k">YTM Starcast extension</div><div class="d"></div></div>';
+  const btn = el('button', 'pill ghost'); btn.style.height = '38px';
+  head.appendChild(btn); sec.appendChild(head);
+  const guide = el('div', 'extguide'); sec.appendChild(guide);
+  let info = null, timer = null, guideSig = '', liveEl = null;
+  const paintHead = () => {
+    const s = info || extBrief(); const [txt, tone] = extStatusText(s);
+    const d = head.querySelector('.d'); d.textContent = txt; d.dataset.tone = tone;
+    btn.textContent = extGuideOpen ? 'Hide the steps' : (s && s.connected && !s.outdated ? 'Show the steps' : 'Set it up');
+  };
+  const load = async () => {
+    try { const r = await fetch('/api/extension', { cache:'no-store' }); if (r.ok) info = await r.json(); else if (r.status === 404) info = null; }
+    catch (e) {}
+    paintHead();
+    // rebuild the steps only when they change (rebuilding on every check would swallow taps on their buttons)
+    const sig = extGuideOpen + '|' + !!info + '|' + !!(info && info.connected && info.outdated) + '|' +
+      (info ? (info.browsers || []).map(b => b.id).join(',') + '|' + info.folder : '');
+    if (sig !== guideSig) paintGuide(); else paintLive();
+  };
+  const paintLive = () => {
+    if (!liveEl || !info) return;
+    const ok = info.connected && !info.outdated;
+    liveEl.textContent = ok ? '✓ The extension is connected.' : 'Waiting for the extension…';
+    liveEl.dataset.tone = ok ? 'ok' : '';
+  };
+  const openOnComputer = async (body, b) => {
+    b.disabled = true;
+    const r = await post('/api/extension/open', body);
+    b.disabled = false;
+    toast(r && r.ok ? 'Opened on the computer' : ((r && (r.message || r.error)) || "Couldn't reach the computer"));
+  };
+  const step = (n, title, body) => {
+    const li = el('li', 'extstep'); li.innerHTML = '<div class="n"></div><div class="b"><div class="k"></div></div>';
+    li.querySelector('.n').textContent = n; li.querySelector('.k').textContent = title;
+    if (body) li.querySelector('.b').appendChild(body); return li;
+  };
+  const paintGuide = () => {
+    guideSig = extGuideOpen + '|' + !!info + '|' + !!(info && info.connected && info.outdated) + '|' +
+      (info ? (info.browsers || []).map(b => b.id).join(',') + '|' + info.folder : '');
+    guide.textContent = ''; guide.hidden = !extGuideOpen; liveEl = null;
+    if (!extGuideOpen) return;
+    if (!info) { guide.appendChild(Object.assign(el('div', 'd'), { textContent: "This computer's YTM Starcast is too old to help with this. Update it first." })); return; }
+    const ol = el('ol', 'extsteps');
+    if (info.connected && info.outdated) {
+      const d1 = el('div', 'd'); d1.textContent = 'Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called "Pocketfader") and press its reload button.';
+      ol.appendChild(step(1, 'Reload the extension', d1));
+      ol.appendChild(step(2, 'Refresh the YouTube Music tab', null));
+    } else {
+      // 1. the extensions page
+      const b1 = el('div');
+      const g = el('div', 'chips');
+      for (const br of info.browsers || []) {
+        const b = el('button', 'pill ghost'); b.textContent = 'Open in ' + br.name;
+        b.addEventListener('click', () => openOnComputer({ what:'page', browser:br.id }, b)); g.appendChild(b);
+      }
+      const d1 = el('div', 'd');
+      d1.textContent = (info.browsers || []).length
+        ? 'Opens it on the computer. Or type its address into the address bar: ' + info.browsers.map(b => b.page).join(', ') + '.'
+        : "Type chrome://extensions (Brave: brave://extensions, Edge: edge://extensions) into the computer's browser.";
+      if ((info.browsers || []).length) b1.appendChild(g);
+      b1.appendChild(d1);
+      ol.appendChild(step(1, "Open the browser's extensions page", b1));
+      // 2. developer mode
+      const d2 = el('div', 'd'); d2.textContent = 'The switch is in the top-right corner of that page.';
+      ol.appendChild(step(2, 'Turn on Developer mode', d2));
+      // 3. load unpacked
+      const b3 = el('div');
+      const path = el('code', 'extpath'); path.textContent = info.folder; b3.appendChild(path);
+      const g3 = el('div', 'chips');
+      const copy = el('button', 'pill ghost'); copy.textContent = 'Copy the folder';
+      copy.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(info.folder); toast('Copied'); } catch (e) { toast("Couldn't copy here: select the folder above instead"); }
+      });
+      const show = el('button', 'pill ghost'); show.textContent = 'Show it on the computer';
+      show.addEventListener('click', () => openOnComputer({ what:'folder' }, show));
+      g3.appendChild(copy); g3.appendChild(show); b3.appendChild(g3);
+      const d3 = el('div', 'd'); d3.textContent = 'You can also drag that folder onto the extensions page.'; b3.appendChild(d3);
+      ol.appendChild(step(3, 'Click "Load unpacked" and choose this folder', b3));
+      // 4. youtube music
+      const d4 = el('div', 'd'); d4.textContent = 'Open music.youtube.com in that browser, or refresh its tab if it is already open.';
+      ol.appendChild(step(4, 'Open YouTube Music', d4));
+    }
+    guide.appendChild(ol);
+    liveEl = el('div', 'extlive'); guide.appendChild(liveEl); paintLive();
+  };
+  btn.addEventListener('click', () => { extGuideOpen = !extGuideOpen; paintHead(); paintGuide(); if (extGuideOpen) load(); });
+  // while the guide is open, see it connect by itself
+  timer = setInterval(() => { if (!sec.isConnected) { clearInterval(timer); return; } if (extGuideOpen) load(); else paintHead(); }, 2500);
+  const s0 = extBrief();
+  if (s0 && !s0.everConnected) extGuideOpen = true;      // never set up: show the steps straight away
+  paintHead(); load();
+  if (extScroll) { extScroll = false; setTimeout(() => sec.scrollIntoView({ behavior:'smooth', block:'start' }), 150); }
+  return sec;
+}
+// Home, until an extension has ever connected: one line that leads to the steps.
+function extensionNote() {
+  const b = el('div', 'partnote');
+  b.innerHTML = "<div class=\"m\">Add the YTM Starcast extension to the computer's browser to use YouTube Music from here.</div>";
+  const btn = el('button', 'pill primary'); btn.textContent = 'Show me how';
+  btn.addEventListener('click', () => { extGuideOpen = true; extScroll = true; setView('settings'); });
+  b.appendChild(btn); return b;
+}
+
 /* ==================== themes ==================== */
 const THEMES = [['auto','Auto'],['material','Material You'],['dark','Dark'],['light','Light'],['oled','OLED'],['space','Space'],['sunset','Sunset'],['forest','Forest'],['rose','Rose']];
 const THEME_SW = { auto:['#0a0a0c','#f5f6fa','#8b5cf6'], material:['#1b1b1f','#2f3033','#a8c7fa'], dark:['#0a0a0c','#20212a','#8b5cf6'], light:['#f5f6fa','#e0e3ec','#7c3aed'],
@@ -1252,6 +1370,9 @@ function rgb2hex(rgb) {
 // lastConnected: something is playing that we can show (YouTube Music, or another player on the computer);
 // lastYtm: YouTube Music itself is connected through the extension (search, queue, artists...).
 let view = 'home', detailStack = null, lastConnected = false, lastYtm = false;
+// /#extension (the desktop window's "Browser extension" button): open on the extension's setup steps
+if (location.hash === '#extension') { view = 'settings'; extGuideOpen = true; extScroll = true;
+  try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) {} }
 const cache = { home:null, playlists:null };
 
 // Slides the selection pill to whichever nav button is active.
@@ -1650,6 +1771,7 @@ async function renderHome(m) {
   bar.appendChild(editBtn);          // pencil sits top-right in the header
   m.appendChild(bar);
   if (!partOn('remote')) m.appendChild(remoteOffNote());
+  else { const x = extBrief(); if (x && !x.everConnected) m.appendChild(extensionNote()); }
 
   const saved = getLayout(), layout = saved.filter(w => widgetPartOn(w.id));   // the saved layout keeps the hidden ones
   const grid = el('div', 'wgrid'); m.appendChild(grid);
@@ -1985,6 +2107,7 @@ function renderMixerPage(m) { m.innerHTML = ''; m.appendChild(topbar('Mixer'));
 function renderSettings(m) {
   m.innerHTML = ''; m.appendChild(topbar('Settings'));
   m.appendChild(partsSection());   // what YTM Starcast does at all comes first
+  m.appendChild(extensionSection());
   // Theme has its own submenu now, so Settings stays short.
   const tSel = localStorage.getItem('vmr-theme') || 'dark';
   const tName = (THEMES.find(t => t[0] === tSel) || [])[1]
@@ -2122,7 +2245,7 @@ function renderSettingsTail(m) {
     help.innerHTML = `<div><div class="k">Bridge is offline — how to fix</div><div class="d">
       1. Open <b>music.youtube.com</b> in the browser on the computer.<br>
       2. If it's already open, refresh that tab.<br>
-      3. Still stuck? Reload the YTM Starcast extension on the browser's extensions page (for example chrome://extensions).</div></div>`;
+      3. Not added yet, or still stuck? Settings → Browser extension has the steps.</div></div>`;
     st.appendChild(help);
   }
   const rc = el('div', 'setrow');
@@ -3427,7 +3550,11 @@ function mixerActive() {
 async function pollMixer() {
   const fast = mixerActive();
   try { const r = await fetch('/api/state'); mixerState = await r.json(); applyMixer();
-    if (mixerState && mixerState.parts) setParts(mixerState.parts, true); } catch (e) {}
+    if (mixerState && mixerState.parts) setParts(mixerState.parts, true);
+    // Home shows "add the extension" until one has ever connected: redraw it when that changes
+    const xs = mixerState && mixerState.extension, xk = xs ? (xs.everConnected ? 'seen' : 'new') : '';
+    if (xk !== extKey) { const first = extKey === null; extKey = xk; if (view === 'home' && !(first && xk !== 'new')) render(); }
+  } catch (e) {}
   setTimeout(pollMixer, fast ? 450 : 1200);   // always poll, just slower when nothing shows it
 }
 
@@ -3562,6 +3689,16 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
 .partnote { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; background:var(--card); border-radius:var(--r-lg); padding:12px 16px; margin:0 0 16px; }
 .partnote .m { flex:1; min-width:180px; color:var(--dim); font-size:13.5px; }
 .partnote .pill { height:38px; }
+.extsec .setrow .d[data-tone=ok] { color:var(--ok, #3ecf8e); } .extsec .setrow .d[data-tone=warn] { color:var(--warn, #f5b14c); }
+.extsec .setrow .d[data-tone=bad] { color:var(--bad, #ff6b6b); }
+.extsteps { list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.extstep { display:flex; gap:12px; background:var(--card); border-radius:var(--r-md); padding:12px 14px; }
+.extstep .n { flex:none; width:26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-weight:700; font-size:13px; }
+.extstep .b { flex:1; min-width:0; } .extstep .k { font-weight:600; margin:3px 0 6px; }
+.extstep .d { font-size:12.5px; color:var(--dim); margin-top:6px; } .extstep .chips { display:flex; flex-wrap:wrap; gap:8px; }
+.extstep .pill { height:36px; }
+.extpath { display:block; font-size:12.5px; background:var(--card2, rgba(255,255,255,.06)); border-radius:var(--r-sm); padding:8px 10px; margin-bottom:8px; overflow-wrap:anywhere; user-select:all; }
+.extlive { margin:10px 2px 0; font-size:13px; color:var(--dim); } .extlive[data-tone=ok] { color:var(--ok, #3ecf8e); font-weight:600; }
 /* ============ settings rows that hold a group (chips, a word list) under their text ============ */
 .setrow.stack { flex-direction:column; align-items:stretch; gap:10px; }
 .setrow .note { font-size:12.5px; color:var(--text); }
@@ -3684,7 +3821,9 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
   // ---- open YouTube Music on the computer when nothing is connected ----
   function openBanner() {
     const m = $('#main'); const old = $('#openytm');
-    if (lastYtm || !partOn('remote') || !['home', 'search', 'playlists'].includes(view)) { if (old) old.remove(); return; }
+    // never set up: the extension's steps come first (opening YouTube Music alone wouldn't connect anything)
+    const neverSet = !!(extBrief() && !extBrief().everConnected);
+    if (lastYtm || neverSet || !partOn('remote') || !['home', 'search', 'playlists'].includes(view)) { if (old) old.remove(); return; }
     if (old || !m) return;
     const b = el('div', 'openytm'); b.id = 'openytm';
     b.innerHTML = '<div class="m">YouTube Music isn\'t connected on the computer. You can open it there, then play from here.</div>';

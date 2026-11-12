@@ -150,3 +150,16 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
 Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 Write-Host "YTM Starcast starts now, and 30 seconds after each time you log in (scheduled task '$TaskName')."
 Write-Host "To see the address to open on your phone, run:  python -m starcast --gui"
+
+# One time, by hand: browsers only take an extension like this from their extensions page.
+# YTM Starcast puts a copy of it in this folder when it starts (and keeps it up to date after updates).
+$extDir = Join-Path $env:LOCALAPPDATA "ytm-starcast\extension"
+Write-Host ""
+Write-Host "One more step: add the YTM Starcast extension to your browser (one time)"
+Write-Host "  1. Open the browser's extensions page: chrome://extensions, edge://extensions or brave://extensions"
+Write-Host "  2. Turn on 'Developer mode'."
+Write-Host "  3. Click 'Load unpacked' and choose this folder:"
+Write-Host "       $extDir"
+Write-Host "  4. Open music.youtube.com in that browser (or refresh its tab)."
+Write-Host "The same steps, with buttons that open the page and the folder: Settings > Browser extension in the app"
+Write-Host "(http://127.0.0.1:8777/#extension)."

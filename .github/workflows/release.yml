@@ -22,7 +22,7 @@ jobs:
         run: |
           pip install pyinstaller
           pyinstaller --onefile --name ytm-starcast \
-            --add-data "starcast/static:starcast/static" \
+            --add-data "starcast/static:starcast/static" --add-data "extension:starcast/extension" \
             --paths . --collect-submodules starcast packaging/entry.py
       - name: Smoke test
         run: |
@@ -58,7 +58,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --onefile --name ytm-starcast `
-            --add-data "starcast/static;starcast/static" `
+            --add-data "starcast/static;starcast/static" --add-data "extension;starcast/extension" `
             --paths . --collect-submodules starcast --collect-all winrt `
             packaging/entry.py
           # The desktop window (no console). tkinter ships with this Python.

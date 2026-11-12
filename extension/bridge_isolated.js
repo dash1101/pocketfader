@@ -78,12 +78,15 @@
       body: JSON.stringify(obj),
     }).catch(() => {});
   }
+  // this extension's version, so the app can tell when the browser still runs an older copy (it then asks for a reload)
+  let EXT_VERSION = null;
+  try { EXT_VERSION = chrome.runtime.getManifest().version; } catch (e) { /* the extension was reloaded under us */ }
   // what plays -> server; its answer carries the switches
   function pushState(obj) {
     return fetch(BASE + "/ext/state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(obj),
+      body: JSON.stringify(EXT_VERSION ? { ...obj, ext: EXT_VERSION } : obj),
     }).then((r) => (r.ok ? r.json().then(takeCfg) : null)).catch(() => {});
   }
 

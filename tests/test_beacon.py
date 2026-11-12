@@ -24,6 +24,7 @@ from starcast import __version__
 from starcast import beacon as bc
 from starcast.audio import AudioFetcher
 from starcast.backends.base import NullEngine
+from starcast.browser_ext import BrowserExtension
 from starcast.beacon import BadRequest, BeaconApp, BeaconError, DiscordStatus
 from starcast.config import JsonFile
 from starcast.discord import IPCError, Presence
@@ -756,7 +757,8 @@ class GateTests(TempCase):
         ds = self.discord(dial=dial)
         app = App(FakeAudio(), NullEngine(), FakeMedia(), prefs=JsonFile(self.tmp / "p.json"), beacon=ds,
                   opener=Opener(dry_run=True), updater=Updater(cache=self.tmp / "updates"),
-                  audio_fetcher=AudioFetcher(folder=self.tmp / "audio", ytdlp=""))
+                  audio_fetcher=AudioFetcher(folder=self.tmp / "audio", ytdlp=""),
+                  extension=BrowserExtension(None, folder=self.tmp / "extension"))
         app.start()
         self.addCleanup(app.stop)
         app.presence_feed("A", {"title": "Song", "playing": True})

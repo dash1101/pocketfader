@@ -83,6 +83,7 @@ class Window:
         btns = ttk.Frame(outer)
         btns.pack(fill="x", pady=(18, 0))
         ttk.Button(btns, text="Open the web app", command=self.on_open).pack(side="left", expand=True, fill="x")
+        ttk.Button(btns, text="Browser extension", command=self.on_extension).pack(side="left", expand=True, fill="x", padx=(8, 0))
         ttk.Button(btns, text="Show log", command=self.on_log).pack(side="left", expand=True, fill="x", padx=(8, 0))
         self.msg = ttk.Label(outer, text="", foreground="#666")
         self.msg.pack(anchor="w", pady=(10, 0))
@@ -228,6 +229,10 @@ class Window:
 
     def on_open(self):
         webbrowser.open(f"http://127.0.0.1:{self.ctl.settings()['port']}/")
+
+    def on_extension(self):
+        """The web app's step-by-step setup of the browser extension."""
+        webbrowser.open(f"http://127.0.0.1:{self.ctl.settings()['port']}/#extension")
 
     def on_log(self):
         win = tk.Toplevel(self.root)

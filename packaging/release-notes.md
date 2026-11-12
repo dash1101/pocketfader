@@ -6,6 +6,18 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.2
+
+**Adding the browser extension, step by step**
+- Settings → **Browser extension** (in the web app, the Android app and the desktop window) shows whether the extension
+  is connected and walks through adding it: open the browser's extensions page, turn on Developer mode, Load unpacked,
+  open YouTube Music. Buttons open the extensions page and the extension's folder on the computer, and the page turns
+  green by itself once the extension connects.
+- Until an extension has connected, Home and Settings point to these steps.
+- The installer copies the extension to a folder that never moves and prints the same steps; on Linux it offers to open
+  the extensions page and the folder right away.
+- Updates refresh that folder. When the browser still runs an older copy, the apps say to reload it.
+
 ### What's new in 0.2.0-alpha.1
 
 **One app**

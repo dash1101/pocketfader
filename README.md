@@ -149,19 +149,25 @@ iPhone Safari: Share → *Add to Home Screen*).
 The YouTube Music remote, Discord status and Refine all need YTM Starcast's extension in the browser that plays YouTube
 Music. It works in Chromium-based browsers (Chrome, Brave, Edge…); Firefox isn't supported yet.
 
-1. Download `ytm-starcast-extension.zip` from the Releases page and unzip it into a folder you will keep: the browser loads
-   the extension from that folder. (From the source, the [`extension/`](extension/) folder works too.)
-2. Open the browser's extensions page (`chrome://extensions`, `brave://extensions` or `edge://extensions`), turn on
-   **Developer mode**, click **Load unpacked** and pick the folder that holds `manifest.json`.
-3. Open **music.youtube.com** and keep that tab open (pinning it is ideal). The web app's Settings → Status then shows
-   YouTube Music as connected.
+YTM Starcast keeps a copy of the extension in a folder that never moves (`~/.local/share/ytm-starcast/extension` on
+Linux, `%LOCALAPPDATA%\ytm-starcast\extension` on Windows). Browsers only take an extension like this one by hand, once:
+
+1. Open the browser's extensions page (`chrome://extensions`, `brave://extensions` or `edge://extensions`).
+2. Turn on **Developer mode** (top-right corner).
+3. Click **Load unpacked** and choose that folder (or drag the folder onto the page).
+4. Open **music.youtube.com** and keep that tab open (pinning it is ideal).
+
+The installer prints these steps, and **Settings → Browser extension** in the web app, the Android app and the desktop
+window walks through them with buttons that open the extensions page and the folder on the computer. It turns green by
+itself once the extension connects. (Running from the source, the [`extension/`](extension/) folder works too, and
+`ytm-starcast-extension.zip` on the Releases page holds the same files.)
 
 The extension's **toolbar button** shows whether YTM Starcast is running, the switches for the remote, Discord status and
 Refine, and a link to open YTM Starcast. It reaches YTM Starcast through an open YouTube Music tab: if it asks you to open YouTube
 Music, reload the tab or allow access to music.youtube.com, do that.
 
-**To update it**, replace the folder's files with those of the new `ytm-starcast-extension.zip`, click **Reload** on the
-extension's card, and reload the YouTube Music tab.
+**Updates** replace the folder's files by themselves. The browser picks them up when you click **Reload** on the
+extension's card (Settings → Browser extension says when that's needed), then reload the YouTube Music tab.
 
 The extension only talks to YTM Starcast on the same computer (`127.0.0.1:8777`); it opens no network port of its own. When it
 isn't connected, the apps fall back to simple play/pause/next/seek for whatever media player *is* running. More in the

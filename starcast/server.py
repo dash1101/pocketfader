@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import __version__
 from .beacon import BadRequest, BeaconError, DiscordStatus
 from .bridge import Bridge
+from .browser_ext import BrowserExtension
 from .discord import agent_from_user_agent
 from .lyrics import LyricsService
 from .updater import Updater
@@ -67,7 +68,7 @@ def validate_parts(body, allowed=PARTS):
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None, audio_fetcher=None, presence=None, dry_run=False):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None, audio_fetcher=None, presence=None, dry_run=False, extension=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
@@ -89,6 +90,12 @@ class App:
         self._sleep_timer = None
         self._sleep_at = None
         self._parts_lock = threading.Lock()
+        # the browser extension: a copy in a fixed folder to load in the browser, its status, and the setup guide's
+        # "open on the computer" actions
+        self.extension = extension or BrowserExtension(self.bridge, seen_file=config_dir() / "extension-seen",
+                                                       dry_run=dry_run)
+        if self.extension.bridge is None:
+            self.extension.bridge = self.bridge
 
     def start(self):
         for b in (self.audio, self.engine, self.media):
@@ -96,6 +103,8 @@ class App:
         threading.Thread(target=self._watch_others, name="pause-others", daemon=True).start()
         if callable(getattr(self.beacon, "start", None)):
             self.beacon.start()         # Discord status (it waits while the old YTM Beacon app still runs)
+        # refresh the extension's folder after an update, so the browser gets the new version on its next reload
+        threading.Thread(target=self.extension.refresh_copy, name="extension-copy", daemon=True).start()
 
     def stop(self):
         self._stop_watch.set()
@@ -138,7 +147,16 @@ class App:
             "limits": {"eq_min": EQ_MIN, "eq_max": EQ_MAX},
             "sleep": {"remainingSec": self.sleep_left()},
             "parts": self.parts(),
+            "extension": self.extension_brief(),
         }
+
+    def extension_brief(self):
+        """Enough for the apps to know whether to show the extension's setup (the full status: /api/extension)."""
+        try:
+            s = self.extension.status()
+        except Exception:
+            return {}
+        return {k: s[k] for k in ("connected", "everConnected", "outdated", "version", "expected")}
 
     # ---- parts: switch the YouTube Music remote, Discord status, Refine and the audio controls on or off ----
     def _stored_parts(self):
@@ -634,6 +652,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/info":
             return self._json(200, {"name": APP_NAME, "version": __version__,
                                     "api": 1, "auth": bool(app.token)})
+        if path == "/api/extension":   # the browser extension: connected?, its folder, the browsers found here
+            return self._json(200, app.extension.status())
 
         name = {"/": "index.html"}.get(path, path.lstrip("/"))
         f = (STATIC / name).resolve()
@@ -681,6 +701,21 @@ class Handler(BaseHTTPRequestHandler):
             app.bridge.bye(inst)
             app.presence_bye(inst)
             return self._json(200, {"ok": True})
+        if path == "/api/extension/open":
+            # The setup guide's buttons: open the extension's folder, or a browser's extensions page, on the computer.
+            # Only those two things, each from a fixed list; nothing from the request is passed to a command.
+            what = body.get("what")
+            try:
+                if what == "folder":
+                    ok = app.extension.open_folder()
+                elif what == "page" and isinstance(body.get("browser"), str):
+                    ok = app.extension.open_extensions_page(body["browser"])
+                else:
+                    return self._json(400, {"error": "what must be \"folder\", or \"page\" with a browser"})
+            except ValueError as e:
+                return self._json(400, {"error": str(e)})
+            return self._json(200 if ok else 502, {"ok": bool(ok)} if ok else
+                              {"error": "couldn't open it", "message": "It couldn't be opened on the computer."})
         if path in ("/api/parts", "/ext/parts"):
             # The extension may switch the remote, Discord status and Refine, never the computer's audio controls.
             try:

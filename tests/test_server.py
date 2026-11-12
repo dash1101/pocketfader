@@ -44,7 +44,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         # anything that asks for the settings folder gets a temporary one, never the real one
-        env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name})
+        env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name, "XDG_DATA_HOME": self.tmp.name, "LOCALAPPDATA": self.tmp.name})
         env.start()
         self.addCleanup(env.stop)
         self.audio, self.media, self.engine = FakeAudio(), FakeMedia(self.media_avail), self.engine_cls()

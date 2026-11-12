@@ -350,8 +350,12 @@ if [ "$UNINSTALL" = 1 ]; then
   # songs kept for the phone (under either name); they are fetched again if YTM Starcast comes back
   remove_dir "$CACHE_HOME/ytm-starcast"
   remove_dir "$CACHE_HOME/pocketfader"
+  # the extension's folder (the browser loads it from there)
+  remove_dir "${XDG_DATA_HOME:-$HOME/.local/share}/ytm-starcast/extension"
+  rmdir -- "${XDG_DATA_HOME:-$HOME/.local/share}/ytm-starcast" 2>/dev/null || true
   if [ "$reload" = 1 ]; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
   say "YTM Starcast is removed. Your settings are kept in $(settings_folder) (delete that folder for a clean slate)."
+  note "Remove the YTM Starcast extension from your browser too: open its extensions page and click Remove."
   exit 0
 fi
 
@@ -399,10 +403,61 @@ remember_starcast
 stop_pocketfader
 retire_ytm_beacon
 
-HINT_EXT=""
-if [ -d "$SRC/extension" ]; then
-  HINT_EXT="To connect YouTube Music, add the browser extension: open chrome://extensions (or brave://extensions), turn on Developer mode, choose \"Load unpacked\" and pick $(tilde "$SRC/extension")."
+# ---- the browser extension: a copy in a folder that never moves (the server keeps it up to date after updates) ----
+EXT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ytm-starcast/extension"
+HAVE_EXT=0
+if [ -f "$SRC/extension/manifest.json" ]; then
+  mkdir -p "$(dirname "$EXT_DIR")"
+  rm -rf -- "$EXT_DIR.new"
+  cp -R -- "$SRC/extension" "$EXT_DIR.new"
+  rm -f -- "$EXT_DIR.new/README.md"
+  rm -rf -- "$EXT_DIR.old"
+  if [ -d "$EXT_DIR" ]; then mv -- "$EXT_DIR" "$EXT_DIR.old"; fi
+  mv -- "$EXT_DIR.new" "$EXT_DIR"
+  rm -rf -- "$EXT_DIR.old"
+  HAVE_EXT=1
 fi
+# The browsers the steps can open (the first one found is offered first).
+ext_browsers() {
+  local b
+  for b in brave-browser brave google-chrome google-chrome-stable chromium chromium-browser microsoft-edge vivaldi; do
+    if command -v "$b" >/dev/null 2>&1; then printf '%s\n' "$b"; fi
+  done
+  return 0
+}
+ext_page() {
+  case "$1" in
+    brave*) echo "brave://extensions" ;; microsoft-edge*) echo "edge://extensions" ;;
+    vivaldi*) echo "vivaldi://extensions" ;; *) echo "chrome://extensions" ;;
+  esac
+}
+# One time, by hand: browsers only take an extension like this from their extensions page.
+extension_steps() {
+  [ "$HAVE_EXT" = 1 ] || return 0
+  local port="${1:-8777}"
+  echo
+  say "One more step: add the YTM Starcast extension to your browser (one time)"
+  note "1. Open the browser's extensions page: brave://extensions, chrome://extensions or edge://extensions"
+  note "2. Turn on \"Developer mode\" (top-right corner)."
+  note "3. Click \"Load unpacked\" and choose this folder:"
+  note "     $(tilde "$EXT_DIR")"
+  note "4. Open music.youtube.com in that browser (or refresh its tab)."
+  note "The same steps, with buttons that open the page and the folder: Settings > Browser extension in the app"
+  note "(http://127.0.0.1:$port/#extension)."
+  # Offer to open the page and the folder now, when someone is at the keyboard
+  local first
+  first="$(ext_browsers | head -n 1 || true)"
+  if [ -t 0 ] && [ -t 1 ] && [ -n "$first" ] && [ "${STARCAST_NO_OPEN:-0}" != 1 ]; then
+    printf '    Open the extensions page in %s and the folder now? [Y/n] ' "$first"
+    local ans=""
+    read -r ans || ans=n
+    case "$ans" in
+      ""|y|Y|yes|Yes)
+        ("$first" "$(ext_page "$first")" >/dev/null 2>&1 &)
+        if command -v xdg-open >/dev/null 2>&1; then (xdg-open "$EXT_DIR" >/dev/null 2>&1 &); fi ;;
+    esac
+  fi
+}
 
 # ---- service ----
 if ! use_systemd; then
@@ -419,7 +474,7 @@ ENTRY
   fi
   remove_pocketfader
   say "Installed. Start it with:  ytm-starcast${EXTRA_ARGS[*]:+ ${EXTRA_ARGS[*]}}"
-  if [ -n "$HINT_EXT" ]; then note "$HINT_EXT"; fi
+  extension_steps
   exit 0
 fi
 
@@ -469,5 +524,5 @@ if [ "$STARTED" = 0 ]; then
 fi
 remove_pocketfader                                  # only now that YTM Starcast runs
 say "YTM Starcast is running. To see the address to open on your phone:  journalctl --user -u ytm-starcast -n 20 --no-pager"
-if [ -n "$HINT_EXT" ]; then note "$HINT_EXT"; fi
+extension_steps
 journalctl --user -u ytm-starcast -n 12 --no-pager 2>/dev/null | grep -E "listening|token|note|audio:" || true

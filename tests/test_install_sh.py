@@ -211,6 +211,27 @@ class Sandbox(unittest.TestCase):
         self.assertNotIn("Pocketfader", self.out)
         self.assertNotIn("YTM Beacon", self.out)
 
+    def test_the_extension_is_copied_and_its_steps_are_shown(self):
+        self.run_install()
+        ext = self.share / "ytm-starcast" / "extension"
+        self.assertTrue((ext / "manifest.json").is_file())
+        self.assertFalse((ext / "README.md").exists())
+        self.assertFalse((self.share / "ytm-starcast" / "extension.new").exists())
+        self.assertIn('Click "Load unpacked" and choose this folder', self.out)
+        self.assertIn("~/.local/share/ytm-starcast/extension", self.out)
+        self.assertIn("#extension", self.out)
+        self.assertNotIn("Open the extensions page in", self.out)     # no keyboard here: nothing is asked or opened
+        # a second install replaces the copy cleanly
+        self.run_install()
+        self.assertTrue((ext / "manifest.json").is_file())
+        self.assertFalse((self.share / "ytm-starcast" / "extension.old").exists())
+
+    def test_uninstall_removes_the_extension_folder(self):
+        self.run_install()
+        self.run_install("--uninstall")
+        self.assertFalse((self.share / "ytm-starcast" / "extension").exists())
+        self.assertIn("Remove the YTM Starcast extension from your browser", self.out)
+
     def test_options_reach_the_service(self):
         self.run_install("--lan", "--allow-host=music.example.com")
         unit = (self.units / "ytm-starcast.service").read_text()

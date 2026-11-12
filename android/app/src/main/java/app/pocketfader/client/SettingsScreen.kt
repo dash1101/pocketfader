@@ -55,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -113,7 +114,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 if (!s.remoteOn) "Not used: the YouTube Music remote is switched off" else if (s.ytm) "Connected" else "Not connected",
             )
             FilledTonalButton(onClick = onEditConnection, modifier = Modifier.padding(top = 4.dp)) { Text("Edit connection") }
+            if (s.online && !s.ytm) OutlinedButton(onClick = { page = "extension" }) { Text("Set up the browser extension") }
         }
+
+        if (page == "extension") Section("Browser extension") { ExtensionSetup(s) }
 
         if (page == "parts") Section("Parts") {
             // fresh from the computer each time the page opens (another phone or the browser may have changed them)
@@ -585,6 +589,7 @@ private val groups = listOf(
     ),
     "Connections" to listOf(
         Cat("connection", "Connection", Icons.Filled.Link), Cat("parts", "Parts", Icons.Filled.PowerSettingsNew),
+        Cat("extension", "Browser extension", Icons.Filled.Extension),
         Cat("discord", "Discord status", Icons.Filled.Chat), Cat("updates", "Updates", Icons.Filled.SystemUpdate),
     ),
     "More" to listOf(Cat("performance", "Performance", Icons.Filled.Speed), Cat("about", "About", Icons.Filled.Info)),
@@ -620,6 +625,7 @@ private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, 
     "screen" -> when (p.keepAwake) { "always" -> "Always on"; "playing" -> "On while playing"; else -> "Screen sleeps normally" } + (if (p.pixelShift) " · pixel shift" else "")
     "connection" -> if (!s.configured) "Not set up" else if (s.online) "Connected · " + cfg.url.removePrefix("http://").removePrefix("https://").trimEnd('/') else "Can't reach the computer"
     "parts" -> s.parts?.let { partsSummary(it) } ?: "Switch parts of YTM Starcast on or off"
+    "extension" -> if (s.ytm) "Connected" else if (s.extNeverSet) "Not added to a browser yet" else "How to add it to the computer's browser"
     "discord" -> BeaconModel.status?.let { beaconSummary(it) } ?: "Show your music on Discord"
     "updates" -> "Installed " + version.ifBlank { "unknown" }
     "performance" -> (when (p.pollSpeed) { "fast" -> "Fast updates"; "battery" -> "Battery saver"; else -> "Normal updates" }) + (if (p.reduceMotion) " · reduced animations" else "")
@@ -633,6 +639,7 @@ private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, versio
         modifier.edgeFade(scroll).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (s.online && s.remoteOn && s.extNeverSet) ExtensionPrompt { open("extension") }
         for ((label, all) in groups) {
             val cats = all.filter { catShown(it.key, s) }
             if (cats.isNotEmpty()) {

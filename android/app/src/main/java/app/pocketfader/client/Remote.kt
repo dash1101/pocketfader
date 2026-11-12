@@ -39,6 +39,7 @@ data class RemoteState(
     val sleepLeft: Int = 0,               // seconds until playback is paused by the sleep timer (0 = none)
     val sleepAt: Long = 0L,               // SystemClock.elapsedRealtime() when sleepLeft was read
     val parts: Parts? = null,             // the computer's part switches; null: an older computer without them (all on)
+    val extNeverSet: Boolean = false,     // the computer has never heard from its browser extension (show the setup)
 ) {
     /** The YouTube Music remote is switched on on the computer (always, for a computer without part switches). */
     val remoteOn: Boolean get() = parts?.remote != false
@@ -294,6 +295,7 @@ object Remote {
                 bridge = if (loc) true else bridge,
                 ytm = bridge,
                 canAudio = st?.optJSONObject("capabilities")?.optBoolean("audio", false) ?: cur.canAudio,
+                extNeverSet = st?.optJSONObject("extension")?.let { !it.optBoolean("everConnected", true) } ?: cur.extNeverSet,
                 volume = if (st == null || settling) cur.volume else parseVolume(st),
                 eq = if (st == null) cur.eq else parseEq(st),
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
@@ -402,6 +404,27 @@ object Remote {
     }
 
     /** Asks the computer for its part switches now (an older computer has none; then nothing changes). */
+    /** GET /api/extension, or null (no computer, or an older one without the extension setup). */
+    suspend fun extensionStatus(): JSONObject? {
+        val a = api ?: return null
+        return withContext(Dispatchers.IO) { runCatching { a.get("/api/extension", 6000) }.getOrNull() }
+    }
+
+    /** Asks the computer to open the extension's folder or a browser's extensions page; returns what to tell the user. */
+    suspend fun openOnComputer(body: JSONObject): String {
+        val a = api ?: return "Not connected to a computer"
+        return withContext(Dispatchers.IO) {
+            try {
+                a.post("/api/extension/open", body, 8000)
+                "Opened on the computer"
+            } catch (e: ApiException) {
+                e.message ?: "Couldn't open it on the computer"
+            } catch (e: Exception) {
+                "Couldn't reach the computer"
+            }
+        }
+    }
+
     suspend fun refreshParts() {
         val a = api ?: return
         val p = withContext(Dispatchers.IO) { runCatching { parseParts(a.get("/api/parts", 6000)) }.getOrNull() } ?: return

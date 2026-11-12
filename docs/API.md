@@ -79,6 +79,13 @@ translation, the lines borrow them from another source by timestamp. Only the ti
 to those services. Sources are third-party and best-effort. `capabilities.lyrics` is `true` on servers that have this
 endpoint.
 
+## Browser extension
+
+| Endpoint | Body | Notes |
+|---|---|---|
+| `GET /api/extension` | — | `{connected, everConnected, version, expected, outdated, folder, folderReady, browsers: [{id, name, page}]}`. `version` is what the connected extension reports (null for one older than 2.0); `outdated` means it should be reloaded; `folder` is where YTM Starcast keeps its copy of the extension; `browsers` are the ones found on the computer. `/api/state` carries a short `extension` object (`connected, everConnected, outdated, version, expected`). |
+| `POST /api/extension/open` | `{"what":"folder"}` or `{"what":"page","browser":"brave"}` | Opens, on the computer, the extension's folder or one of those browsers' extensions page. Nothing else can be opened: anything else is `400`. `502` with a `message` when it couldn't be opened. Under `--dry-run` nothing opens. |
+
 ## Parts
 
 YTM Starcast's four parts can each be switched off. The apps hide what belongs to a part that is off.
@@ -203,7 +210,7 @@ times out is dropped, not run later.
 | Endpoint | Body | Notes |
 |---|---|---|
 | `GET /ext/poll?i=<tab>` | — | Long poll (≤ 25 s). Replies with a command `{id, type, …}`, or with no `id` when there is none; both carry `"cfg": {"remote", "discord", "refine"}`. A waiting poll is answered at once when one of those switches changes or another tab says goodbye. Each poll also tells Discord status the tab is still open (a paused tab sends nothing else). A tab that hasn't reported since the server started gets `"resend": true` once, at once, and answers by sending its whole state again. |
-| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Replies `{"ok": true, "cfg": {...}}`. |
+| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. |
 | `POST /ext/result` | `{id, data}` | The answer to a command. |
 | `POST /ext/bye` | `{"instance": "<tab>"}` | The tab is closing or leaving the page (sent on `pagehide`, as `text/plain`). The server forgets that tab at once, and clears its Discord card. Replies `{"ok": true}`; `400` without `instance`. |
 | `GET /ext/status` | — | For the extension's toolbar button and Refine's panel: `{"app": "YTM Starcast", "version", "parts": {...all four}, "discord": {"headline", "visible", "state"}}`. `headline` uses the values above; it is `off` while `parts.discord` is off. |
