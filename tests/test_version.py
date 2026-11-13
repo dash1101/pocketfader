@@ -11,6 +11,15 @@ class VersionTests(unittest.TestCase):
         text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
         self.assertEqual(re.search(r'^version = "([^"]+)"', text, re.M).group(1), __version__)
 
+    def test_release_notes_hold_only_this_version(self):
+        # they become the release's description: what's new in this version, not every version before it
+        root = Path(__file__).resolve().parent.parent
+        notes = (root / "packaging" / "release-notes.md").read_text()
+        news = re.findall(r"^#+\s*What's new in (.+)$", notes, re.M)
+        self.assertEqual(news, [__version__])
+        self.assertLess(len(notes.splitlines()), 60)
+        self.assertNotIn(f"## {__version__}\n", (root / "docs" / "CHANGELOG.md").read_text())   # moved there next time
+
     def test_extension_scripts_say_the_manifest_version(self):
         ext = Path(__file__).resolve().parent.parent / "extension"
         manifest = json.loads((ext / "manifest.json").read_text())["version"]

@@ -30,12 +30,13 @@ LEGACY_REPO = "dash1101/pocketfader"
 API = "https://api.github.com"
 _FOLLOW = (301, 302, 307, 308)
 _PREFIXES = ("ytm-starcast", "ytm_starcast", "pocketfader")   # downloaded release files, under the new and the old name
-_VER = re.compile(r"v?(\d+)\.(\d+)\.(\d+)(?:[-._]?(alpha|beta|rc|a|b)[-._]?(\d+))?", re.I)
+_VER = re.compile(r"v?(\d+)\.(\d+)\.(\d+)(?:[-._]?(alpha|beta|rc|a|b)(?:[-._]?(\d+))?)?", re.I)
 _STAGE = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "rc": 2}
 
 
 def parse_version(text):
-    """'v0.1.0-alpha.4' / '0.1.0a4' -> comparable tuple; None if it isn't a version. Final releases sort last."""
+    """'v0.2.1-alpha' / 'v0.1.0-alpha.4' / '0.1.0a4' -> comparable tuple; None if it isn't a version. Final releases
+    sort last."""
     m = _VER.fullmatch((text or "").strip())
     if not m:
         return None
@@ -143,7 +144,7 @@ class Updater:
 
     def _list(self, repo):
         """GET the release listing -> (status, body). Follows a redirect only while it stays on the GitHub API."""
-        url = f"{API}/repos/{repo}/releases?per_page=15"
+        url = f"{API}/repos/{repo}/releases?per_page=50"     # GitHub doesn't list them in version order
         headers = self._headers()
         for _ in range(4):
             status, h, body = self.fetch(url, headers)
@@ -270,6 +271,13 @@ class Updater:
             lines = (out.stderr or out.stdout).strip().splitlines()
             return False, lines[-1] if lines else "pip failed"
         return True, f"Updated to {self.latest().get('latest')}. Restart YTM Starcast to use it."
+
+
+def for_old_apps(tag):
+    """A version name as Android apps up to 0.2.0-alpha.10 can read it: they want a number after "alpha"
+    ("v0.2.1-alpha" -> "v0.2.1-alpha.0"), and would otherwise never see a newer release."""
+    m = re.fullmatch(r"(v?\d+\.\d+\.\d+[-._]?(?:alpha|beta|rc|a|b))", tag or "", re.I)
+    return m.group(1) + ".0" if m else tag
 
 
 def _is_apk(name):

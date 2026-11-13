@@ -67,7 +67,9 @@ class PfApi(private val cfg: ServerConfig) {
             // A redirect here almost always means a Cloudflare Access login page, not our API.
             conn.instanceFollowRedirects = false
             conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("User-Agent", "ytm-starcast-android")
+            // with its version: the server tells apps that send just "ytm-starcast-android" (older ones) about new
+            // releases in the version names they can read
+            conn.setRequestProperty("User-Agent", "ytm-starcast-android/${AppVersion.name}")
             if (cfg.token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer ${cfg.token}")
             if (cfg.hasCloudflareToken) {
                 conn.setRequestProperty("CF-Access-Client-Id", cfg.cfClientId)

@@ -31,7 +31,7 @@ from .discord import agent_from_user_agent
 from .lyrics import LyricsService
 from .proc import no_window
 from . import qr
-from .updater import Updater
+from .updater import Updater, for_old_apps
 from .config import DEFAULT_PORT, JsonFile, config_dir
 from .opener import Opener, music_url, valid_id
 from .audio import AudioFetcher, TYPES as AUDIO_TYPES, parse_range
@@ -730,6 +730,9 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(urlsplit(self.path).query)
             info = dict(app.updater.latest(refresh=(q.get("refresh") or [""])[0] == "1"))
             info["self_update"] = app.updater.can_update_self()
+            if self.headers.get("User-Agent") == "ytm-starcast-android":
+                # an Android app from before the version names lost their last number (newer ones say their version)
+                info["latest"] = for_old_apps(info.get("latest"))
             return self._json(200, info)
         if path.startswith("/api/media/audio/"):
             return self._audio(path.rsplit("/", 1)[-1])

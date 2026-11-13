@@ -3,14 +3,17 @@
 Before the first YTM Starcast release, the repository has to move once: see
 [Moving the repository](#moving-the-repository-once).
 
-1. Bump `version` in `pyproject.toml` and `__version__` in `starcast/__init__.py` (a test checks they agree), e.g. `0.2.0a2`.
-2. Write the new top section of `packaging/release-notes.md`, which becomes the release's description. The Android app
-   shows the bullet points of its first `### What's new …` section as the update's notes, so keep the news in `- ` bullets there
-   (bold lines between them are fine; a new `###` heading ends the list). Fold older versions into one-liners under
-   "Earlier".
+1. Bump `version` in `pyproject.toml` and `__version__` in `starcast/__init__.py` (a test checks they agree). Versions
+   are named `0.2.1-alpha`, `0.2.2-alpha` …: the middle number for bigger steps, the last one for each release, and no
+   number after "alpha".
+2. Move the previous version's section from `packaging/release-notes.md` to the top of `docs/CHANGELOG.md` (as
+   `## <version>`), then write the new version's `### What's new in <version>` in `packaging/release-notes.md`. That file
+   becomes the release's description, so it holds only this version (a test checks). The Android app shows the bullet
+   points of its `### What's new …` section as the update's notes, so keep the news in `- ` bullets there (a new `###`
+   heading ends the list).
 3. Make sure `assets/discord/` (`logo.png`, `play.png`, `pause.png`) is committed: Discord loads the card's images from
    the release tag (`https://raw.githubusercontent.com/dash1101/ytm-starcast/<tag>/assets/discord/`).
-4. Tag and push: `git tag -a v0.2.0-alpha.2 -m "YTM Starcast v0.2.0-alpha.2" && git push origin v0.2.0-alpha.2`.
+4. Tag and push: `git tag -a v0.2.1-alpha -m "YTM Starcast v0.2.1-alpha" && git push origin v0.2.1-alpha`.
    The release workflow (`.github/workflows/release.yml`) builds everything, checks the Linux and Windows programs
    start, and publishes a pre-release. "Run workflow" from the Actions tab builds the same files without publishing.
 
@@ -25,8 +28,8 @@ Before the first YTM Starcast release, the repository has to move once: see
 | `ytm-starcast-extension.zip` | The `extension/` folder, to load unpacked (the files sit at the top of the zip). |
 | `SHA256SUMS.txt` | SHA-256 of every file above. The updater checks downloads against it. |
 
-`<tag>` is the release tag, so the Windows file of `v0.2.0-alpha.1` is `ytm-starcast-v0.2.0-alpha.1-windows-x64.zip`, and
-`<version>` is the Python version (`0.2.0a1`).
+`<tag>` is the release tag, so the Windows file of `v0.2.1-alpha` is `ytm-starcast-v0.2.1-alpha-windows-x64.zip`, and
+`<version>` is the Python version as pip writes it (`0.2.1a0` for `0.2.1-alpha`).
 
 The Android `versionCode` is the workflow's run number, so it keeps rising as long as the workflow file keeps its name.
 Android refuses an update whose `versionCode` is lower than the installed one: don't rename `release.yml`, and if the

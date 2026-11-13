@@ -748,7 +748,7 @@ object Remote {
         need().post("/api/beacon/settings", JSONObject().put(key, v), 8000)
     }
 
-    // ---- app updates (the computer finds the release, the phone just asks it)
+    // ---- app updates, when the phone can't reach GitHub itself (the computer finds the release and passes it on)
 
     fun updateInfo(refresh: Boolean): UpdateInfo =
         parseUpdate(need().get("/api/update" + if (refresh) "?refresh=1" else "", 20000))

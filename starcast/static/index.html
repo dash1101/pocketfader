@@ -4031,8 +4031,10 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
     ab.appendChild(ver); m.appendChild(ab);
     fetch('/api/update', { cache: 'no-store' }).then(r => r.json()).then(u => {
       if (view !== 'settings') return;
-      const pretty = (v) => { const x = String(v || '').replace(/^v/, '').match(/^(\d+\.\d+\.\d+)(?:-?(?:alpha\.?|a)(\d+))?/);
-        return x ? x[1] + (x[2] ? ' alpha ' + x[2] : '') : String(v || ''); };
+      // "v0.2.1-alpha" -> "0.2.1 alpha"; older names ("0.2.0-alpha.10", "0.2.0a10") keep their number
+      const pretty = (v) => { const x = String(v || '').replace(/^v/, '').match(/^(\d+\.\d+\.\d+)(?:[-._]?(alpha|beta|rc|a|b)(?:[-._]?(\d+))?)?$/i);
+        const stage = x && x[2] ? ({ a:'alpha', b:'beta' }[x[2].toLowerCase()] || x[2].toLowerCase()) : '';
+        return x ? x[1] + (stage ? ' ' + stage + (x[3] ? ' ' + x[3] : '') : '') : String(v || ''); };
       ver.querySelector('.k').textContent = 'YTM Starcast ' + pretty(u.current);
       ver.querySelector('.d').textContent = u.error ? "Couldn't check for updates right now."
         : u.available ? pretty(u.latest) + ' is out. Update it on the computer (ytm-starcast --update, or the YTM Starcast window).'

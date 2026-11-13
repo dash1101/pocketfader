@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytm-starcast"
-version = "0.2.0a10"
+version = "0.2.1-alpha"
 description = "YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music."
 readme = "README.md"
 requires-python = ">=3.9"

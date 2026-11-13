@@ -109,7 +109,13 @@ data class UpdateInfo(
     val url: String = "",
     val apk: Boolean = false,
     val error: String? = null,
+    /** Found on GitHub by the phone itself (null: the computer found it, and passes the APK on). */
+    val github: GithubRelease? = null,
 )
+
+/** The newest release as GitHub lists it, with where its Android app and its checksum list are. */
+@Immutable
+data class GithubRelease(val apkName: String, val apkUrl: String, val sumsUrl: String?)
 
 @Immutable
 data class LyricSource(val id: String, val label: String, val found: Boolean, val synced: Boolean, val words: Boolean = false)
@@ -282,20 +288,72 @@ fun parseUpdate(o: JSONObject) = UpdateInfo(
     error = o.str("error"),
 )
 
-/** "0.1.0-alpha.4" / "v0.1.0a4" -> comparable list (final releases sort after their alphas); null if not a version. */
+/** "0.2.1-alpha" / "0.1.0-alpha.4" / "v0.1.0a4" -> comparable list (final releases sort after their alphas); null if not
+ *  a version. */
 fun versionKey(text: String): List<Int>? {
-    val m = Regex("""v?(\d+)\.(\d+)\.(\d+)(?:[-._]?(alpha|beta|rc|a|b)[-._]?(\d+))?""", RegexOption.IGNORE_CASE).matchEntire(text.trim()) ?: return null
+    val m = Regex("""v?(\d+)\.(\d+)\.(\d+)(?:[-._]?(alpha|beta|rc|a|b)(?:[-._]?(\d+))?)?""", RegexOption.IGNORE_CASE)
+        .matchEntire(text.trim()) ?: return null
     val g = m.groupValues
     val stage = when (g[4].lowercase()) { "" -> 9; "a", "alpha" -> 0; "b", "beta" -> 1; else -> 2 }
     return listOf(g[1].toInt(), g[2].toInt(), g[3].toInt(), stage, g[5].ifEmpty { "0" }.toInt())
 }
 
+private fun compareKeys(a: List<Int>, b: List<Int>): Int {
+    for (i in a.indices) if (a[i] != b[i]) return a[i].compareTo(b[i])
+    return 0
+}
+
 fun isNewer(latest: String, current: String): Boolean {
     val a = versionKey(latest) ?: return false
     val b = versionKey(current) ?: return true
-    for (i in a.indices) if (a[i] != b[i]) return a[i] > b[i]
-    return false
+    return compareKeys(a, b) > 0
 }
+
+const val RELEASES_REPO = "dash1101/ytm-starcast"
+private const val DOWNLOADS = "https://github.com/$RELEASES_REPO/releases/download/"
+
+/** GitHub's tags (GET /repos/…/tags) -> the [count] highest versions, highest first. GitHub doesn't list releases in
+ *  version order, so the phone works it out from the tag names (a short list) and then asks for one release. */
+fun newestTags(tags: JSONArray, count: Int = 3): List<String> {
+    val found = ArrayList<Pair<List<Int>, String>>()
+    for (i in 0 until tags.length()) {
+        val name = tags.optJSONObject(i)?.str("name") ?: continue
+        val key = versionKey(name) ?: continue
+        found += key to name
+    }
+    return found.sortedWith { a, b -> compareKeys(b.first, a.first) }.take(count).map { it.second }
+}
+
+/** One release from GitHub (GET /repos/…/releases/tags/<tag>) -> [UpdateInfo]; null for a draft. Its Android app is
+ *  the APK that isn't the "unshrunk" one; downloads are only taken from this repository's own release files. */
+fun releaseInfo(r: JSONObject): UpdateInfo? {
+    if (r.optBoolean("draft")) return null
+    var apk: JSONObject? = null
+    var sums: JSONObject? = null
+    val assets = r.optJSONArray("assets")
+    for (i in 0 until (assets?.length() ?: 0)) {
+        val a = assets?.optJSONObject(i) ?: continue
+        val name = a.str("name") ?: continue
+        if (apk == null && name.endsWith(".apk") && "unshrunk" !in name) apk = a
+        if (name == "SHA256SUMS.txt") sums = a
+    }
+    val apkName = apk?.str("name")
+    val apkUrl = apk?.str("browser_download_url")?.takeIf { it.startsWith(DOWNLOADS) }
+    val sumsUrl = sums?.str("browser_download_url")?.takeIf { it.startsWith(DOWNLOADS) }
+    return UpdateInfo(
+        latest = r.str("tag_name").orEmpty(),
+        notes = r.str("body").orEmpty(),
+        url = r.str("html_url").orEmpty(),
+        apk = apkUrl != null,
+        github = if (apkName != null && apkUrl != null) GithubRelease(apkName, apkUrl, sumsUrl) else null,
+    )
+}
+
+/** A SHA256SUMS.txt ("<digest>  <name>" per line) -> the digest listed for [name], or null. */
+fun checksumFor(sums: String, name: String): String? = sums.lineSequence()
+    .map { it.trim().split(Regex("\\s+"), limit = 2) }
+    .firstOrNull { it.size == 2 && it[1].removePrefix("*") == name && it[0].matches(Regex("[0-9a-fA-F]{64}")) }
+    ?.get(0)?.lowercase()
 
 // ---- the parts of YTM Starcast on the computer, each with its own switch
 

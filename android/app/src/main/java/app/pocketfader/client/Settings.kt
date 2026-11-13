@@ -7,10 +7,21 @@ import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** This app's version name ("0.2.1-alpha"), read once when the app starts. */
+object AppVersion {
+    @Volatile var name = ""
+        private set
+
+    fun init(ctx: Context) {
+        name = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName.orEmpty() } catch (e: Exception) { "" }
+    }
+}
+
 class PocketfaderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.init(this)       // first, so an error while starting is written down too
+        AppVersion.init(this)
         Settings.init(this)
         Downloads.init(this)
         Library.init(this)

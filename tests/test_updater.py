@@ -27,7 +27,7 @@ class Net:
 
     def __call__(self, url, headers=None, timeout=20):
         self.calls.append((url, dict(headers or {})))
-        if url.endswith("per_page=15"):
+        if url.endswith("per_page=50"):
             return self.status, {}, json.dumps(self.releases).encode()
         if url.endswith("/assets/10"):                 # the apk: GitHub redirects to a pre-signed CDN link
             return 302, {"location": "https://cdn.example/apk?sig=1"}, b""
@@ -44,6 +44,23 @@ class VersionTests(unittest.TestCase):
         order = ["0.1.0a2", "v0.1.0-alpha.10", "0.1.0b1", "0.1.0rc1", "0.1.0", "0.2.0a1"]
         self.assertEqual(sorted(order, key=parse_version), order)
         self.assertIsNone(parse_version("nightly"))
+
+    def test_names_without_a_last_number(self):
+        # from 0.2.1-alpha on, versions have no number after "alpha"
+        self.assertEqual(parse_version("v0.2.1-alpha"), parse_version("0.2.1a0"))
+        order = ["v0.2.0-alpha.4", "v0.2.0-alpha.10", "v0.2.1-alpha", "0.2.2-alpha", "v0.2.2-beta", "v0.2.2", "v0.3.0-alpha"]
+        self.assertEqual(sorted(reversed(order), key=parse_version), order)
+
+    def test_names_for_old_android_apps(self):
+        self.assertEqual(updater_mod.for_old_apps("v0.2.1-alpha"), "v0.2.1-alpha.0")
+        for same in ("v0.2.0-alpha.10", "v0.2.1", "nightly", None):
+            self.assertEqual(updater_mod.for_old_apps(same), same)
+
+    def test_the_newest_is_found_whatever_order_github_lists_them_in(self):
+        u = Updater(repo="o/r", current="0.2.0-alpha.10", fetch=Net([release("v0.2.0-alpha.9"), release("v0.2.1-alpha"),
+                                                                       release("v0.2.0-alpha.10")]), token="", cache="/nonexistent")
+        info = u.latest()
+        self.assertEqual((info["latest"], info["available"]), ("v0.2.1-alpha", True))
 
 
 class UpdaterTests(unittest.TestCase):
@@ -127,13 +144,21 @@ class UpdateApiTests(Base):
         st, body, _ = self.req("GET", "/api/update", headers=self.auth())
         self.assertEqual((st, body["available"], body["latest"], body["apk"]), (200, True, "v0.1.0-alpha.4", True))
 
+    def test_old_android_apps_get_a_version_name_they_can_read(self):
+        self.app.updater = Updater(repo="o/r", current="0.2.1-alpha", fetch=Net([release("v0.2.1-alpha")]), token="tok",
+                                   cache=self.app.updater.dir)
+        got = lambda ua: self.req("GET", "/api/update", headers={**self.auth(), **({"User-Agent": ua} if ua else {})})[1]["latest"]  # noqa: E731
+        self.assertEqual(got("ytm-starcast-android"), "v0.2.1-alpha.0")          # apps up to 0.2.0-alpha.10
+        self.assertEqual(got("ytm-starcast-android/0.2.1-alpha"), "v0.2.1-alpha")
+        self.assertEqual(got(None), "v0.2.1-alpha")
+
     def test_apk_is_served_to_the_phone(self):
         st, body, r = self.req("GET", "/api/update/apk", headers=self.auth())
         self.assertEqual((st, body), (200, APK))
         self.assertEqual(r.getheader("Content-Type"), "application/vnd.android.package-archive")
 
 
-LISTING = "https://api.github.com/repos/{}/releases?per_page=15"
+LISTING = "https://api.github.com/repos/{}/releases?per_page=50"
 
 
 class Routes:
@@ -188,7 +213,7 @@ class RenameTests(unittest.TestCase):
             self.assertEqual(Updater(fetch=Routes({})).token(), "old-tok")
 
     def test_a_renamed_repo_is_followed_on_the_api_host(self):
-        moved = "https://api.github.com/repositories/123/releases?per_page=15"
+        moved = "https://api.github.com/repositories/123/releases?per_page=50"
         u, net, _ = self.make({LISTING.format("o/old"): (301, {"location": moved}, b""),
                                moved: (200, {}, [release("v0.2.0-alpha.2")])}, repo="o/old")
         self.assertEqual(u.latest()["latest"], "v0.2.0-alpha.2")
@@ -197,7 +222,7 @@ class RenameTests(unittest.TestCase):
 
     def test_302_and_307_are_followed_too(self):
         for code in (302, 307):
-            hop = f"https://api.github.com/repositories/9/releases?per_page=15&c={code}"
+            hop = f"https://api.github.com/repositories/9/releases?per_page=50&c={code}"
             u, _, _ = self.make({LISTING.format("o/r"): (code, {"location": hop}, b""),
                                  hop: (200, {}, [release("v0.2.0-alpha.3")])}, repo="o/r")
             self.assertEqual(u.latest()["latest"], "v0.2.0-alpha.3")

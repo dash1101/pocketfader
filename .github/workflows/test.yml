@@ -43,7 +43,7 @@ jobs:
         with: { gradle-version: "8.9" }
       - name: Compile the Android app (debug and release)
         working-directory: android
-        run: gradle --no-daemon :app:assembleDebug :app:assembleRelease :app:assembleUnshrunk
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleUnshrunk
       - name: Show the APK's minimum Android version
         run: |
           AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)

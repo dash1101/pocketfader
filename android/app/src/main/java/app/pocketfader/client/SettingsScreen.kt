@@ -405,7 +405,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 OutlinedButton(onClick = { UpdateManager.openReleasePage(ctx) }) { Text("Open the download page") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton(onClick = { scope.launch { UpdateManager.check(ctx, refresh = true) } }, enabled = !UpdateManager.checking && s.online) {
+                FilledTonalButton(onClick = { scope.launch { UpdateManager.check(ctx, refresh = true) } }, enabled = !UpdateManager.checking) {
                     Text(if (UpdateManager.checking) "Checking…" else "Check now")
                 }
                 if (newer) {
@@ -414,7 +414,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     }
                 }
             }
-            Toggle("Check automatically", "Looks for a new version when the app opens (the computer checks GitHub, at most every few hours).", p.autoUpdate) { v ->
+            Toggle("Check automatically", "Looks for a new version on GitHub when the app opens (or asks the computer, when GitHub can't be reached from the phone).", p.autoUpdate) { v ->
                 Settings.update { it.copy(autoUpdate = v) }
             }
             val notes = remember(info?.notes) { info?.notes?.let { parseReleaseNotes(it) } }

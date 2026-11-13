@@ -298,9 +298,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     LaunchedEffect(Unit) { Remote.messages.collect { snackbar.showSnackbar(it) } }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val updateScope = androidx.compose.runtime.rememberCoroutineScope()
-    // Once the computer is reachable, look for a new version of the app (the computer asks GitHub).
+    // Look for a new version of the app on GitHub (through the computer when GitHub can't be reached from the phone).
     LaunchedEffect(s.online, prefs.autoUpdate) {
-        if (s.online && prefs.autoUpdate && UpdateManager.info == null) UpdateManager.check(ctx, refresh = false)
+        if (prefs.autoUpdate && UpdateManager.shouldCheckNow(s.online)) UpdateManager.check(ctx, refresh = false)
     }
     LaunchedEffect(s.error, s.online) {
         val e = s.error

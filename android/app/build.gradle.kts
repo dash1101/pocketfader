@@ -59,6 +59,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    testOptions { unitTests.isReturnDefaultValues = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     packaging {
         resources {
@@ -88,4 +89,7 @@ dependencies {
     // YouTube Music search and audio streams on the phone (GPL-3.0; this is why the Android app is GPL-3.0)
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.0.4")
+    // unit tests on the computer (no phone): the version and release parsing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")       // Android's own org.json is only a stub off the phone
 }
