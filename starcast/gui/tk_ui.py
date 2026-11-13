@@ -34,12 +34,25 @@ def blend(a, b, t):
     return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(ca, cb))
 
 
-def rrect(cv, x1, y1, x2, y2, r, **kw):
-    """A rounded rectangle on a canvas."""
-    r = max(0, min(r, (x2 - x1) / 2, (y2 - y1) / 2))
-    pts = [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r,
-           x1, y1 + r, x1, y1]
-    return cv.create_polygon(pts, smooth=True, splinesteps=24, **kw)
+def rrect(cv, x1, y1, x2, y2, r, fill, outline="", width=0, tags=()):
+    """A rounded rectangle on a canvas, its corners true quarter circles (four arcs and two rectangles; Tk's smoothed
+    polygons only round them a little). An outline is drawn as the shape in its colour with the fill inset over it."""
+    def shape(a1, b1, a2, b2, rr, colour):
+        rr = max(0, min(rr, (a2 - a1) / 2, (b2 - b1) / 2))
+        d = 2 * rr
+        kw = dict(fill=colour, outline=colour, width=0, tags=tags)
+        if rr > 0:
+            cv.create_arc(a1, b1, a1 + d, b1 + d, start=90, extent=90, style="pieslice", **kw)
+            cv.create_arc(a2 - d, b1, a2, b1 + d, start=0, extent=90, style="pieslice", **kw)
+            cv.create_arc(a1, b2 - d, a1 + d, b2, start=180, extent=90, style="pieslice", **kw)
+            cv.create_arc(a2 - d, b2 - d, a2, b2, start=270, extent=90, style="pieslice", **kw)
+        cv.create_rectangle(a1 + rr, b1, a2 - rr, b2, **kw)
+        cv.create_rectangle(a1, b1 + rr, a2, b2 - rr, **kw)
+    if outline and width:
+        shape(x1, y1, x2, y2, r, outline)
+        shape(x1 + width, y1 + width, x2 - width, y2 - width, r - width, fill)
+    else:
+        shape(x1, y1, x2, y2, r, fill)
 
 
 class Fonts:
@@ -75,7 +88,7 @@ class Card(tk.Canvas):
 
     def _draw(self, e):
         self.delete("shape")
-        rrect(self, 0, 0, e.width, e.height, px(22), fill=self.P["card"], outline="", tags="shape")
+        rrect(self, 0, 0, e.width, e.height, px(22), fill=self.P["card"], tags=("shape",))
         self.tag_lower("shape")
         self.itemconfigure(self.win, width=max(1, e.width - 2 * self.pad))
 
@@ -121,7 +134,7 @@ class Switch(tk.Canvas):
             track, edge, thumb, r, cx = P["card2"], P["off"], P["off"], px(8), px(16)
         if not self.enabled:
             track, edge, thumb = (P["line"], P["line"], P["card"]) if self.on else (P["card2"], P["line"], P["line"])
-        rrect(self, 1, 1, self.W - 1, self.H - 1, self.H / 2 - 1, fill=track, outline=edge, width=max(2, px(2)))
+        rrect(self, 0, 0, self.W, self.H, self.H / 2, fill=track, outline=edge, width=max(2, px(2)))
         self.create_oval(cx - r, self.H / 2 - r, cx + r, self.H / 2 + r, fill=thumb, outline="")
 
 
@@ -167,8 +180,23 @@ class Pill(tk.Canvas):
             fill = blend(fill or self.cget("bg"), P["text"], .12 if self.down else .08)
         r = px(12) if self.down else h / 2    # pressed, it squares off a little, as in the apps
         if fill:
-            rrect(self, 0, 0, w, h, r, fill=fill, outline="")
+            rrect(self, 0, 0, w, h, r, fill=fill)
         self.create_text(w / 2, h / 2, text=self.text, fill=fg, font=self.font)
+
+
+class Chip(tk.Canvas):
+    """A small rounded label (the version)."""
+
+    def __init__(self, parent, P, fonts, bg):
+        self.P, self.font = P, tkfont.Font(font=fonts.section)
+        super().__init__(parent, height=px(26), bg=bg, highlightthickness=0, bd=0)
+
+    def set_text(self, text):
+        w, h = self.font.measure(text) + px(22), px(26)
+        self.configure(width=w)
+        self.delete("all")
+        rrect(self, 0, 0, w, h, h / 2, fill=self.P["cont"])
+        self.create_text(w / 2, h / 2, text=text, fill=self.P["on_cont"], font=self.font)
 
 
 class Scroller(tk.Frame):
@@ -223,7 +251,7 @@ class Window:
         names.pack(side="left", fill="x", expand=True)
         tk.Label(names, text="YTM Starcast", font=self.f.title, fg=P["text"], bg=P["bg"]).pack(anchor="w")
         tk.Label(names, text="YouTube Music companion", font=self.f.small, fg=P["muted"], bg=P["bg"]).pack(anchor="w")
-        self.version = tk.Label(head, text="", font=self.f.section, fg=P["on_cont"], bg=P["cont"], padx=px(10), pady=px(3))
+        self.version = Chip(head, P, self.f, P["bg"])
 
         # --- running or not, and how it starts
         card = self.card(col)
@@ -246,11 +274,12 @@ class Window:
                                       self.on_lan)
         row, _ = self.row(card, "Cloudflare hostname", "Only if you put the server behind a Cloudflare Tunnel.")
         self.host_var = tk.StringVar()
-        box = tk.Frame(row, bg=P["card2"], padx=px(10), pady=px(7))
+        box = tk.Canvas(row, bg=P["card"], highlightthickness=0, bd=0, width=px(210), height=px(40))
         box.pack(side="right")
-        entry = tk.Entry(box, textvariable=self.host_var, width=22, bg=P["card2"], fg=P["text"], insertbackground=P["text"],
+        rrect(box, 0, 0, px(210), px(40), px(12), fill=P["card2"])
+        entry = tk.Entry(box, textvariable=self.host_var, bg=P["card2"], fg=P["text"], insertbackground=P["text"],
                          relief="flat", bd=0, font=self.f.body, highlightthickness=0)
-        entry.pack()
+        box.create_window(px(12), px(20), window=entry, anchor="w", width=px(186))
         entry.bind("<Return>", lambda _e: self.on_host())
         entry.bind("<FocusOut>", lambda _e: self.on_host())
         self.entry = entry
@@ -399,7 +428,7 @@ class Window:
         d = d or {}
         ver = d.get("version") or ""
         if ver:
-            self.version.config(text=ver)
+            self.version.set_text(ver)
             self.version.pack(side="right")
         else:
             self.version.pack_forget()
