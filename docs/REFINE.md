@@ -60,16 +60,20 @@ Refine found (`refine`), so selectors can be corrected from real data when YouTu
 
 YouTube Music has two layouts of the player bar, and Refine supports both. What has been tried, and where:
 
-- **The classic bar, on the real YouTube Music** (signed out, in a muted browser, with the scripts loaded by hand): the ✦ menu
-  and every switch, the style layers, the wavy bar, the speed menu, the random-song and lyrics buttons, and the play button's
-  two shapes while playing and paused.
+- **On the real YouTube Music, with the classic bar** (signed out, in a headless browser that can't make a sound: muted,
+  with its sound output switched off and no sound device it can reach, its own empty profile, the extension loaded as it
+  ships): the ✦ menu, the Discord button, All settings, the sidebar entries and the logo; the style layers, Material You
+  page parts and the animations' page change; the wavy bar, the speed menu, a speed kept across songs and the times
+  that follow it; the lyrics in the Lyrics tab (word by word), in their window, in the floating window above other
+  windows, following you out of the player and changing with the song; the clear slowed sound running on the page's real
+  sound (the processor loads, and the sound flows through it); the cover visualizers, Bars and Pulse following the
+  music; the toolbar button; and that the extension connects without the browser's local-network permission. Refine
+  adds about a millisecond of script work per second there.
 - **The newer bar** (the one signed-in accounts usually get): only on a silent stand-in page with the same element names.
-- **YTM Starcast's switches** in the ✦ menu and Refine's own on/off switch: only on a silent stand-in page.
 - **Not tried on the real page:** anything that needs an account (the playlist maker saving a playlist, liked songs, your
-  playlists), the lyrics in the Lyrics tab and in their window, the times that follow the speed, the animations, and the
-  clear slowed sound with real music. All of these were tried on a silent stand-in page; the clear slowed sound's
-  processor was also checked on made-up tones (pitch, steady volume, no gaps), in Node and in the browser's audio engine,
-  without playing anything.
+  playlists), the newer bar, and the browser's automatic floating window when switching tabs (it depends on the browser
+  offering it). The clear slowed sound's processor was also checked on made-up tones (pitch, steady volume, no gaps), in
+  Node and in the browser's audio engine.
 
 ## Live lyrics
 
