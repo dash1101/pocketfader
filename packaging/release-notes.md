@@ -1,18 +1,20 @@
-### What's new in 0.2.2-alpha
+### What's new in 0.2.3-alpha
 
-- The Android app's notification shows the song again when music plays on the phone (with its cover and progress, on
-  the lock screen too): the phone's player never handed its session to the notification.
-- The now-playing card stays at the bottom of every page on phones (the pages make room for it); tap it for the player.
-- Play on a playlist, album, offline playlist or your downloads takes you to the player.
-- Download quality: Best (about 1.2 MB a minute), Standard or Data saver (about 0.4 MB a minute), in Settings → Downloads
-  & offline. Space estimates now go by each song's length and the quality (and by your own downloads, once there are a
-  few), and say how many songs fit.
-- Smart downloads can **Fill the space**: as many songs as fit in the space you set (most played and quick picks first,
-  then liked songs, what you play most and your playlists).
-- Playlists and albums open at once when you've opened them before, and the first page shows while the rest loads.
-- The Comments tab only shows for songs that have comments.
-- A new battery in full screen (on its side, filled to the charge, with a bolt while charging).
-- Settings: Library & offline is part of Downloads & offline now.
+- **The web app looks and works like the Android app:** Playing, Search and Settings. On phones the player is a page of
+  its own, with a navigation bar (or the floating pill) and the mini player on every other page; on wide screens the
+  player stays on the left with Queue, Lyrics, Search and Settings beside it. Search holds For you, Library and
+  Favorites as tabs; Settings is a list of categories (the mixer is Sound & outputs).
+- **The desktop window is redrawn in Material You** (on Windows): rounded cards, switches and buttons, dark or light as
+  Windows is (it follows a change), a dark title bar, YTM Starcast's icon in the window and the taskbar, and sizes
+  that follow the display's scaling. The Windows programs carry the icon too. On Linux the window follows the
+  desktop's dark setting (KDE, GNOME and others).
+- **Android downloads:** a Downloading card with the progress of everything (megabytes, speed, about how long is left)
+  and of each song, and Cancel the rest; the notification says the same. The quality choices name their bitrates.
+  Warnings when the space for automatic downloads (or the number of smart downloads) is more than the phone has room
+  for, and the phone's free space shows by your downloads. Automatic downloads always leave 1 GB of the phone free.
+- **Android:** Settings → Sound & outputs shows the phone itself while music plays on it: its volume, where the sound
+  goes (speaker, headphones, Bluetooth, USB) and Android's output picker.
+- The extension's toolbar popup no longer shows an empty update card.
 
 ### Updating from 0.2.0-alpha.10 or older
 
