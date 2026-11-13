@@ -2465,10 +2465,12 @@
   }
 
   // ---- All settings: everything together, with the sections listed down the side
-  let allDlg = null;
+  let allDlg = null, allFrom = null;
   function openAll(section) {
+    const from = document.activeElement;
     closeSheet();
     if (allDlg) { if (section) jumpTo(section); return; }
+    allFrom = from && from !== document.body ? from : null;
     const sections = [
       ["look", "Look", [
         sw("colors", "Colours from the album art", "The page takes on the colour of the cover"),
@@ -2522,6 +2524,15 @@
       h("div", { class: "pf-all-main" }, nav, body));
     allDlg = h("div", { class: "pf-scrim pf-ui" }, dlg);
     allDlg.addEventListener("pointerdown", (e) => { if (e.target === allDlg) closeAll(); });
+    // Tab stays inside the dialog while it is open
+    dlg.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const all = [...dlg.querySelectorAll("button, input, select, textarea, [tabindex]:not([tabindex='-1'])")].filter((x) => !x.disabled && x.getClientRects().length);
+      if (!all.length) return;
+      const first = all[0], last = all[all.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
     document.body.append(allDlg);
     requestAnimationFrame(() => allDlg && allDlg.classList.add("pf-open"));
     // the section in view is marked in the list
@@ -2547,6 +2558,8 @@
     allDlg = null;
     el.classList.remove("pf-open");
     setTimeout(() => el.remove(), 250);
+    if (allFrom && allFrom.isConnected) allFrom.focus({ preventScroll: true });   // back where it was opened from
+    allFrom = null;
   }
   // Room (a soft reverb for a "slowed + reverb" sound), as in the speed menu
   function roomControl() {
