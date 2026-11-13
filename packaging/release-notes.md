@@ -6,6 +6,12 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.8
+
+- Fixed: when the YouTube Music tab the app followed went away without saying so (the browser crashed or was closed
+  hard, or the tab was reloaded and its goodbye got lost), a paused YouTube Music tab still open didn't take over, and
+  the remote's buttons did nothing until something changed in that tab. It takes over within a few seconds now.
+
 ### What's new in 0.2.0-alpha.7
 
 - The Android app and the web app follow the playback speed too: at 0.8x a 3:00 song shows 3:45 in the player, the

@@ -63,6 +63,21 @@ class Bridge:
         self._prune(now)
         return take
 
+    def _take_over(self, inst, now):
+        """A tab that keeps polling becomes the one followed once the followed tab has gone quiet (it closed without its
+        goodbye arriving, or the browser was closed). Without this, a paused tab, which only reports when something
+        changes, would never take over, and commands would wait for a tab that is gone. It is then asked to send its
+        state again (see claim_resend). Caller holds the lock. True when it took over."""
+        if inst is None or inst == self._active or self._active is None or self._alive(self._active, now):
+            return False
+        self._active, self._active_playing = inst, False
+        self._state, self._state_at = {}, 0.0
+        self._last_seen = now
+        self._reported.discard(inst)
+        self._asked.discard(inst)
+        self._cond.notify_all()
+        return True
+
     def _prune(self, now):
         """Forget tabs not heard of for a while. Caller holds the lock."""
         for k in [k for k in self._seen if not self._alive(k, now)]:
@@ -79,6 +94,8 @@ class Bridge:
             now = time.time()
             self._seen[instance] = now
             wake = self._wake
+            if self._take_over(instance, now):
+                return None                 # it is followed now: it asks again at once, and is told to send its state
             if instance == self._active or self._active is None or not self._alive(self._active, now):
                 self._last_seen = now
             while True:
@@ -91,6 +108,8 @@ class Bridge:
                 self._cond.wait(remaining)
                 if instance in self._seen:          # not if the tab said goodbye meanwhile
                     self._seen[instance] = time.time()
+                    if self._take_over(instance, time.time()):
+                        return None
 
     def claim_resend(self, instance):
         """True once for a tab that hasn't pushed its state since this server started: the server was restarted while

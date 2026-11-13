@@ -251,3 +251,43 @@ class SlowCommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuietTakeoverTests(unittest.TestCase):
+    """The followed tab vanished without its goodbye arriving: a tab that only polls (paused, so it reports nothing)
+    takes over, is asked for its state, and gets the commands."""
+
+    def test_a_polling_tab_takes_over_from_one_that_vanished(self):
+        b = Bridge()
+        b.STALE_AFTER = 0.3
+        b.push_state({"instance": "A", "now": {"playing": False}})
+        self.assertEqual(b.followed, "A")
+        time.sleep(0.4)                                     # A is gone without a goodbye
+        self.assertIsNone(b.poll(timeout=0.5, instance="B"))
+        self.assertEqual(b.followed, "B")
+        self.assertTrue(b.claim_resend("B"))                # asked to send everything again
+        out = {}
+        t = threading.Thread(target=lambda: out.update(r=b.request({"type": "x"}, timeout=2)))
+        t.start()
+        cmd = b.poll(timeout=1, instance="B")
+        self.assertEqual((cmd or {}).get("type"), "x")
+        b.deliver_result(cmd["id"], {"ok": True})
+        t.join(2)
+        self.assertEqual(out["r"], {"ok": True})
+
+    def test_no_takeover_while_the_followed_tab_is_alive(self):
+        b = Bridge()
+        b.push_state({"instance": "A", "now": {"playing": False}})
+        self.assertIsNone(b.poll(timeout=0.05, instance="B"))
+        self.assertEqual(b.followed, "A")
+
+    def test_a_waiting_poll_takes_over_when_the_followed_tab_goes_quiet(self):
+        b = Bridge()
+        b.STALE_AFTER = 0.3
+        b.push_state({"instance": "A", "now": {"playing": False}})
+        b.poll(timeout=0.05, instance="B")                  # B is around, A still followed
+        t0 = time.time()
+        threading.Timer(0.5, b.wake_polls).start()          # a wake-up after A has gone quiet
+        self.assertIsNone(b.poll(timeout=2, instance="B"))
+        self.assertLess(time.time() - t0, 1.5)
+        self.assertEqual(b.followed, "B")
