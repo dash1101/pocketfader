@@ -6,6 +6,11 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.9
+
+- Refine's All settings: the Tab key stays inside it while it's open, and closing it puts you back where you opened it.
+- The "something you might like" button says what it plays without play counts ("Playing Song · Artist").
+
 ### What's new in 0.2.0-alpha.8
 
 - Fixed: when the YouTube Music tab the app followed went away without saying so (the browser crashed or was closed
