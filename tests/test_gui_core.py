@@ -86,6 +86,19 @@ class SettingsTests(unittest.TestCase):
         r.close()
 
 
+class DarkModeTests(unittest.TestCase):
+    def test_what_the_desktop_prefers(self):
+        portal = lambda answer: (lambda argv, timeout=2: (0, answer) if argv[0] == "gdbus" else (1, ""))  # noqa: E731
+        self.assertTrue(core.prefers_dark("linux", sh=portal("(<<uint32 1>>,)")))
+        self.assertFalse(core.prefers_dark("linux", sh=portal("(<<uint32 2>>,)")))
+        # no portal: GNOME's own setting
+        gnome = lambda argv, timeout=2: (1, "") if argv[0] == "gdbus" else (0, "'prefer-dark'\n")  # noqa: E731
+        self.assertTrue(core.prefers_dark("linux", sh=gnome))
+        self.assertFalse(core.prefers_dark("linux", sh=lambda argv, timeout=2: (127, "")))
+        self.assertTrue(core.prefers_dark("darwin", sh=lambda argv, timeout=2: (0, "Dark\n")))
+        self.assertFalse(core.prefers_dark("darwin", sh=lambda argv, timeout=2: (1, "does not exist")))
+
+
 class AddressTests(unittest.TestCase):
     def test_addresses_follow_the_settings(self):
         r = Rig()

@@ -89,7 +89,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
     }
     Column(modifier.fillMaxSize()) {
     PageHeader(allCats.firstOrNull { it.key == current }?.title ?: "Settings") { page = null }
-    if (current == "sound" && !s.audioOn) {
+    if (current == "sound" && Remote.local) {
+        // music plays on this phone: its own volume and outputs
+        PhoneSoundScreen(Modifier.weight(1f).fillMaxWidth())
+    } else if (current == "sound" && !s.audioOn) {
         // computer audio is switched off on the computer: say so, with a way to turn it back on
         Column(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) { AudioOffNote(s.online) }
     } else if (current == "sound") {
@@ -708,7 +711,7 @@ private fun partsSummary(p: Parts): String {
 /** Pages left out of the overview: Parts on a computer without part switches, the computer's sound while that part is off. */
 private fun catShown(key: String, s: RemoteState): Boolean = when (key) {
     "parts" -> s.parts != null
-    "sound" -> s.audioOn
+    "sound" -> s.audioOn || Remote.local
     else -> true
 }
 
@@ -763,6 +766,8 @@ private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, versio
 @Composable
 private fun summaryText(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String {
     if (key == "updates") return if (UpdateManager.available(LocalContext.current)) "A new version is ready" else "Installed " + version.ifBlank { "unknown" }
+    // music on this phone: the page is about the phone's own sound
+    if (key == "sound" && Remote.local) return "This phone · ${LocalPlayer.phoneVolume()}% · ${phoneOutputName(LocalContext.current)}"
     return summaryOf(key, p, s, cfg, version)
 }
 

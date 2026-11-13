@@ -880,6 +880,94 @@
     .artwrap { width:min(100%, clamp(150px, calc(100vh - 560px), 360px)); }
     .np { padding-top:16px; }
   }
+
+  /* ---------- Settings as a list of categories (as in the Android app) ---------- */
+  .offcat { display:none !important; }
+  .setsec h3.samecat { display:none; }
+  .setgroup { max-width:600px; margin-bottom:22px; }
+  .setgroup h3 { font-size:12.5px; font-weight:700; color:var(--accent); letter-spacing:.04em; margin:0 0 8px 6px; }
+  .setcard { background:var(--card); border-radius:var(--r-lg); overflow:hidden; }
+  .setcat { display:flex; align-items:center; gap:16px; width:100%; padding:14px 16px; border:0; background:none; text-align:left;
+            color:var(--text); transition:background .15s; }
+  .setcat + .setcat { border-top:1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  .setcat:hover { background:color-mix(in srgb, var(--text) 5%, transparent); }
+  .setcat:active { background:color-mix(in srgb, var(--text) 8%, transparent); }
+  .setcat .ic { width:40px; height:40px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center;
+                background:color-mix(in srgb, var(--accent) 20%, transparent); color:var(--accent); }
+  .setcat .ic svg { width:21px; height:21px; fill:currentColor; }
+  .setcat .tx { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .setcat .k { font-weight:620; font-size:15px; }
+  .setcat .d { font-size:12.5px; color:var(--dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .setcat .chev { width:18px; height:18px; fill:var(--dim2); flex:none; }
+
+  /* ---------- the Android app's layout (Playing / Search / Settings) ---------- */
+  .navbtn[hidden] { display:none !important; }
+  #qpane { display:none; }
+  /* Search's tabs: what used to be Home, Library and Favorites */
+  .stabs { display:flex; gap:4px; margin:-6px 0 16px; border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none; }
+  .stabs::-webkit-scrollbar { display:none; }
+  .stab { flex:none; border:0; background:none; color:var(--dim); font-weight:620; font-size:14px; padding:10px 14px 11px;
+          position:relative; border-radius:var(--r-sm) var(--r-sm) 0 0; transition:color .15s; }
+  .stab:hover { color:var(--text); }
+  .stab.on { color:var(--accent); }
+  .stab.on::after { content:''; position:absolute; left:12px; right:12px; bottom:-1px; height:3px; border-radius:3px 3px 0 0; background:var(--accent); }
+
+  /* wide: the player on the left, tabs beside it */
+  @media (min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape) {
+    #app { grid-template-columns:minmax(340px, .85fr) minmax(0, 1.15fr); grid-template-rows:auto minmax(0, 1fr);
+           grid-template-areas:"rail nav" "rail main"; }
+    #rail { border-left:0; border-right:1px solid var(--line); }
+    #rail .railhead { display:none; }
+    #nav { flex-direction:row; align-items:center; gap:2px; padding:10px 18px 0; border-right:0; border-bottom:1px solid var(--line);
+           background:transparent; }
+    #nav .brand { width:34px; height:34px; margin:0 12px 8px 0; }
+    #nav .dot { margin:0 0 8px 10px; }
+    .navbtn { width:auto; height:46px; flex-direction:row; gap:8px; padding:0 16px 2px; font-size:14px; font-weight:640;
+              border-radius:var(--r-sm) var(--r-sm) 0 0; }
+    .navbtn svg { width:20px; height:20px; }
+    .navbtn.sel { color:var(--accent); background:none; border:0; box-shadow:none; backdrop-filter:none; }
+    .navbtn.sel svg { filter:none; }
+    .navbtn:hover { color:var(--text); }
+    .navbtn[data-view="playing"] { display:none; }
+    #navpill { height:3px !important; border-radius:3px 3px 0 0 !important; background:var(--accent) !important; border:0 !important;
+               box-shadow:none !important; }
+    #qpane { grid-area:main; flex-direction:column; min-height:0; overflow:hidden; padding:12px 14px 0; }
+    #app.v-queue #main, #app.v-lyrics #main { display:none; }
+    #app.v-queue #qpane, #app.v-lyrics #qpane { display:flex; }
+    #qpane .railbody { flex:1; min-height:0; overflow-y:auto; }
+    #qpane #lyricsbody { flex:1; }
+  }
+
+  /* phones: Playing, Search and Settings along the bottom (a bar, or a floating pill), the player as a page of its own */
+  @media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
+    .navbtn[data-view="queue"], .navbtn[data-view="lyrics"] { display:none !important; }
+    /* the bar (Material's navigation bar): every page named, the chosen one's icon on a small pill */
+    html:not([data-nav="pill"]) #nav { height:auto; padding:8px 0 calc(10px + var(--sa-bottom, env(safe-area-inset-bottom)));
+      background:color-mix(in srgb, var(--card) 96%, var(--bg)); border-top:0; }
+    html:not([data-nav="pill"]) .navbtn { height:60px; gap:4px; font-size:12px; font-weight:620; background:none; border:0; box-shadow:none; }
+    html:not([data-nav="pill"]) .navbtn svg { width:60px; height:32px; padding:4px 18px; border-radius:16px; box-sizing:border-box;
+      transition:background-color .2s; }
+    html:not([data-nav="pill"]) .navbtn.sel { color:var(--text); background:none; border:0; box-shadow:none; backdrop-filter:none; }
+    html:not([data-nav="pill"]) .navbtn.sel svg { background:color-mix(in srgb, var(--accent) 26%, transparent); filter:none; }
+    html:not([data-nav="pill"]) #navpill { display:none; }
+    /* the floating pill: only the chosen page shows its name */
+    html[data-nav="pill"] #nav { left:50%; right:auto; transform:translateX(-50%); bottom:calc(12px + var(--sa-bottom, env(safe-area-inset-bottom)));
+           width:auto; max-width:calc(100% - 32px); justify-content:center; gap:2px; padding:6px; border:0; border-radius:999px;
+           background:color-mix(in srgb, var(--card2) 96%, transparent); backdrop-filter:blur(14px);
+           box-shadow:0 10px 30px rgba(0,0,0,.45), 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent); }
+    html[data-nav="pill"] .navbtn { flex:none; width:auto; height:48px; flex-direction:row; gap:8px; padding:0 15px; border-radius:999px;
+           font-size:13.5px; min-width:0; overflow:visible; }
+    html[data-nav="pill"] .navbtn span { display:none; }
+    html[data-nav="pill"] .navbtn.sel span { display:inline; }
+    html[data-nav="pill"] .navbtn.sel { color:var(--text); background:none; border:0; box-shadow:none; backdrop-filter:none; flex:none; }
+    html[data-nav="pill"] #navpill { border-radius:999px !important; background:color-mix(in srgb, var(--accent) 26%, var(--card2)) !important;
+           border:0 !important; box-shadow:none !important; }
+    #app.v-playing #rail { z-index:40; padding-bottom:calc(92px + var(--sa-bottom, env(safe-area-inset-bottom))); }
+    #app.v-playing #rail .np { padding-top:calc(18px + env(safe-area-inset-top)); }
+    body.v-playing #miniplayer { display:none !important; }
+    #app.v-playing .raildrag { display:none; }
+    body.v-playing #topbarhost { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -888,16 +976,17 @@
   <nav id="nav">
     <div id="navpill"></div>
     <div class="brand"><img src="/icon.svg" alt=""></div>
-    <button class="navbtn sel" data-view="home"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3z"/></svg>Home</button>
-    <button class="navbtn" data-view="search"><svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg>Search</button>
-    <button class="navbtn" data-view="playlists"><svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm12 .5a2.5 2.5 0 105 0 2.5 2.5 0 00-5 0z"/></svg>Library</button>
-    <button class="navbtn mixbtn" data-view="mixer"><svg viewBox="0 0 24 24"><path d="M7 3v6H5v6h2v6h2v-6h2V9H9V3zm8 0v3h-2v6h2v9h2v-9h2V6h-2V3z"/></svg>Mixer</button>
+    <button class="navbtn sel" data-view="playing"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm-2 14.5v-9l6 4.5z"/></svg><span>Playing</span></button>
+    <button class="navbtn" data-view="queue"><svg viewBox="0 0 24 24"><path d="M15 6H3v2h12zm0 4H3v2h12zM3 16h8v-2H3zM17 6v8.18A3 3 0 1019 17V8h3V6z"/></svg><span>Queue</span></button>
+    <button class="navbtn" data-view="lyrics" id="nav-lyrics"><svg viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h10v2H4zm0 4h16v2H4zm0 4h10v2H4z"/></svg><span>Lyrics</span></button>
+    <button class="navbtn" data-view="search"><svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg><span>Search</span></button>
     <div class="spacer"></div>
-    <button class="navbtn" data-view="settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.6 7.6 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7 7 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.58.24-1.12.56-1.62.94l-2.39-.96a.5.5 0 00-.6.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.6 7.6 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32c.14.24.42.32.6.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.62-.94l2.39.96c.18.08.46 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg>Settings</button>
+    <button class="navbtn" data-view="settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.6 7.6 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7 7 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.58.24-1.12.56-1.62.94l-2.39-.96a.5.5 0 00-.6.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.6 7.6 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32c.14.24.42.32.6.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.62-.94l2.39.96c.18.08.46 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg><span>Settings</span></button>
     <div id="ndot" class="dot"></div>
   </nav>
 
   <main id="main"></main>
+  <section id="qpane" aria-label="Queue and lyrics"></section>
 
   <aside id="rail">
     <button class="railclose" id="railclose" title="Close"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></button>
@@ -937,7 +1026,7 @@
         <span class="p" id="mvolpct"></span>
       </div>
     </div>
-    <div class="railhead"><button class="rtab on" data-rt="queue">Up Next</button><button class="rtab" data-rt="lyrics" id="rt-lyrics" style="display:none">Lyrics</button><span class="c" id="qcount"></span></div>
+    <div class="railhead"><button class="rtab on" data-rt="queue">Up next</button><button class="rtab" data-rt="lyrics" id="rt-lyrics" style="display:none">Lyrics</button><span class="c" id="qcount"></span></div>
     <div class="qmodes" id="qmodes" style="display:none">
       <button class="qm" id="qm-shuffle" title="Shuffle (double-tap to reshuffle)"><svg viewBox="0 0 24 24"><path d="M10.6 9.2L5.4 4 4 5.4l5.2 5.2 1.4-1.4zM14.5 4l2.0 2-12.5 12.5 1.4 1.4L17.9 7.4l2.1 2.1V4h-5.5zm.4 9.8l-1.4 1.4 3.3 3.3-2.1 2.1H20v-5.5l-2.0 2-3.1-3.3z"/></svg><span>Shuffle</span></button>
       <button class="qm" id="qm-repeat" title="Loop"><svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg><span id="qm-repeat-l">Loop off</span></button>
@@ -1490,7 +1579,9 @@ function moveNavPill() {
   if (!sel) { pill.style.opacity = '0'; return; }
   pill.style.width = sel.offsetWidth + 'px';
   pill.style.height = sel.offsetHeight + 'px';
-  pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + sel.offsetTop + 'px)';
+  // wide screens: an underline under the tab (its height is fixed by CSS); phones: the capsule behind it
+  const y = isWide() ? sel.offsetTop + sel.offsetHeight - 3 : sel.offsetTop;
+  pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + y + 'px)';
   pill.style.opacity = '1';
 }
 // Re-measure whenever the bar or a button changes size (a label appearing, fonts loading late, the phone turning).
@@ -1509,14 +1600,34 @@ window.addEventListener('resize', () => {
   lastOrient = o;
 });
 
-// The five tabs; every other view (a playlist, an artist, the theme picker...) belongs to the tab it was opened from.
+// The tabs, as in the Android app: Playing, Search and Settings on phones; on wide screens the player stays in view on the
+// left and Queue, Lyrics, Search and Settings are tabs beside it. Every other view (a playlist, an artist, the mixer, the
+// theme picker...) belongs to the tab it was opened from.
 let onDetailRenamed = null;   // set by the open playlist page, so a rename shows there at once
-const TOP_VIEWS = new Set(['home', 'search', 'playlists', 'mixer', 'settings']);
-let topView = 'home';
+const TOP_VIEWS = new Set(['playing', 'queue', 'lyrics', 'search', 'settings']);
+const PLAYER_VIEWS = new Set(['playing', 'queue', 'lyrics']);
+// Search's own tabs (what used to be Home, Library and Favorites)
+const SEARCH_TABS = [['search', 'Search'], ['home', 'For you'], ['playlists', 'Library'], ['favorites', 'Favorites']];
+const SEARCH_VIEWS = new Set(SEARCH_TABS.map(t => t[0]));
+let topView = 'playing';
+function topOf(v) {
+  if (TOP_VIEWS.has(v)) return v;
+  if (v === 'theme' || v === 'mixer' || v.startsWith('set:')) return 'settings';
+  return 'search';
+}
 function setView(v, push = true) {
-  if (!viewAllowed(v)) v = 'home';   // a page of a part that is switched off (also when Back leads to one)
+  // the phone shows the queue and lyrics on its Playing page; wide screens always show the player, so they have no Playing tab
+  if (isWide() && v === 'playing') v = railMode === 'lyrics' ? 'lyrics' : 'queue';
+  if (!isWide() && (v === 'queue' || v === 'lyrics')) { setRailMode(v === 'lyrics' ? 'lyrics' : 'queue'); v = 'playing'; }
+  if (!viewAllowed(v)) v = isWide() ? 'queue' : 'playing';   // a page of a part that is switched off (also when Back leads to one)
   view = v;
-  if (TOP_VIEWS.has(v)) topView = v; else if (v === 'theme') topView = 'settings';
+  topView = topOf(v);
+  const app = $('#app');
+  // (on the body too: the mini player and the phone's page header sit outside #app)
+  for (const k of PLAYER_VIEWS) { app.classList.toggle('v-' + k, v === k); document.body.classList.toggle('v-' + k, v === k); }
+  if (v === 'queue' || v === 'lyrics') setRailMode(v);
+  // on phones the player is the Playing page itself
+  if (!isWide()) app.classList.toggle('railopen', v === 'playing');
   document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('sel', b.dataset.view === topView));
   moveNavPill();
   const m = $('#main'); m.classList.remove('viewin'); void m.offsetWidth; m.classList.add('viewin');
@@ -1533,13 +1644,37 @@ function setView(v, push = true) {
 }
 // Hardware / browser back → restore the previous view without pushing a new entry.
 window.addEventListener('popstate', e => {
-  if ($('#app').classList.contains('railopen')) { closeNowPlaying(); return; }
   const st = e.state || { view: 'home' };
   if (st.view === 'detail' && st.detail) detailStack = st.detail;
   if ($('#cpwrap').classList.contains('show')) $('#cpwrap').classList.remove('show');
   if ($('#sheet').classList.contains('show')) closeSheet();
   setView(st.view || 'home', false);
 });
+// Wide screens show the queue and lyrics in the pane beside the player (its Queue and Lyrics tabs); phones under the player.
+let panesWide = null;
+function placePanes() {
+  const wide = isWide();
+  if (wide === panesWide) return;
+  panesWide = wide;
+  const nodes = ['#qmodes', '#railbody', '#lyricsbody'].map(s => $(s));
+  if (wide) { $('#qpane').append(...nodes); $('#app').classList.remove('railopen'); }
+  else $('#rail .railhead').after(...nodes);
+  if (view) setView(view, false);       // the same place, in this layout's terms
+  requestAnimationFrame(() => requestAnimationFrame(moveNavPill));   // the tabs moved: once laid out, the marker follows
+}
+try { WIDE_MQ.addEventListener('change', placePanes); } catch (e) {}
+// The tabs at the top of Search.
+function searchTabs() {
+  const bar = el('div', 'stabs');
+  bar.setAttribute('role', 'tablist');
+  for (const [v, label] of SEARCH_TABS) {
+    const b = el('button', 'stab' + (view === v ? ' on' : ''));
+    b.textContent = label; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(view === v));
+    b.addEventListener('click', () => { if (view !== v) setView(v); });
+    bar.appendChild(b);
+  }
+  return bar;
+}
 
 // On phones the page header lives in a body-level fixed host (see CSS) — move it there
 // after each render so no ancestor can offset or clip it.
@@ -1551,13 +1686,14 @@ function hoistTopbar() {
 }
 function render() {
   const m = $('#main');
+  if (PLAYER_VIEWS.has(view)) { m.innerHTML = ''; $('#topbarhost').replaceChildren(); return; }   // the player (and its panes) show instead
   if (view === 'home') return renderHome(m);
   if (view === 'search') return renderSearch(m);
   if (view === 'playlists') return renderPlaylists(m);
   if (view === 'favorites') return renderFavorites(m);
   if (view === 'detail') return renderDetail(m, detailStack);
   if (view === 'mixer') return renderMixerPage(m);
-  if (view === 'settings') return renderSettings(m);
+  if (view === 'settings' || view.startsWith('set:')) return renderSettings(m);
   if (view === 'theme') return renderThemes(m);
 }
 
@@ -1566,7 +1702,7 @@ function topbar(title, withSearch) {
   const bar = el('div', 'topbar');
   // A back arrow on pages inside a tab: the Android back button does the same, but an iPhone home-screen app
   // and a desktop window have none.
-  if (!TOP_VIEWS.has(view)) {
+  if (!TOP_VIEWS.has(view) && !SEARCH_VIEWS.has(view)) {
     const back = el('button', 'backbtn'); back.title = 'Back'; back.setAttribute('aria-label', 'Back');
     back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>';
     back.addEventListener('click', () => {
@@ -1869,7 +2005,7 @@ function togglePin(item) {
 
 async function renderHome(m) {
   m.innerHTML = '';
-  const bar = topbar('Home');
+  const bar = topbar('Search', true);
   const editing = $('#app').classList.contains('editwidgets');
   const editBtn = el('button', 'editbtn' + (editing ? ' on' : '')); editBtn.title = editing ? 'Done' : 'Edit layout';
   editBtn.innerHTML = editing
@@ -1984,7 +2120,7 @@ function enableWidgetResize(card, rz, grid) {
 }
 
 async function renderSearch(m) {
-  m.innerHTML = ''; m.appendChild(topbar('Search', true));
+  m.innerHTML = ''; m.appendChild(topbar('Search', true)); m.appendChild(searchTabs());
   const res = el('div', 'list'); res.id = 'searchres'; m.appendChild(res);
   setTimeout(() => $('#searchbox')?.focus(), 30);
   recentBlock(res);
@@ -2004,7 +2140,7 @@ async function renderSearch(m) {
 }
 
 function renderFavorites(m) {
-  m.innerHTML = ''; m.appendChild(topbar('Favorites'));
+  m.innerHTML = ''; m.appendChild(topbar('Search', true)); m.appendChild(searchTabs());
   const pins = favList();
   if (!pins.length) { m.appendChild(emptyMsg('Nothing here yet — tap ☆ on a song or playlist to save it.')); return; }
 
@@ -2054,7 +2190,9 @@ function filterBar(q) {
   return bar;
 }
 async function doSearch(q) {
-  if (!q) return; const res = $('#searchres'); if (!res) return;
+  if (!q) return;
+  if (view !== 'search') setView('search');     // typed on another of Search's tabs
+  const res = $('#searchres'); if (!res) return;
   const box = $('#searchbox'); if (box && box.value.trim() !== q) box.value = q;
   const seq = ++searchSeq, filter = searchFilter;
   res.innerHTML = ''; res.appendChild(filterBar(q));
@@ -2095,7 +2233,7 @@ function recentBlock(res) {
 }
 
 async function renderPlaylists(m) {
-  m.innerHTML = ''; m.appendChild(topbar('Library'));
+  m.innerHTML = ''; m.appendChild(topbar('Search', true)); m.appendChild(searchTabs());
   const mkRow = el('div', 'acts'); mkRow.style.padding = '0 4px 12px';
   const mkBtn = el('button', 'pill ghost');
   mkBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>New playlist';
@@ -2209,7 +2347,7 @@ async function renderDetail(m, d) {
   paint();
 }
 
-function renderMixerPage(m) { m.innerHTML = ''; m.appendChild(topbar('Mixer'));
+function renderMixerPage(m) { m.innerHTML = ''; m.appendChild(topbar('Sound & outputs'));
   const c = el('div'); c.style.maxWidth = '520px'; c.id = 'mixerpage'; m.appendChild(c); paintMixer(c); }
 
 function renderSettings(m) {
@@ -2762,10 +2900,9 @@ function morphRail(open) {
   }
 }
 function openNowPlaying() {
-  const app = $('#app'); if (app.classList.contains('railopen')) return;
-  if (isWide()) { app.classList.add('railopen'); }
-  else morphRail(true);
-  history.pushState({ railopen:true }, '');
+  if (isWide()) { setView(railMode === 'lyrics' ? 'lyrics' : 'queue'); return; }
+  if (!$('#app').classList.contains('railopen')) morphRail(true);   // grows out of the card
+  setView('playing');
 }
 function closeNowPlaying() {
   const app = $('#app'); if (!app.classList.contains('railopen')) return;
@@ -2885,7 +3022,7 @@ function optimisticNow(item) {
       const p = Math.max(0, Math.min(1, -_dy / (H() * .35)));
       clear(); restoreText(); revealing = false;
       if (p > .26) {                                      // release while moving up = lock it open
-        settleRailOpen(); history.pushState({ railopen:true }, '');
+        settleRailOpen(); setView('playing');
         clearChip();                                      // CSS keeps the chip hidden while open
       } else { morphRail(false); clearChip(); }
       return;
@@ -3116,6 +3253,7 @@ setInterval(lyricsFollow, 300);
 function lyricsTrackChanged() {
   const caps = mixerState && mixerState.capabilities;
   $('#rt-lyrics').style.display = (caps && caps.lyrics) ? '' : 'none';
+  $('#nav-lyrics').hidden = !(caps && caps.lyrics);
   if (railMode === 'queue' && !partOn('remote')) syncRail();   // the remote went off before the capabilities came in
   if (railMode === 'lyrics' && lyricsKey() !== lyr.key) loadLyrics(false);
 }
@@ -3657,7 +3795,7 @@ async function pollMusic() {
       else if (wasConnected === false && ok) toast('Reconnected');
       // Settings shows connection state, so refresh it live rather than making the user
       // navigate away and back to see the change.
-      if (wasConnected !== null && (wasConnected !== ok || wasYtm !== lastYtm) && view === 'settings') render();
+      if (wasConnected !== null && (wasConnected !== ok || wasYtm !== lastYtm) && (view === 'settings' || view === 'set:status')) render();
       wasConnected = ok; wasYtm = lastYtm;
     }
   }
@@ -3729,7 +3867,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
-setView('home'); setRailTab('queue'); pollMusic(); pollMixer(); favPull();
+placePanes(); setView(view === 'settings' ? 'settings' : (isWide() ? 'queue' : 'playing')); setRailTab('queue'); pollMusic(); pollMixer(); favPull();
 setInterval(favPull, 20000);   // keep favourites in step across devices
 setTimeout(moveNavPill, 80);   // once layout settles, park the pill on the active tab
 </script>
@@ -3768,17 +3906,6 @@ html[data-glow="extreme"] #np-glow { inset:-26% -26% -30% -26%; opacity:1; filte
 .seek #seek::-webkit-slider-thumb { -webkit-appearance:none; width:4px; height:22px; border-radius:2px; background:var(--accent); margin-top:7px; }
 .seek #seek::-moz-range-thumb { width:4px; height:22px; border:0; border-radius:2px; background:var(--accent); }
 .times { margin-top:0; }
-/* floating pill navigation (phone layout) as an option */
-@media (max-width:819px), (max-width:1100px) and (max-height:599px), (max-width:1100px) and (orientation:portrait) {
-  html[data-nav="pill"] #nav { left:16px; right:16px; bottom:calc(10px + var(--sa-bottom, env(safe-area-inset-bottom))); border-radius:var(--r-full);
-    border:1px solid var(--line); background:color-mix(in srgb, var(--panel) 94%, transparent); box-shadow:0 10px 28px rgba(0,0,0,.45);
-    padding:6px 8px; backdrop-filter:blur(10px); justify-content:space-around; }
-  html[data-nav="pill"] .navbtn { height:48px; border-radius:var(--r-full); flex-direction:row; gap:8px; font-size:0; flex:1 1 0; min-width:40px;
-    padding:0 6px; white-space:nowrap; overflow:hidden; }
-  html[data-nav="pill"] .navbtn.sel { font-size:12.5px; flex:0 1 auto; padding:0 16px; }
-  html[data-nav="pill"] .navbtn svg { width:23px; height:23px; flex:none; }
-  @media (max-width:340px) { html[data-nav="pill"] .navbtn.sel { font-size:0; gap:0; padding:0 12px; } }
-}
 /* little extras */
 #nav .brand { background:none; box-shadow:none; overflow:visible; }
 #nav .brand::after { display:none; }
@@ -4030,7 +4157,7 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
     const ver = el('div', 'setrow'); ver.innerHTML = '<div><div class="k">YTM Starcast</div><div class="d">Checking for updates…</div></div>';
     ab.appendChild(ver); m.appendChild(ab);
     fetch('/api/update', { cache: 'no-store' }).then(r => r.json()).then(u => {
-      if (view !== 'settings') return;
+      if (view !== 'settings' && !view.startsWith('set:')) return;
       // "v0.2.1-alpha" -> "0.2.1 alpha"; older names ("0.2.0-alpha.10", "0.2.0a10") keep their number
       const pretty = (v) => { const x = String(v || '').replace(/^v/, '').match(/^(\d+\.\d+\.\d+)(?:[-._]?(alpha|beta|rc|a|b)(?:[-._]?(\d+))?)?$/i);
         const stage = x && x[2] ? ({ a:'alpha', b:'beta' }[x[2].toLowerCase()] || x[2].toLowerCase()) : '';
@@ -4050,6 +4177,92 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
   };
   // set the view for an already-open artist/settings page
   if (view === 'settings' || view === 'artist') render();
+})();
+
+// Settings as in the Android app: a list of categories, each a page of its own (views "set:<key>"). The sections
+// themselves are built as before; a category's page keeps its own and leaves the others out.
+(() => {
+  const I = (d) => '<svg viewBox="0 0 24 24"><path d="' + d + '"/></svg>';
+  const ICON = {
+    sound: I('M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z'),
+    playback: I('M12 2a10 10 0 100 20 10 10 0 000-20zm-2 14.5v-9l6 4.5z'),
+    appearance: I('M12 3a9 9 0 000 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01a1.5 1.5 0 011.13-2.49H16a5 5 0 005-5c0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3-4a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm5 0a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm3 4a1.5 1.5 0 110-3 1.5 1.5 0 010 3z'),
+    parts: I('M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42A6.92 6.92 0 0119 12a7 7 0 11-11.42-5.42L6.17 5.17A8.93 8.93 0 003 12a9 9 0 0018 0c0-2.74-1.23-5.18-3.17-6.83z'),
+    extension: I('M20.5 11H19V7a2 2 0 00-2-2h-4V3.5a2.5 2.5 0 00-5 0V5H4a2 2 0 00-2 2v3.8h1.5a2.7 2.7 0 010 5.4H2V20a2 2 0 002 2h3.8v-1.5a2.7 2.7 0 015.4 0V22H17a2 2 0 002-2v-4h1.5a2.5 2.5 0 000-5z'),
+    devices: I('M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13-2h-2v3h-3v2h3v3h2v-3h3v-2h-3z'),
+    discord: I('M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z'),
+    status: I('M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'),
+    about: I('M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z'),
+  };
+  // [key, title, the sections it holds (titles; a RegExp for one whose name varies) or the view it opens]
+  const GROUPS = [
+    ['Listening', [['sound', 'Sound & outputs', 'mixer'], ['playback', 'Playback', ['Playback', 'Other players', /engine$/]]]],
+    ['Look & feel', [['appearance', 'Appearance', ['Appearance', 'Effects', 'Interface', 'Display']]]],
+    ['Connections', [['parts', 'Parts', ['Parts']], ['extension', 'Browser extension', ['Browser extension']],
+      ['devices', 'Open on another device', ['Open on another device']], ['discord', 'Discord status', ['Discord status']]]],
+    ['More', [['status', 'Status', ['Status', 'Cue app']], ['about', 'About', ['About']]]],
+  ];
+  const CATS = GROUPS.flatMap(g => g[1]);
+  const holds = (cat, title) => Array.isArray(cat[2]) && cat[2].some(x => x instanceof RegExp ? x.test(title) : x === title);
+  const summary = (key) => {
+    const st = mixerState || {}, v = st.volume || {}, x = st.extension || {}, p = st.parts || {};
+    switch (key) {
+      case 'sound': return v.available ? v.percent + '%' + (v.muted ? ' (muted)' : '') + (v.device ? ' · ' + v.device : '') : "The computer's volume, outputs and equalizer";
+      case 'playback': return 'Seeking, keyboard shortcuts, other players';
+      case 'appearance': {
+        const t = localStorage.getItem('vmr-theme') || 'dark';
+        return ((THEMES.find(x => x[0] === t) || [])[1] || (customThemes().find(c => c.id === t) || {}).name || 'Dark') + ' theme, effects, layout';
+      }
+      case 'parts': { const off = PARTS.filter(([k]) => p[k] === false).map(([, l]) => l); return off.length ? 'Off: ' + off.join(', ') : 'Everything is on'; }
+      case 'extension': return x.connected ? 'Connected' + (x.version ? ' · version ' + x.version : '') : 'Not connected';
+      case 'devices': return 'Addresses and a QR code for your phone';
+      case 'discord': return 'Your music on your Discord profile';
+      case 'status': return lastConnected ? (lastYtm ? 'YouTube Music connected' : 'Connected') : 'Not connected';
+      case 'about': return (st.version ? 'Version ' + st.version : 'Version') + ', updates and the Android app';
+    }
+    return '';
+  };
+  const overview = (m) => {
+    m.innerHTML = ''; m.appendChild(topbar('Settings'));
+    for (const [group, cats] of GROUPS) {
+      const box = el('div', 'setgroup');
+      box.appendChild(Object.assign(el('h3'), { textContent: group }));
+      const card = el('div', 'setcard');
+      for (const c of cats) {
+        if (c[0] === 'sound' && !partOn('audio')) continue;
+        if ((c[0] === 'discord') && !((mixerState && mixerState.capabilities) || {}).discord && !((mixerState && mixerState.capabilities) || {}).beacon) continue;
+        const r = el('button', 'setcat');
+        r.innerHTML = '<span class="ic">' + ICON[c[0]] + '</span><span class="tx"><span class="k"></span><span class="d"></span></span>' +
+          '<svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6z"/></svg>';
+        r.querySelector('.k').textContent = c[1]; r.querySelector('.d').textContent = summary(c[0]);
+        r.addEventListener('click', () => setView(c[2] === 'mixer' ? 'mixer' : 'set:' + c[0]));
+        card.appendChild(r);
+      }
+      box.appendChild(card); m.appendChild(box);
+    }
+  };
+  const full = renderSettings;
+  renderSettings = function (m) {
+    if (!view.startsWith('set:')) return overview(m);
+    const cat = CATS.find(c => c[0] === view.slice(4));
+    const out = full.apply(this, arguments);
+    if (!cat) return out;
+    const h = m.querySelector('.topbar .viewtitle'); if (h) h.textContent = cat[1];
+    // leave out the other categories' sections, including ones added a moment later
+    const sort = () => m.querySelectorAll(':scope > .setsec').forEach(s => {
+      const t = (s.querySelector('h3') || {}).textContent || '';
+      s.classList.toggle('offcat', !holds(cat, t));
+      const h3 = s.querySelector('h3');      // the page is named after its category: a lone section needs no heading
+      if (h3) h3.classList.toggle('samecat', cat[2].length === 1);
+    });
+    sort();
+    const mo = new MutationObserver(sort);
+    mo.observe(m, { childList: true });
+    const stop = () => { if (!view.startsWith('set:') || !m.isConnected) mo.disconnect(); };
+    setTimeout(function chk() { stop(); if (view.startsWith('set:')) setTimeout(chk, 1500); }, 1500);
+    return out;
+  };
+  if (view === 'settings' || view.startsWith('set:')) render();
 })();
 </script>
 </body>

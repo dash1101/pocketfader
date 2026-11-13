@@ -1,6 +1,7 @@
 """What the desktop window does, separate from how it looks."""
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -70,6 +71,30 @@ def _sh(argv, timeout=6):
         return r.returncode, (r.stdout or "") + (r.stderr or "")
     except (OSError, subprocess.SubprocessError) as e:
         return 127, str(e)
+
+
+def prefers_dark(platform=None, sh=_sh):
+    """Whether the system is set to a dark look: Windows' app setting, macOS' appearance, and on Linux the desktop
+    portal's colour scheme (KDE, GNOME and others), else GNOME's own setting. False when it can't be told."""
+    p = platform or sys.platform
+    if p == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+                return winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 0
+        except (ImportError, OSError):
+            return False
+    if p == "darwin":
+        rc, out = sh(["defaults", "read", "-g", "AppleInterfaceStyle"], timeout=2)
+        return rc == 0 and "dark" in out.lower()
+    rc, out = sh(["gdbus", "call", "--session", "--dest", "org.freedesktop.portal.Desktop",
+                  "--object-path", "/org/freedesktop/portal/desktop", "--method", "org.freedesktop.portal.Settings.Read",
+                  "org.freedesktop.appearance", "color-scheme"], timeout=2)
+    m = re.search(r"uint32 (\d)", out) if rc == 0 else None
+    if m:
+        return m.group(1) == "1"         # 1 = prefers dark, 2 = prefers light, 0 = no preference
+    rc, out = sh(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"], timeout=2)
+    return rc == 0 and "dark" in out
 
 
 class Controller:

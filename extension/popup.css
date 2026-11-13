@@ -46,6 +46,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; line-height: 1.2; letter-spac
 .card[hidden] { display: none; }
 .sec { margin: 4px 16px 2px; padding-top: 10px; font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pf-accent); }
 #state, #upd { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; }
+#upd[hidden] { display: none; }      /* an id's display beats .card[hidden]: without this the empty card always showed */
 #updHead { font-weight: 600; font-size: 15px; }
 .dot { flex: none; width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: var(--pf-outline);
   transition: background-color var(--t-short) var(--ease), border-radius var(--t-medium) var(--spring); }

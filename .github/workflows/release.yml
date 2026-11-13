@@ -51,20 +51,21 @@ jobs:
       - name: Install
         shell: pwsh
         run: |
-          pip install pyinstaller ".[windows]"
+          pip install pyinstaller pillow ".[windows]"      # Pillow: PyInstaller turns the PNG icon into the programs' .ico
           # The lazily-imported Windows backends must at least import cleanly.
           python -c "import starcast.backends.windows.winaudio, starcast.backends.windows.gsmtc; print('windows backends import ok')"
       - name: Build
         shell: pwsh
         run: |
           # No console window (it starts at logon): its messages go to server.log in its settings folder.
-          pyinstaller --onefile --windowed --name ytm-starcast `
+          pyinstaller --onefile --windowed --name ytm-starcast --icon starcast/static/icon-512.png `
             --add-data "starcast/static;starcast/static" --add-data "extension;starcast/extension" `
             --paths . --collect-submodules starcast --collect-all winrt `
             packaging/entry.py
           # The desktop window (no console). tkinter ships with this Python.
           python -c "import tkinter; print('tkinter ok')"
-          pyinstaller --onefile --windowed --name ytm-starcast-gui `
+          pyinstaller --onefile --windowed --name ytm-starcast-gui --icon starcast/static/icon-512.png `
+            --add-data "starcast/static/icon-192.png;starcast/static" `
             --paths . --collect-submodules starcast.gui `
             packaging/gui_entry.py
       - name: Installer scripts parse
@@ -120,6 +121,17 @@ jobs:
           Get-Content $log -ErrorAction SilentlyContinue
           if (-not $ok) { throw "the server didn't start without a console" }
           if (-not (Select-String -Path $log -Pattern "listening on" -Quiet)) { throw "nothing in server.log" }
+      - name: Pictures of the desktop window
+        # dark and light, at 100 % and 150 % display scaling, drawn with made-up answers (kept as an artifact)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory gui-preview | Out-Null
+          foreach ($m in "dark", "light") { foreach ($s in "1", "1.5") { python packaging/gui_preview.py $m $s "gui-preview/$m-$s.png" } }
+          Get-ChildItem gui-preview
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with: { name: gui-preview, path: gui-preview }
       - name: Package
         shell: pwsh
         run: |

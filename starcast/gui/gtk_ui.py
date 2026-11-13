@@ -6,9 +6,10 @@ from pathlib import Path
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from .core import APP_ID, PART_ROWS, Controller  # noqa: E402
+from .core import APP_ID, PART_ROWS, Controller, prefers_dark  # noqa: E402
 
 ICON = Path(__file__).resolve().parent.parent / "static" / "icon.svg"
 
@@ -331,9 +332,35 @@ class StarcastApp(Gtk.Application):
         win.present()
 
 
+def follow_dark_mode():
+    """GTK 3 only looks dark when its theme is a dark one, or the app asks: so the window asks whenever the desktop says
+    it prefers dark (KDE, GNOME and others say so through the desktop portal), and follows a change at once."""
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return
+    settings.set_property("gtk-application-prefer-dark-theme", prefers_dark())
+    try:
+        portal = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+                                                "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                                "org.freedesktop.portal.Settings", None)
+    except GLib.Error:
+        return
+
+    def changed(_proxy, _sender, signal, params):
+        if signal != "SettingChanged":
+            return
+        ns, key, value = params.unpack()
+        if ns == "org.freedesktop.appearance" and key == "color-scheme":
+            settings.set_property("gtk-application-prefer-dark-theme", value == 1)
+
+    portal.connect("g-signal", changed)
+    follow_dark_mode.portal = portal      # kept alive with the window
+
+
 def run():
     # The window carries the same name on X11 (its class) as on Wayland (its app id), and ytm-starcast.desktop names it
     # as StartupWMClass, so the desktop matches the window to YTM Starcast's menu entry and icon either way.
     GLib.set_prgname(APP_ID)
     GLib.set_application_name("YTM Starcast")
+    follow_dark_mode()
     return StarcastApp().run([])
