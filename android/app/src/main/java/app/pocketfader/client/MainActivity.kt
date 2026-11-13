@@ -90,11 +90,7 @@ class MainActivity : ComponentActivity() {
             val s by Remote.state.collectAsStateWithLifecycle()
             val playing = s.now?.playing == true
             LaunchedEffect(prefs.keepAwake, prefs.dimAfterMin, prefs.immersive, playing) { applyWindow(prefs, playing) }
-            LaunchedEffect(prefs.notification, cfg.isSet, prefs.playOn) {
-                // on the phone, the phone's own player shows its notification; the computer's would be a duplicate
-                if (cfg.isSet && prefs.notification && prefs.playOn != "phone") startPlayback()
-                else stopService(Intent(this@MainActivity, PlaybackService::class.java))
-            }
+            LaunchedEffect(prefs.notification, cfg.isSet, prefs.playOn) { syncPlayback() }
             PocketfaderTheme(prefs) {
                 PixelShift(prefs.pixelShift, prefs.pixelShiftMin, prefs.pixelShiftDp) {
                     App(cfg = cfg, s = s, prefs = prefs, onSave = { c -> applyConfig(c) }, onForget = { applyConfig(ServerConfig()) })
@@ -181,6 +177,21 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    /** Each time the app comes to the front: Android may have refused the notification the last time (the app wasn't
+     *  quite in front yet), and a refused start is never tried again by itself. Starting it again when it runs is free. */
+    override fun onStart() {
+        super.onStart()
+        syncPlayback()
+    }
+
+    /** The notification for what the computer plays: on when wanted. On the phone, the phone's own player shows its
+     *  notification; the computer's would be a duplicate. */
+    private fun syncPlayback() {
+        val p = Settings.prefs.value
+        if (cfg.isSet && p.notification && p.playOn != "phone") startPlayback()
+        else stopService(Intent(this, PlaybackService::class.java))
+    }
+
     private fun startPlayback() {
         val i = Intent(this, PlaybackService::class.java)
         try {
@@ -250,7 +261,7 @@ private enum class Dest(val key: String, val label: String, val icon: ImageVecto
 }
 
 // On wide screens the player is always visible on the left, so the right pane gets its own tabs.
-private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Search("Search") }
+private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Comments("Comments"), Search("Search") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -338,6 +349,8 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
                 actions = {
+                    // full screen hides the status bar's clock and battery: shown here instead when asked for
+                    if (prefs.immersive) StatusCorner(prefs.barClock, prefs.barBattery)
                     if (!showSettings) PlayOnButton(prefs, cfg.isSet, s.remoteOn)
                     if (wide && !showSettings) IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, "Settings") }
                 },
@@ -395,13 +408,16 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             // an artist, album or playlist page opens beside the player, which stays in view
                             DetailHost(Modifier.fillMaxSize())
                         } else {
-                            TabRow(selectedTabIndex = pane.ordinal) {
+                            // see-through, as on phones: the cover's glow carries on under the tabs instead of stopping
+                            // at a hard edge
+                            TabRow(selectedTabIndex = pane.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
                                 Pane.values().forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) {
                                 when (pane) {
                                     Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
                                     Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
+                                    Pane.Comments -> CommentsPane(s, Modifier.fillMaxSize())
                                     Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
                                 }
                             }

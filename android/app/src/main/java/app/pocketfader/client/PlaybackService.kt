@@ -251,6 +251,7 @@ class PlaybackService : Service() {
             .addAction(action("next", android.R.drawable.ic_media_next, "Next"))
             .setStyle(MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1, 2))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)      // a media player's controls (phones group them as such)
             .setOnlyAlertOnce(true)
             .setOngoing(playing)
             .build()

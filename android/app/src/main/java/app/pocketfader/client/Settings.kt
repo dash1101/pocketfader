@@ -24,6 +24,7 @@ class PocketfaderApp : Application() {
         AppVersion.init(this)
         Settings.init(this)
         Downloads.init(this)
+        OfflineLists.init(this)
         Library.init(this)
         Recommend.init(this)
         LocalPlayer.init(this)
@@ -59,6 +60,8 @@ data class Prefs(
     val keepAwake: String = "off",           // off | playing | always
     val dimAfterMin: Int = 0,                // 0 = never; dims while kept awake and untouched
     val immersive: Boolean = false,          // hide the status and navigation bars
+    val barClock: Boolean = false,           // in full screen: show the time in a corner
+    val barBattery: Boolean = false,         // in full screen: show the battery in a corner
     val pixelShift: Boolean = false,         // nudge the whole screen now and then (OLED burn-in)
     val pixelShiftMin: Int = 2,              // minutes between nudges
     val pixelShiftDp: Int = 4,               // how far
@@ -68,6 +71,7 @@ data class Prefs(
     val volumeStep: Int = 5,                 // percent per press
     val haptics: Boolean = true,
     val keepPlayingClosed: Boolean = false,  // music on this device carries on after the app is swiped away
+    val pauseOnUnplug: Boolean = true,       // music on this device pauses when headphones / a speaker disconnect
     // lyrics
     val lyricsRoman: Boolean = false,
     val lyricsTranslation: Boolean = false,
@@ -127,10 +131,11 @@ object Settings {
             coverShape = s("coverShape", d.coverShape), transitions = b("transitions", d.transitions),
             keepAwake = s("keepAwake", d.keepAwake), dimAfterMin = i("dimAfterMin", d.dimAfterMin),
             immersive = b("immersive", d.immersive), pixelShift = b("pixelShift", d.pixelShift),
+            barClock = b("barClock", d.barClock), barBattery = b("barBattery", d.barBattery),
             pixelShiftMin = i("pixelShiftMin", d.pixelShiftMin), pixelShiftDp = i("pixelShiftDp", d.pixelShiftDp),
             notification = b("notification", d.notification), volumeKeys = b("volumeKeys", d.volumeKeys),
             volumeStep = i("volumeStep", d.volumeStep), haptics = b("haptics", d.haptics),
-            keepPlayingClosed = b("keepPlayingClosed", d.keepPlayingClosed),
+            keepPlayingClosed = b("keepPlayingClosed", d.keepPlayingClosed), pauseOnUnplug = b("pauseOnUnplug", d.pauseOnUnplug),
             lyricsRoman = b("lyricsRoman", d.lyricsRoman), lyricsTranslation = b("lyricsTranslation", d.lyricsTranslation),
             lyricsSize = i("lyricsSize", d.lyricsSize), lyricsSource = s("lyricsSource", d.lyricsSource), lyricsOffsetMs = i("lyricsOffsetMs", d.lyricsOffsetMs),
             lyricsAlign = s("lyricsAlign", d.lyricsAlign), lyricsSp = i("lyricsSp", d.lyricsSp),
@@ -154,10 +159,11 @@ object Settings {
             .putString("coverShape", p.coverShape).putBoolean("transitions", p.transitions)
             .putString("keepAwake", p.keepAwake).putInt("dimAfterMin", p.dimAfterMin)
             .putBoolean("immersive", p.immersive).putBoolean("pixelShift", p.pixelShift)
+            .putBoolean("barClock", p.barClock).putBoolean("barBattery", p.barBattery)
             .putInt("pixelShiftMin", p.pixelShiftMin).putInt("pixelShiftDp", p.pixelShiftDp)
             .putBoolean("notification", p.notification).putBoolean("volumeKeys", p.volumeKeys)
             .putInt("volumeStep", p.volumeStep).putBoolean("haptics", p.haptics)
-            .putBoolean("keepPlayingClosed", p.keepPlayingClosed)
+            .putBoolean("keepPlayingClosed", p.keepPlayingClosed).putBoolean("pauseOnUnplug", p.pauseOnUnplug)
             .putBoolean("lyricsRoman", p.lyricsRoman).putBoolean("lyricsTranslation", p.lyricsTranslation)
             .putInt("lyricsSize", p.lyricsSize).putString("lyricsSource", p.lyricsSource)
             .putInt("lyricsOffsetMs", p.lyricsOffsetMs)

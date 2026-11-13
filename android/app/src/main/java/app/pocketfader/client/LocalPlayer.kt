@@ -67,6 +67,11 @@ object LocalPlayer {
     val hasQueue: Boolean get() = items.isNotEmpty() || (restored?.items?.isNotEmpty() == true)
 
     /** The player (created on first use). Main thread only. */
+    /** Settings → Controls: pause when headphones or a speaker disconnect. */
+    fun setPauseOnUnplug(on: Boolean) {
+        exo?.setHandleAudioBecomingNoisy(on)
+    }
+
     fun player(c: Context? = null): ExoPlayer {
         exo?.let { return it }
         val context = c?.applicationContext ?: ctx ?: throw IllegalStateException("not initialised")
@@ -96,7 +101,8 @@ object LocalPlayer {
         val p = ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(resolving))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
-            .setHandleAudioBecomingNoisy(true)          // pause when headphones are pulled out
+            // pause when the sound would move to the phone's speaker: headphones, AUX, a USB or Bluetooth device disconnecting
+            .setHandleAudioBecomingNoisy(Settings.prefs.value.pauseOnUnplug)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         p.addListener(object : Player.Listener {
@@ -185,7 +191,7 @@ object LocalPlayer {
             else -> Uri.EMPTY
         }
         val meta = MediaMetadata.Builder().setTitle(i.title).setArtist(i.artist)
-        i.art?.let { meta.setArtworkUri(Uri.parse(it)) }
+        bigArt(i.art)?.let { meta.setArtworkUri(Uri.parse(it)) }
         if (i.album.isNotBlank()) meta.setAlbumTitle(i.album)
         return MediaItem.Builder().setMediaId(i.key).setUri(uri).setMediaMetadata(meta.build()).build()
     }
@@ -491,7 +497,7 @@ object LocalPlayer {
             val cur = r?.items?.getOrNull(r.index)
             currentVideoId = cur?.videoId
             Remote.applyLocal(
-                cur?.let { Now(title = it.title, artist = it.artist, art = it.art, playing = false, duration = it.durationSec, videoId = it.videoId ?: it.key, liked = Library.isLiked(it.videoId), shuffle = shuffled, autoplay = autoplay) },
+                cur?.let { Now(title = it.title, artist = it.artist, art = bigArt(it.art), playing = false, duration = it.durationSec, videoId = it.videoId ?: it.key, liked = Library.isLiked(it.videoId), shuffle = shuffled, autoplay = autoplay) },
                 r?.items.orEmpty().mapIndexed { i, it -> trackOf(it, i, i == r?.index) },
                 Progress((r?.positionMs ?: 0L) / 1000.0, SystemClock.elapsedRealtime()), 0,
             )
@@ -502,7 +508,7 @@ object LocalPlayer {
         currentVideoId = cur?.videoId
         if (cur != null) track(p)
         val now = if (cur == null) null else Now(
-            title = cur.title, artist = cur.artist, art = cur.art,
+            title = cur.title, artist = cur.artist, art = bigArt(cur.art),
             playing = p.isPlaying || (p.playWhenReady && p.playbackState == Player.STATE_BUFFERING),
             duration = if (p.duration > 0) p.duration / 1000.0 else cur.durationSec,
             videoId = cur.videoId ?: cur.key,

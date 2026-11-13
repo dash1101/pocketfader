@@ -62,6 +62,9 @@ object Downloads {
 
     private val index: File get() = File(dir, "downloads.json")
 
+    /** Space left where songs are saved, in bytes (-1 before the app has started). */
+    fun freeBytes(): Long = if (::dir.isInitialized) dir.usableSpace else -1L
+
     private fun load() {
         val list = ArrayList<Download>()
         runCatching {
@@ -150,7 +153,7 @@ object Downloads {
             val audio = File(dir, "$id.${src.ext}")
             fetch(src.url, src.headers, audio) { p -> _active.update { it + (id to p) } }
             // the cover, as large as YouTube gives it
-            val artUrl = (meta.art ?: item.art)?.let { bigCover(it) }
+            val artUrl = bigArt(meta.art ?: item.art)
             val artFile = artUrl?.let { u -> runCatching { File(dir, "$id.jpg").also { fetch(u, emptyMap(), it) {} } }.getOrNull() }
             // the lyrics: from the computer if it's there (more sources, word timing), else straight from LRCLIB
             val lyrics = runCatching { Remote.lyricsJson(meta.title, meta.artist, meta.durationSec, id) }.getOrNull()
@@ -181,10 +184,6 @@ object Downloads {
 
     /** Stop the downloads that haven't started yet (the one in progress finishes). */
     fun cancelPending() { _active.update { m -> m.filterValues { it > 0f } } }
-
-    /** Google image addresses carry a size; ask for a big one. */
-    private fun bigCover(url: String): String =
-        url.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w544-h544").replace(Regex("=s\\d+[^&?]*"), "=s544")
 
     /**
      * Fetches [url] into [to]. The file is asked for in pieces of a megabyte (Range requests): YouTube serves a whole

@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,6 +50,7 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
     val vid = item.videoId ?: return
     var open by remember { mutableStateOf(false) }
     var addToPlaylist by remember { mutableStateOf(false) }
+    var addOffline by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(modifier) {
         IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, "More") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -68,6 +70,10 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
                 text = { Text("Add to playlist…") }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) },
                 onClick = { open = false; addToPlaylist = true },
             )
+            DropdownMenuItem(
+                text = { Text("Add to an offline playlist…") }, leadingIcon = { Icon(Icons.Filled.PlaylistAdd, null) },
+                onClick = { open = false; addOffline = true },
+            )
             if (Downloads.isDownloaded(vid)) DropdownMenuItem(
                 text = { Text("Remove download") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
                 onClick = { open = false; Downloads.delete(vid); Remote.notify("Removed from this phone") },
@@ -82,6 +88,7 @@ fun SongMenuButton(item: SearchItem, modifier: Modifier = Modifier) {
         }
     }
     if (addToPlaylist) AddToPlaylistDialog(item) { addToPlaylist = false }
+    if (addOffline) item.toLocal()?.let { song -> AddToOfflineDialog(song) { addOffline = false } }
 }
 
 /** Pick one of your playlists (or make a new one) to put [item] in. */

@@ -87,4 +87,41 @@ class UpdateParsingTest {
         assertNull(checksumFor(sums, "other.apk"))
         assertNull(checksumFor("xyz  ytm-starcast-android.apk", "ytm-starcast-android.apk"))
     }
+
+    @Test
+    fun bigCovers() {
+        assertEquals(
+            "https://lh3.googleusercontent.com/abc=w544-h544-l90-rj",
+            bigArt("https://lh3.googleusercontent.com/abc=w120-h120-l90-rj"),
+        )
+        assertEquals("https://yt3.ggpht.com/xyz=s544", bigArt("https://yt3.ggpht.com/xyz=s88-c-k-c0x00ffffff-no-rj"))
+        assertEquals("https://i.ytimg.com/vi/abc/hqdefault.jpg", bigArt("https://i.ytimg.com/vi/abc/hqdefault.jpg"))
+        assertEquals("content://media/external/audio/albumart/1", bigArt("content://media/external/audio/albumart/1"))
+        assertNull(bigArt(null))
+    }
+
+    @Test
+    fun offlinePlaylistsKeepTheirSongsInOrder() {
+        val lists = listOf(
+            OfflineList(
+                "pl:PL1", "Mix", null,
+                listOf(
+                    LocalItem("aaaaaaaaaaa", null, "One", "A", "https://x/1", 200.0, "Album"),
+                    LocalItem("bbbbbbbbbbb", null, "Two", "B", null),
+                ),
+                source = "PL1", createdAt = 5L,
+            ),
+            OfflineList("own:x", "Mine", "https://x/t", emptyList()),
+        )
+        val back = offlineListsFromJson(JSONArray(offlineListsToJson(lists).toString()))
+        assertEquals(lists, back)
+        assertFalse(back[0].own)
+        assertTrue(back[1].own)
+        assertEquals("https://x/1", back[0].cover)
+        // entries without an id, and songs that aren't YouTube Music songs, are left out
+        val odd = offlineListsFromJson(JSONArray("""[{"title":"no id"},{"id":"own:y","title":"Y","songs":[{"id":"file.mp3","t":"x"}]}]"""))
+        assertEquals(1, odd.size)
+        assertEquals(emptyList<LocalItem>(), odd[0].songs)
+    }
 }
+

@@ -208,6 +208,12 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Toggle("Full screen", "Hide the status and navigation bars. Swipe from the edge to bring them back.", p.immersive) { v ->
                 Settings.update { it.copy(immersive = v) }
             }
+            Toggle("Show the time", "In full screen, the time in the top corner.", p.barClock, enabled = p.immersive) { v ->
+                Settings.update { it.copy(barClock = v) }
+            }
+            Toggle("Show the battery", "In full screen, the battery level beside it.", p.barBattery, enabled = p.immersive) { v ->
+                Settings.update { it.copy(barBattery = v) }
+            }
             Toggle(
                 "Pixel shift",
                 "Moves the whole screen a few pixels every so often so static parts don't burn in on OLED displays. Works best with Always on and the Black theme.",
@@ -244,6 +250,12 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "For music playing on this device. When off, swiping the app away stops the music; the queue and your place in the song are kept.",
                 p.keepPlayingClosed,
             ) { v -> Settings.update { it.copy(keepPlayingClosed = v) } }
+            Toggle(
+                "Pause when headphones disconnect",
+                "For music playing on this device: pauses when the sound would move to the phone's speaker, as when headphones " +
+                    "or an AUX cable are unplugged, or a Bluetooth or USB speaker disconnects.",
+                p.pauseOnUnplug,
+            ) { v -> Settings.update { it.copy(pauseOnUnplug = v) }; LocalPlayer.setPauseOnUnplug(v) }
             // other players on the computer (Spotify, a video in another tab, VLC...)
             var pauseOthers by remember { mutableStateOf<Boolean?>(null) }
             androidx.compose.runtime.LaunchedEffect(s.online) {
@@ -359,16 +371,27 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Toggle("Liked songs", "Keep the songs you like downloaded, new likes included.", p.autoDlLiked) { v ->
                     Settings.update { it.copy(autoDlLiked = v) }; AutoDownload.soon()
                 }
-                Choice(
-                    "Smart downloads", "Keep your most played songs and today's quick picks on the phone, refreshed as your taste changes.",
-                    listOf("0" to "Off", "25" to "25 songs", "50" to "50 songs", "100" to "100 songs"), p.smartDownloads.toString(),
-                ) { v -> Settings.update { it.copy(smartDownloads = v.toInt()) }; Recommend.refreshIfStale(); AutoDownload.soon() }
+                val songsNeed = p.smartDownloads * AutoDownload.ESTIMATE
+                NumberChoice(
+                    "Smart downloads",
+                    "Keep up to this many of your most played songs and today's quick picks on the phone, refreshed as your taste " +
+                        "changes (fewer while your listening history is short)." +
+                        if (p.autoDlLimitMb > 0 && songsNeed > p.autoDlLimitMb * 1_048_576L)
+                            " That many need about ${gb(songsNeed)}: only what fits in the space below is kept." else "",
+                    presets = listOf(0 to "Off", 25 to "25", 50 to "50", 100 to "100", 250 to "250", 500 to "500", 1000 to "1000"),
+                    value = p.smartDownloads, range = 1..1000, unit = "songs", custom = { "$it songs" },
+                ) { v -> Settings.update { it.copy(smartDownloads = v) }; Recommend.refreshIfStale(); AutoDownload.soon() }
                 Info("Playlists kept on this phone", if (keep.isEmpty()) "None. Open a playlist and turn on “Keep on this phone”." else "${keep.size}: " +
                     keep.mapNotNull { k -> if (k == "LM") "Liked music" else lists.firstOrNull { it.id == k }?.title }.joinToString(", "))
-                Choice(
-                    "Space for automatic downloads", "Songs you download yourself don't count, and are never removed automatically.",
-                    listOf("1024" to "1 GB", "2048" to "2 GB", "5120" to "5 GB", "10240" to "10 GB", "0" to "No limit"), p.autoDlLimitMb.toString(),
-                ) { v -> Settings.update { it.copy(autoDlLimitMb = v.toInt()) }; AutoDownload.soon() }
+                val free = remember { Downloads.freeBytes() }
+                NumberChoice(
+                    "Space for automatic downloads",
+                    "Songs you download yourself don't count, and are never removed automatically." +
+                        if (free >= 0) " ${gb(free)} free on this phone." else "",
+                    presets = listOf(1 to "1 GB", 2 to "2 GB", 5 to "5 GB", 10 to "10 GB", 25 to "25 GB", 50 to "50 GB", 100 to "100 GB", 0 to "No limit"),
+                    value = if (p.autoDlLimitMb <= 0) 0 else (p.autoDlLimitMb + 1023) / 1024,
+                    range = 1..2000, unit = "GB", custom = { "$it GB" },
+                ) { v -> Settings.update { it.copy(autoDlLimitMb = v * 1024) }; AutoDownload.soon() }
                 Toggle("Only on Wi-Fi", "Automatic downloads wait for Wi-Fi (or another connection that isn't metered).", p.dlWifiOnly) { v ->
                     Settings.update { it.copy(dlWifiOnly = v) }; AutoDownload.soon()
                 }
@@ -559,6 +582,66 @@ private fun Choice(
                 FilterChip(selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
+    }
+}
+
+/** "1.4 GB" / "350 MB" */
+private fun gb(bytes: Long): String =
+    if (bytes >= 1_073_741_824L) "%.1f GB".format(bytes / 1_073_741_824.0).replace(".0 GB", " GB") else "${bytes / 1_048_576L} MB"
+
+/** A number picked from [presets] (0 means off / no limit when it is one of them), or typed in with "Custom…" (within
+ *  [range], in [unit]). */
+@Composable
+private fun NumberChoice(
+    title: String,
+    subtitle: String?,
+    presets: List<Pair<Int, String>>,
+    value: Int,
+    range: IntRange,
+    unit: String,
+    custom: (Int) -> String,
+    onSet: (Int) -> Unit,
+) {
+    var asking by remember { mutableStateOf(false) }
+    val isPreset = presets.any { it.first == value }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            presets.forEach { (v, label) ->
+                FilterChip(selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
+            }
+            FilterChip(
+                selected = !isPreset, shape = chipShape(!isPreset), onClick = { asking = true },
+                label = { Text(if (isPreset) "Custom…" else custom(value)) },
+            )
+        }
+    }
+    if (asking) {
+        var text by remember { mutableStateOf(if (isPreset || value == 0) "" else value.toString()) }
+        val n = text.trim().toIntOrNull()
+        val ok = n != null && n in range
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text(title) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { t -> text = t.filter { it.isDigit() }.take(6) },
+                    singleLine = true,
+                    label = { Text(unit.replaceFirstChar { it.uppercase() }) },
+                    supportingText = { Text("From ${range.first} to ${range.last} $unit.") },
+                    isError = text.isNotEmpty() && !ok,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                    ),
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { if (ok) { onSet(n!!); asking = false } }, enabled = ok) { Text("Set") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = false }) { Text("Cancel") } },
+        )
     }
 }
 

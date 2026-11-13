@@ -118,7 +118,7 @@ class DownloadService : Service() {
 object AutoDownload {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private var job: Job? = null
-    private const val ESTIMATE = 4_500_000L      // a typical song, before it's downloaded
+    const val ESTIMATE = 4_500_000L              // a typical song, before it's downloaded
 
     /** Run the rules in a few seconds (changes often come in bursts). */
     fun soon() {

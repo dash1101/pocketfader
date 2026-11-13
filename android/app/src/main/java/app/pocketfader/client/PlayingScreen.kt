@@ -393,22 +393,51 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
     }
 }
 
+/** A slider's position: it glides to changes made elsewhere (the volume buttons, another device) and follows the finger
+ *  exactly while dragged. */
+@Composable
+private fun rememberGlide(target: Float, dragging: Boolean): Float {
+    val still = LocalReduceMotion.current
+    val shown by androidx.compose.animation.core.animateFloatAsState(
+        target,
+        if (dragging || still) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(180, easing = Motion.Ease),
+        label = "slider-glide",
+    )
+    return shown
+}
+
 /** The phone's own volume (while music plays on the phone). */
 @Composable
 fun PhoneVolumeRow(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
     var percent by remember { mutableIntStateOf(LocalPlayer.phoneVolume()) }
-    // follow the phone's volume buttons too
+    var dragging by remember { mutableStateOf(false) }
+    // follow the phone's volume buttons at once: Android records every volume change in its settings, so watching them
+    // reports a press straight away
+    androidx.compose.runtime.DisposableEffect(ctx) {
+        val watch = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                if (!dragging) percent = LocalPlayer.phoneVolume()
+            }
+        }
+        ctx.contentResolver.registerContentObserver(android.provider.Settings.System.CONTENT_URI, true, watch)
+        onDispose { ctx.contentResolver.unregisterContentObserver(watch) }
+    }
+    // and now and then anyway, for a phone that doesn't record it
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000)
-            percent = LocalPlayer.phoneVolume()
+            delay(3000)
+            if (!dragging) percent = LocalPlayer.phoneVolume()
         }
     }
+    val shown = rememberGlide(percent / 100f, dragging)
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Icon(if (percent == 0) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, null, Modifier.padding(12.dp))
         Slider(
-            value = percent / 100f,
-            onValueChange = { percent = (it * 100).roundToInt(); LocalPlayer.setPhoneVolume(percent) },
+            value = shown,
+            onValueChange = { dragging = true; percent = (it * 100).roundToInt(); LocalPlayer.setPhoneVolume(percent) },
+            // the phone has fewer volume steps than a hundred: settle on the step it chose
+            onValueChangeFinished = { dragging = false; percent = LocalPlayer.phoneVolume() },
             modifier = Modifier.weight(1f),
         )
         Text("$percent%", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp).widthIn(min = 40.dp), textAlign = TextAlign.End)
@@ -421,10 +450,11 @@ fun VolumeRow(v: VolumeState, modifier: Modifier = Modifier) {
         IconButton(onClick = { Remote.setMuted(!v.muted) }, enabled = v.available) {
             Icon(if (v.muted || v.percent == 0) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (v.muted) "Unmute" else "Mute")
         }
+        var dragging by remember { mutableStateOf(false) }
         Slider(
-            value = v.percent / 100f,
-            onValueChange = { Remote.setVolume((it * 100).roundToInt(), false) },
-            onValueChangeFinished = { Remote.setVolume(Remote.state.value.volume.percent, true) },
+            value = rememberGlide(v.percent / 100f, dragging),
+            onValueChange = { dragging = true; Remote.setVolume((it * 100).roundToInt(), false) },
+            onValueChangeFinished = { dragging = false; Remote.setVolume(Remote.state.value.volume.percent, true) },
             enabled = v.available,
             modifier = Modifier.weight(1f),
         )
@@ -438,19 +468,20 @@ fun VolumeRow(v: VolumeState, modifier: Modifier = Modifier) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Phone: one scrolling page. The player is at the top; "Up next" and "Lyrics" are below it, with the
+// Phone: one scrolling page. The player is at the top; "Up next", "Lyrics" and "Comments" are below it, with the
 // tab bar pinned while you scroll. Once the player has scrolled away a slim control bar appears.
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val prefs by Settings.prefs.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableIntStateOf(0) }          // 0 = up next, 1 = lyrics
+    var tab by rememberSaveable { mutableIntStateOf(0) }          // 0 = up next, 1 = lyrics, 2 = comments
     var playedOpen by rememberSaveable { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ui = rememberLyrics(s.now, active = tab == 1)
+    val comments = rememberComments(s.now?.videoId, active = tab == 2)
     val lines = ui.result?.lines.orEmpty()
     val active = rememberActiveLine(lines, ui.result?.synced == true, s.now?.playing == true)
     // list items before the first lyric line: player, tabs, lyrics controls
@@ -467,14 +498,17 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
                     TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
                         Tab(selected = tab == 0, onClick = { tab = 0; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Up next") })
                         Tab(selected = tab == 1, onClick = { tab = 1; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Lyrics") })
+                        Tab(selected = tab == 2, onClick = { tab = 2; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Comments") })
                     }
                 }
             }
             if (tab == 0) {
                 queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
-            } else {
+            } else if (tab == 1) {
                 item(key = "ly-controls") { LyricsControls(ui) }
                 lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
+            } else {
+                commentItems(comments, scope)
             }
             item(key = "pad") { Spacer(Modifier.height(88.dp)) }
         }

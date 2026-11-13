@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
@@ -426,10 +427,18 @@ fun playOnPhone(list: List<LocalItem>, start: Int, shuffle: Boolean = false) {
     LocalPlayer.playItems(list, start, shuffle)
 }
 
-/** Downloads and the music files on this phone. */
+/** Downloads and the music files on this phone, with the offline playlists at the top. */
 @Composable
 private fun DeviceTab() {
+    var openList by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val open = openList
+    if (open != null) {
+        OfflineListView(open, onBack = { openList = null })
+        return
+    }
     val ctx = LocalContext.current
+    var adding by remember { mutableStateOf<LocalItem?>(null) }
+    adding?.let { song -> AddToOfflineDialog(song) { adding = null } }
     val downloads by Downloads.items.collectAsStateWithLifecycle()
     val active by Downloads.active.collectAsStateWithLifecycle()
     var files by remember { mutableStateOf<List<LocalItem>?>(null) }
@@ -442,6 +451,7 @@ private fun DeviceTab() {
     val savedItems = remember(saved) { saved.map { it.toLocal() } }
     val state = rememberLazyListState()
     LazyColumn(Modifier.fillMaxSize().edgeFade(state), state = state) {
+        item(key = "offline-lists") { OfflineListsRow(onOpen = { openList = it }) }
         item(key = "dl-h") {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
                 Text("Downloaded · ${saved.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -464,6 +474,9 @@ private fun DeviceTab() {
         }
         itemsIndexed(saved, key = { _, d -> "dl-" + d.videoId }) { i, d ->
             DeviceRow(d.art, d.title, d.artist, onClick = { playOnPhone(savedItems, i) }) {
+                IconButton(onClick = { adding = d.toLocal().copy(uri = null) }) {
+                    Icon(Icons.Filled.PlaylistAdd, "Add to an offline playlist")
+                }
                 IconButton(onClick = { Downloads.delete(d.videoId) }) { Icon(Icons.Filled.Delete, "Remove download") }
             }
         }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -385,8 +386,20 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                             ) {
                                 Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text("Shuffle", Modifier.padding(start = 6.dp))
                             }
-                            IconButton(onClick = { Downloads.enqueue(songs) }, enabled = songs.isNotEmpty()) {
-                                Icon(Icons.Filled.Download, "Download all to this phone")
+                            // the whole playlist or album, kept together on the phone as an offline playlist (in its order)
+                            val saveId = pid ?: albumId
+                            val offline by OfflineLists.lists.collectAsStateWithLifecycle()
+                            IconButton(
+                                onClick = {
+                                    if (saveId != null) OfflineLists.saveFrom(saveId, title, item.thumb ?: list.firstOrNull()?.thumb, songs)
+                                    else Downloads.enqueue(songs)
+                                },
+                                enabled = songs.isNotEmpty(),
+                            ) {
+                                Icon(
+                                    if (saveId != null && offline.any { it.id == "pl:$saveId" }) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                                    "Download all and keep this playlist on the phone",
+                                )
                             }
                             if (editable) {
                                 // a round button: "Edit" in words made this row too wide for a phone

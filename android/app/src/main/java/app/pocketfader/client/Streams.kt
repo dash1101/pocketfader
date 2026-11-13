@@ -37,6 +37,15 @@ data class LocalItem(
 
 private val YT_ID = Regex("^[A-Za-z0-9_-]{11}$")
 
+/** YouTube Music's cover addresses (Google image servers) carry the size to send, and lists ask for small ones (60 or
+ *  120 px): this asks for a big one instead, for the player, the notification and downloads. Others stay as they are. */
+fun bigArt(url: String?): String? {
+    if (url == null) return null
+    val host = runCatching { java.net.URI(url).host }.getOrNull().orEmpty()
+    if (!host.endsWith("googleusercontent.com") && !host.endsWith("ggpht.com")) return url
+    return url.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w544-h544-l90-rj").replace(Regex("=s\\d+[^&?]*"), "=s544")
+}
+
 /** True for a YouTube video id (not a file or content address). */
 fun isYtId(s: String?): Boolean = s != null && YT_ID.matches(s)
 
