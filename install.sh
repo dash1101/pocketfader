@@ -3,12 +3,16 @@
 #
 #   ./install.sh                    install, start it now and every time you log in
 #   ./install.sh --lan              also listen on your home network (turns on an access token)
+#   ./install.sh --port=8790        another port than 8777
 #   ./install.sh --token --allow-host=music.example.com   behind a reverse proxy / Cloudflare Tunnel
+#   ./install.sh --no-desktop-app   leave out the desktop app (the window in the application menu)
 #   ./install.sh --no-systemd       install only; start it yourself with `ytm-starcast`
 #   ./install.sh --keep-ytm-beacon  leave the separate YTM Beacon app installed
 #   ./install.sh --uninstall        remove YTM Starcast (your settings are kept)
 #
 # Everything lives in your home directory; no root needed. It never changes your sound settings.
+# Installing again (an update) keeps the server options it was started with, and leaves the desktop app out if it was
+# left out before (--desktop-app brings it back).
 # YTM Starcast used to be called Pocketfader: an installed Pocketfader is replaced, and its settings carry over.
 # YTM Starcast also shows your music as your Discord status, which the separate YTM Beacon app used to do. If that app is
 # installed, its settings are copied to YTM Starcast and it is removed with its own uninstaller.
@@ -30,6 +34,7 @@ OPTIONS_GIVEN=0
 NO_SYSTEMD="${PF_NO_SYSTEMD:-0}"
 UNINSTALL=0
 KEEP_BEACON=0
+DESKTOP_APP=""                       # yes / no; empty: as the installation that's there has it (yes for a new one)
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
 
@@ -38,6 +43,14 @@ for a in "$@"; do
     --lan) EXTRA_ARGS+=(--lan); OPTIONS_GIVEN=1 ;;
     --token) EXTRA_ARGS+=(--token); OPTIONS_GIVEN=1 ;;
     --allow-host=*) EXTRA_ARGS+=(--allow-host "${a#--allow-host=}"); OPTIONS_GIVEN=1 ;;
+    --port=*)
+      p="${a#--port=}"
+      if ! [[ $p =~ ^[0-9]{1,5}$ ]] || [ "$p" -lt 1 ] || [ "$p" -gt 65535 ]; then
+        echo "--port needs a number from 1 to 65535" >&2; exit 2
+      fi
+      EXTRA_ARGS+=(--port "$p"); OPTIONS_GIVEN=1 ;;
+    --no-desktop-app) DESKTOP_APP=no ;;
+    --desktop-app) DESKTOP_APP=yes ;;
     --no-systemd) NO_SYSTEMD=1 ;;
     --keep-ytm-beacon) KEEP_BEACON=1 ;;
     --uninstall) UNINSTALL=1 ;;
@@ -379,12 +392,25 @@ python3 -m venv --system-site-packages "$APP_DIR/venv"   # lets the window use t
 # a current yt-dlp lets the computer fetch songs for the phone when the phone can't (the distro's copy is often too old)
 "$APP_DIR/venv/bin/pip" install --quiet --upgrade yt-dlp || echo "Note: couldn't install yt-dlp; the phone will get songs on its own only."
 ln -sfn "$APP_DIR/venv/bin/ytm-starcast" "$BIN_DIR/ytm-starcast"
-if [ -e "$APP_DIR/venv/bin/ytm-starcast-gui" ]; then ln -sfn "$APP_DIR/venv/bin/ytm-starcast-gui" "$BIN_DIR/ytm-starcast-gui"; fi
 
-# Menu entry, so "YTM Starcast" shows up in the application menu (it opens the desktop window).
-mkdir -p "$APPS_DIR" "$ICON_DIR"
-cp "$SRC/starcast/static/icon.svg" "$ICON_DIR/ytm-starcast.svg" 2>/dev/null || true
-cat > "$APPS_DIR/ytm-starcast.desktop" <<DESKTOP
+# The desktop app (a window with the addresses for your phone, the switches, start/stop and the log): its command and
+# its entry in the application menu. Left out with --no-desktop-app, and on updates of an installation without it.
+NO_APP_MARK="$APP_DIR/no-desktop-app"
+if [ -z "$DESKTOP_APP" ]; then
+  if [ -f "$NO_APP_MARK" ]; then DESKTOP_APP=no; else DESKTOP_APP=yes; fi
+fi
+if [ "$DESKTOP_APP" = no ]; then
+  remove_links ytm-starcast-gui
+  rm -f -- "$APPS_DIR/ytm-starcast.desktop" "$ICON_DIR/ytm-starcast.svg"
+  echo "Installed with --no-desktop-app: updates leave the desktop app out too." > "$NO_APP_MARK"
+  note "The desktop app is left out (--no-desktop-app)."
+else
+  rm -f -- "$NO_APP_MARK"
+  if [ -e "$APP_DIR/venv/bin/ytm-starcast-gui" ]; then ln -sfn "$APP_DIR/venv/bin/ytm-starcast-gui" "$BIN_DIR/ytm-starcast-gui"; fi
+  # Menu entry, so "YTM Starcast" shows up in the application menu (it opens the desktop window).
+  mkdir -p "$APPS_DIR" "$ICON_DIR"
+  cp "$SRC/starcast/static/icon.svg" "$ICON_DIR/ytm-starcast.svg" 2>/dev/null || true
+  cat > "$APPS_DIR/ytm-starcast.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=YTM Starcast
@@ -397,6 +423,7 @@ Categories=AudioVideo;Audio;Utility;
 Keywords=YouTube Music;Discord;remote;Pocketfader;YTM Beacon;
 StartupWMClass=app.novalabs.starcast
 DESKTOP
+fi
 
 # ---- replace what YTM Starcast takes over ----
 remember_starcast
@@ -434,7 +461,10 @@ ext_page() {
 # One time, by hand: browsers only take an extension like this from their extensions page.
 extension_steps() {
   [ "$HAVE_EXT" = 1 ] || return 0
-  local port="${1:-8777}"
+  local port=8777 i
+  for ((i = 0; i + 1 < ${#EXTRA_ARGS[@]}; i++)); do
+    if [ "${EXTRA_ARGS[$i]}" = --port ]; then port="${EXTRA_ARGS[$((i + 1))]}"; fi
+  done
   echo
   say "One more step: add the YTM Starcast extension to your browser (one time)"
   note "1. Open the browser's extensions page: brave://extensions, chrome://extensions or edge://extensions"

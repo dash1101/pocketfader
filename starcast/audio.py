@@ -11,6 +11,8 @@ import threading
 import time
 from pathlib import Path
 
+from .proc import no_window
+
 _ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 TYPES = {".m4a": "audio/mp4", ".webm": "audio/webm", ".opus": "audio/ogg", ".mp3": "audio/mpeg"}
 
@@ -111,7 +113,7 @@ class AudioFetcher:
     @staticmethod
     def _default_run(cmd, timeout):
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL, **no_window())
             return p.returncode, (p.stderr or "")
         except subprocess.TimeoutExpired:
             return 1, "timed out"

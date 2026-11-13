@@ -2,12 +2,17 @@
 #
 #   .\install-exe.ps1                    # Windows volume + media controls
 #   .\install-exe.ps1 -Lan               # also listen on your home network (adds an access token)
+#   .\install-exe.ps1 -Port 8790         # another port than 8777
 #   .\install-exe.ps1 -Audio voicemeeter # optional Voicemeeter extras (EQ, meter)
+#   .\install-exe.ps1 -NoDesktopApp      # leave out the desktop app (the window in the Start menu)
 #   .\install-exe.ps1 -KeepYtmBeacon     # leave the separate YTM Beacon app installed
 #   .\install-exe.ps1 -Uninstall         # remove YTM Starcast (your settings are kept)
 #
 # The program is copied to %LOCALAPPDATA%\Programs\YTM Starcast, with a "YTM Starcast" entry in the Start menu.
 # No admin rights needed. Your settings live in %APPDATA%\ytm-starcast and are never removed by this script.
+# Installing again (an update) keeps the options given last time: -Lan, -Port, -Audio and -NoDesktopApp. To change one,
+# give it again: -Lan:$false turns the home network off again, -NoDesktopApp:$false brings the desktop app back.
+# YTM Starcast runs without a console window; its messages go to server.log in your settings folder.
 #
 # YTM Starcast used to be called Pocketfader: an installed Pocketfader is stopped and replaced (its settings carry over).
 # YTM Starcast also shows your music as your Discord status, which the separate YTM Beacon app used to do. If that app is
@@ -16,9 +21,13 @@
 param(
     [ValidateSet("windows", "voicemeeter")][string]$Audio = "windows",
     [switch]$Lan,
+    [ValidateRange(1, 65535)][int]$Port = 8777,
+    [switch]$NoDesktopApp,
     [switch]$KeepYtmBeacon,
     [switch]$Uninstall
 )
+
+$DefaultPort = 8777
 
 $TaskName = "YTM Starcast"
 $LegacyTask = "Pocketfader"
@@ -28,6 +37,7 @@ $LegacyRunValue = "Pocketfader"
 $Target = Join-Path $env:LOCALAPPDATA "Programs\YTM Starcast"
 $LegacyDir = Join-Path $env:LOCALAPPDATA "Programs\Pocketfader"
 $StartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+$NoAppMark = Join-Path $Target "no-desktop-app"   # this folder was installed with -NoDesktopApp
 
 function Remove-Task($name) {
     if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
@@ -87,8 +97,10 @@ function Retire-YtmBeacon($starcast) {
     # time it starts, so anything changed in YTM Beacon since then would otherwise be lost.
     $copied = $false
     try {
-        & $starcast --take-over-ytm-beacon
-        $copied = ($LASTEXITCODE -eq 0)
+        # Start-Process -Wait: the program has no console window, so PowerShell wouldn't wait for it otherwise
+        $p = Start-Process -FilePath $starcast -ArgumentList "--take-over-ytm-beacon" -NoNewWindow -Wait -PassThru `
+            -ErrorAction Stop
+        $copied = ($p.ExitCode -eq 0)
     } catch {
         Write-Host "YTM Beacon's settings couldn't be copied to YTM Starcast: $($_.Exception.Message)"
     }
@@ -147,6 +159,11 @@ $oldArgs = Get-TaskArguments $TaskName
 if (-not $oldArgs) { $oldArgs = Get-TaskArguments $LegacyTask }
 if (-not $PSBoundParameters.ContainsKey("Lan") -and $oldArgs -match '(^|\s)--lan(\s|$)') { $Lan = $true }
 if (-not $PSBoundParameters.ContainsKey("Audio") -and $oldArgs -match '--audio\s+voicemeeter') { $Audio = "voicemeeter" }
+if (-not $PSBoundParameters.ContainsKey("Port") -and $oldArgs -match '--port\s+(\d{1,5})(\s|$)') {
+    $old = [int]$Matches[1]
+    if ($old -ge 1 -and $old -le 65535) { $Port = $old }
+}
+if (-not $PSBoundParameters.ContainsKey("NoDesktopApp") -and (Test-Path $NoAppMark)) { $NoDesktopApp = [switch]$true }
 
 Retire-Pocketfader
 
@@ -156,27 +173,42 @@ if (-not (Test-SameFolder $PSScriptRoot $Target)) {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Get-Process -Name "ytm-starcast", "ytm-starcast-gui" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
-    foreach ($f in @("ytm-starcast.exe", "ytm-starcast-gui.exe", "install-exe.ps1", "README.md", "LICENSE")) {
+    $files = @("ytm-starcast.exe", "install-exe.ps1", "README.md", "LICENSE")
+    if (-not $NoDesktopApp) { $files += "ytm-starcast-gui.exe" }
+    foreach ($f in $files) {
         $from = Join-Path $PSScriptRoot $f
         if (Test-Path $from) { Copy-Item $from -Destination $Target -Force }
-    }
-    $gui = Join-Path $Target "ytm-starcast-gui.exe"
-    if (Test-Path $gui) {
-        $shell = New-Object -ComObject WScript.Shell
-        $lnk = $shell.CreateShortcut((Join-Path $StartMenu "YTM Starcast.lnk"))
-        $lnk.TargetPath = $gui
-        $lnk.WorkingDirectory = $Target
-        $lnk.Description = "YouTube Music companion"
-        $lnk.Save()
     }
     Write-Host "Installed YTM Starcast to $Target."
 }
 $exe = Join-Path $Target "ytm-starcast.exe"
 
+# The desktop app: a window with the addresses for your phone, the switches, start/stop and the log.
+$gui = Join-Path $Target "ytm-starcast-gui.exe"
+$shortcut = Join-Path $StartMenu "YTM Starcast.lnk"
+if ($NoDesktopApp) {
+    Get-Process -Name "ytm-starcast-gui" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Remove-Item $shortcut -Force -ErrorAction SilentlyContinue
+    if (Test-Path $gui) { Start-Sleep -Milliseconds 300; Remove-Item $gui -Force -ErrorAction SilentlyContinue }
+    Set-Content -Path $NoAppMark -Value "Installed with -NoDesktopApp: updates leave the desktop app out too." -Encoding ASCII
+    Write-Host "The desktop app is left out (-NoDesktopApp)."
+} else {
+    Remove-Item $NoAppMark -Force -ErrorAction SilentlyContinue
+    if (Test-Path $gui) {
+        $shell = New-Object -ComObject WScript.Shell
+        $lnk = $shell.CreateShortcut($shortcut)
+        $lnk.TargetPath = $gui
+        $lnk.WorkingDirectory = $Target
+        $lnk.Description = "YouTube Music companion"
+        $lnk.Save()
+    }
+}
+
 Retire-YtmBeacon $exe
 
 $argsList = "--audio $Audio"
 if ($Lan) { $argsList += " --lan" }
+if ($Port -ne $DefaultPort) { $argsList += " --port $Port" }
 
 # the program's folder name has a space in it, so the task's command is quoted
 $action  = New-ScheduledTaskAction -Execute "`"$exe`"" -Argument $argsList -WorkingDirectory $Target
@@ -194,7 +226,12 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
 # start it now too, so nothing waits for the next logon (Pocketfader or YTM Beacon may just have been stopped)
 Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 Write-Host "YTM Starcast starts now, and 30 seconds after each time you log in (scheduled task '$TaskName')."
-Write-Host "To see the address to open on your phone, open YTM Starcast from the Start menu."
+if ($NoDesktopApp) {
+    Write-Host "Its settings, and the address to open on your phone: http://127.0.0.1:$Port/ in a browser on this computer."
+} else {
+    Write-Host "To see the address to open on your phone, open YTM Starcast from the Start menu."
+}
+Write-Host "Its messages go to $(Join-Path (Get-SettingsFolder) 'server.log')."
 
 # One time, by hand: browsers only take an extension like this from their extensions page.
 # YTM Starcast puts a copy of it in this folder when it starts (and keeps it up to date after updates).
@@ -207,4 +244,4 @@ Write-Host "  3. Click 'Load unpacked' and choose this folder:"
 Write-Host "       $extDir"
 Write-Host "  4. Open music.youtube.com in that browser (or refresh its tab)."
 Write-Host "The same steps, with buttons that open the page and the folder: Settings > Browser extension in the app"
-Write-Host "(http://127.0.0.1:8777/#extension)."
+Write-Host "(http://127.0.0.1:$Port/#extension)."

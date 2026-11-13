@@ -413,6 +413,18 @@
             padding:14px 16px; background:var(--card); border-radius:var(--r-sm); margin-bottom:10px; }
   .setrow .k { font-weight:600; } .setrow .d { font-size:12.5px; color:var(--dim); margin-top:2px; }
   .setrow .val { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums; }
+  .conncard { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; padding:16px; background:var(--card);
+              border-radius:var(--r-sm); margin-bottom:10px; }
+  .connqr { width:168px; flex:none; }
+  .connqr svg { display:block; width:100%; height:auto; border-radius:var(--r-xs); }
+  .connside { flex:1; min-width:190px; display:flex; flex-direction:column; gap:8px; }
+  .connside .d { font-size:12.5px; color:var(--dim); }
+  .connaddr { text-align:left; border:1px solid var(--line); background:transparent; color:var(--text);
+              border-radius:var(--r-xs); padding:9px 12px; font:inherit; cursor:pointer; }
+  .connaddr.sel { border-color:var(--accent); }
+  .connaddr .k { display:block; font-weight:600; font-size:13px; }
+  .connaddr .u { display:block; font-size:12px; color:var(--dim); word-break:break-all; margin-top:1px; }
+  .connside .pill { align-self:flex-start; height:36px; }
   .toggle { width:46px; height:27px; border-radius:var(--r-full); border:0; background:var(--card2); position:relative; flex:none; transition:background .18s; }
   .toggle::after { content:''; position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:var(--dim); transition:transform .18s, background .18s; }
   .toggle.on { background:var(--accent); } .toggle.on::after { transform:translateX(19px); background:#fff; }
@@ -1218,6 +1230,68 @@ function extStatusText(s) {
   if (s.everConnected) return ["Not connected right now. Open YouTube Music in the computer's browser.", 'warn'];
   return ['Not added to a browser yet.', 'bad'];
 }
+// Open on another device: the addresses YTM Starcast can be reached at, each with a QR code to scan with a phone.
+let lastConnect = null;
+function connectSection() {
+  const sec = el('div', 'setsec connsec'); sec.appendChild(Object.assign(el('h3'), { textContent:'Open on another device' }));
+  const body = el('div'); sec.appendChild(body);
+  let sig = '';
+  const show = (c) => {
+    if (JSON.stringify(c) === sig) return;
+    sig = JSON.stringify(c); body.innerHTML = '';
+    const phone = (c.addresses || []).filter(a => a.phone && a.url);
+    if (!phone.length) {
+      const row = el('div', 'setrow');
+      row.innerHTML = `<div><div class="k">Only this computer can open it</div><div class="d">To use it from your phone,
+        install Tailscale on both (recommended), or start YTM Starcast with --lan for your home network.</div></div>`;
+      body.appendChild(row); return;
+    }
+    let pick = phone[0];
+    const card = el('div', 'conncard'), qr = el('div', 'connqr'), side = el('div', 'connside');
+    card.append(qr, side); body.appendChild(card);
+    // the link carries the access token when one is needed: shown shortened, copied whole
+    const shown = (u) => u.replace(/([?&]token=)[^&#]+/, '$1…');
+    const paint = () => {
+      qr.innerHTML = pick.qr || '';
+      side.innerHTML = '';
+      const d = el('div', 'd');
+      d.textContent = "Scan the code with your phone's camera, or open one of these addresses on it:";
+      side.appendChild(d);
+      for (const a of phone) {
+        const b = el('button', 'connaddr' + (a === pick ? ' sel' : ''));
+        b.innerHTML = '<span class="k"></span><span class="u"></span>';
+        b.querySelector('.k').textContent = a.label; b.querySelector('.u').textContent = shown(a.url);
+        b.addEventListener('click', () => { pick = a; paint(); });
+        side.appendChild(b);
+      }
+      const cp = el('button', 'pill ghost'); cp.textContent = 'Copy the link';
+      cp.addEventListener('click', () => copyText(pick.url, 'Link copied'));
+      side.appendChild(cp);
+    };
+    paint();
+  };
+  if (lastConnect) show(lastConnect);        // what it said last time, at once (the settings page is redrawn now and then)
+  (async () => {
+    let c = null;
+    try { const r = await fetch('/api/connect', { cache:'no-store' }); if (r.ok) c = await r.json(); } catch (e) {}
+    if (!c) { if (!lastConnect) sec.remove(); return; }      // a server without it
+    lastConnect = c; show(c);
+  })();
+  return sec;
+}
+
+function copyText(text, done) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast(done), () => toast("Couldn't copy here"));
+    return;
+  }
+  // plain HTTP (over Tailscale): execCommand still works there
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast(done); } catch (e) { toast("Couldn't copy here"); }
+  document.body.removeChild(ta);
+}
+
 function extensionSection() {
   const sec = el('div', 'setsec extsec'); sec.appendChild(Object.assign(el('h3'), { textContent:'Browser extension' }));
   const head = el('div', 'setrow');
@@ -2142,6 +2216,7 @@ function renderSettings(m) {
   m.innerHTML = ''; m.appendChild(topbar('Settings'));
   m.appendChild(partsSection());   // what YTM Starcast does at all comes first
   m.appendChild(extensionSection());
+  m.appendChild(connectSection());
   // Theme has its own submenu now, so Settings stays short.
   const tSel = localStorage.getItem('vmr-theme') || 'dark';
   const tName = (THEMES.find(t => t[0] === tSel) || [])[1]

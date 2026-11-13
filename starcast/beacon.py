@@ -28,6 +28,7 @@ from pathlib import Path
 
 from .discord import Presence, SettingsError, beacon_config_path
 from .discord import settings as discord_store
+from .proc import no_window
 
 log = logging.getLogger("starcast.discord")
 
@@ -264,9 +265,7 @@ def beacon_binaries(system=None, environ=None, home=None):
 def run_command(cmd, timeout):
     """Runs a program without a window or any input, and returns (exit code, its last words). Output goes to a
     temporary file rather than a pipe, so a helper the program leaves behind can never keep us waiting."""
-    kw = {}
-    if sys.platform == "win32":
-        kw["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    kw = no_window()
     try:
         with tempfile.TemporaryFile() as out:
             try:

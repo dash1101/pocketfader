@@ -11,6 +11,7 @@ SECURITY MODEL (read before changing bind logic):
 import hmac
 import ipaddress
 import json
+import re
 import secrets
 import shutil
 import socket
@@ -28,6 +29,8 @@ from .bridge import Bridge
 from .browser_ext import BrowserExtension
 from .discord import agent_from_user_agent
 from .lyrics import LyricsService
+from .proc import no_window
+from . import qr
 from .updater import Updater
 from .config import DEFAULT_PORT, JsonFile, config_dir
 from .opener import Opener, music_url, valid_id
@@ -43,6 +46,11 @@ CORS_ORIGINS = {"https://music.youtube.com"}
 EXTENSION_ORIGIN = "chrome-extension://eohnmkbflbhphedffdfokpdnngcgknai"
 PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/api/info"}
 COOKIE = "pf_token"
+# Tailscale's addresses (IPv4 and IPv6)
+TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+# GET /api/connect: what each kind of address is called, in the order they are offered
+CONNECT_KINDS = {"tailscale-name": "Tailscale name", "tailscale": "Tailscale address", "lan": "Home network",
+                 "proxy": "Web address", "address": "Address", "local": "This computer"}
 APP_NAME = "YTM Starcast"
 
 # The parts of YTM Starcast that can be switched on and off. All on unless switched off.
@@ -99,6 +107,9 @@ class App:
                                                        dry_run=dry_run)
         if self.extension.bridge is None:
             self.extension.bridge = self.bridge
+        self.listening = []             # (host, port) of every address it listens on (serve_on adds them)
+        self._ts_name = None            # (when it was looked up, this computer's Tailscale name or None)
+        self._qr = {}                   # address -> its QR code (SVG)
 
     def start(self):
         for b in (self.audio, self.engine, self.media):
@@ -118,6 +129,66 @@ class App:
                 pass
         for b in (self.audio, self.engine):
             b.stop()
+
+    # ---- the addresses a phone can open (GET /api/connect) ----
+    TS_NAME_TTL = 60                    # seconds a looked-up Tailscale name is kept (each look-up runs a program)
+
+    def tailscale_name(self):
+        if self._ts_name is None or time.monotonic() - self._ts_name[0] > self.TS_NAME_TTL:
+            self._ts_name = (time.monotonic(), tailscale_name())
+        return self._ts_name[1]
+
+    def qr_svg(self, url):
+        if url not in self._qr:
+            if len(self._qr) > 32:
+                self._qr.clear()
+            self._qr[url] = qr.svg(url, title=url)
+        return self._qr[url]
+
+    def connect(self, port, qr=True):
+        """The addresses it can be opened at, best first, each with a QR code for a phone to scan. When it needs the
+        access token, the links carry it (whoever asks has it already)."""
+        q = f"/?token={self.token}" if self.token else "/"
+        found = []                      # (kind, url)
+        for host in dict.fromkeys(h for h, _ in self.listening):
+            try:
+                ip = ipaddress.ip_address(host)
+            except ValueError:
+                found.append(("address", f"http://{host}:{port}{q}"))
+                continue
+            if ip.is_unspecified:       # --bind 0.0.0.0: every address of this computer; the home network's is shown
+                lan = lan_ip()
+                if lan:
+                    found.append(("lan", f"http://{lan}:{port}{q}"))
+                continue
+            shown = f"[{ip}]" if ip.version == 6 else str(ip)
+            url = f"http://{shown}:{port}{q}"
+            if ip.is_loopback:
+                found.append(("local", url))
+            elif any(ip in net for net in TAILNET):
+                name = self.tailscale_name()
+                if name:
+                    found.append(("tailscale-name", f"http://{name}:{port}{q}"))
+                found.append(("tailscale", url))
+            elif ip.is_private:
+                found.append(("lan", url))
+            else:
+                found.append(("address", url))
+        for h in sorted(self.allowed_hosts):
+            found.append(("proxy", f"https://{h}{q}"))
+        if not any(k == "local" for k, _ in found):
+            found.append(("local", f"http://127.0.0.1:{port}{q}"))
+        order = list(CONNECT_KINDS)
+        found = sorted(dict.fromkeys(found), key=lambda f: order.index(f[0]))
+        out = []
+        for kind, url in found:
+            a = {"kind": kind, "label": CONNECT_KINDS[kind], "url": url, "phone": kind != "local"}
+            if a["phone"] and qr:
+                a["qr"] = self.qr_svg(url)
+            out.append(a)
+        best = next((a for a in out if a["phone"]), None)
+        return {"port": port, "token": bool(self.token), "addresses": out,
+                "best": best["url"] if best else None, "qr": best.get("qr") if best else None}
 
     # ---- merged state ----
     def capabilities(self):
@@ -683,6 +754,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/info":
             return self._json(200, {"name": APP_NAME, "version": __version__,
                                     "api": 1, "auth": bool(app.token)})
+        if path == "/api/connect":     # the addresses to open on a phone, with QR codes
+            return self._json(200, app.connect(self.server.server_address[1],
+                                               qr=(parse_qs(urlsplit(self.path).query).get("qr") or ["1"])[0] != "0"))
         if path == "/api/extension":   # the browser extension: connected?, its folder, the browsers found here
             return self._json(200, app.extension.status())
 
@@ -960,11 +1034,27 @@ def tailscale_ip():
     if not exe:
         return None
     try:
-        out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=4)
+        out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=4, **no_window())
     except (OSError, subprocess.SubprocessError):
         return None
     lines = [l.strip() for l in out.stdout.splitlines() if l.strip()]
     return lines[0] if lines else None
+
+
+def tailscale_name():
+    """This computer's name on the tailnet (like pc.tail1234.ts.net), or None."""
+    exe = _tailscale_exe()
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "status", "--json"], capture_output=True, text=True, timeout=4, **no_window())
+        name = str((json.loads(out.stdout).get("Self") or {}).get("DNSName") or "").rstrip(".")
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+    return name if _HOSTNAME.fullmatch(name) else None
+
+
+_HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 
 
 def bind_when_tailscale_up(app, port, announce, attempts=100, delay=3.0):
@@ -1000,6 +1090,7 @@ def serve_on(app, host, port):
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.app = app
     threading.Thread(target=httpd.serve_forever, name=f"http-{host}", daemon=True).start()
+    app.listening.append((host, port))
     return httpd
 
 

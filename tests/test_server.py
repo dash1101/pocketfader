@@ -309,6 +309,75 @@ class ProxySafetyTests(Base):
         self.assertIn("Secure", r.getheader("Set-Cookie"))
 
 
+class ConnectTests(Base):
+    """GET /api/connect: the addresses to open on a phone, with a QR code for each."""
+
+    def listen(self, *hosts):
+        self.app.listening[:] = [(h, self.port) for h in hosts]
+
+    def test_what_it_listens_on_best_first(self):
+        self.listen("127.0.0.1", "192.168.1.20", "100.101.102.103")
+        with mock.patch("starcast.server.tailscale_name", return_value="pc.tail1234.ts.net") as name:
+            code, got, _ = self.req("GET", "/api/connect")
+            self.req("GET", "/api/connect")
+        self.assertEqual(code, 200)
+        self.assertEqual(name.call_count, 1)                    # looked up once, then kept for a while
+        p = self.port
+        self.assertEqual([(a["kind"], a["label"], a["url"], a["phone"]) for a in got["addresses"]], [
+            ("tailscale-name", "Tailscale name", f"http://pc.tail1234.ts.net:{p}/", True),
+            ("tailscale", "Tailscale address", f"http://100.101.102.103:{p}/", True),
+            ("lan", "Home network", f"http://192.168.1.20:{p}/", True),
+            ("local", "This computer", f"http://127.0.0.1:{p}/", False),
+        ])
+        self.assertEqual((got["port"], got["token"], got["best"]), (p, False, f"http://pc.tail1234.ts.net:{p}/"))
+        self.assertTrue(all(a["qr"].startswith("<svg") for a in got["addresses"] if a["phone"]))
+        self.assertNotIn("qr", got["addresses"][-1])            # this computer's own address: nothing to scan
+        self.assertEqual(got["qr"], got["addresses"][0]["qr"])
+
+    def test_without_tailscale_or_with_a_proxy(self):
+        self.listen("127.0.0.1")
+        self.app.allowed_hosts = {"music.example.com"}
+        with mock.patch("starcast.server.tailscale_name", return_value=None):
+            got = self.req("GET", "/api/connect?qr=0")[1]
+        self.assertEqual([(a["kind"], a["url"]) for a in got["addresses"]],
+                         [("proxy", "https://music.example.com/"), ("local", f"http://127.0.0.1:{self.port}/")])
+        self.assertNotIn("qr", got["addresses"][0])
+        self.assertIsNone(got["qr"])
+
+    def test_only_this_computer(self):
+        self.listen("127.0.0.1")
+        got = self.req("GET", "/api/connect")[1]
+        self.assertEqual([a["kind"] for a in got["addresses"]], ["local"])
+        self.assertEqual((got["best"], got["qr"]), (None, None))
+
+    def test_a_bind_address(self):
+        self.listen("127.0.0.1", "1.2.3.4", "::1")
+        with mock.patch("starcast.server.lan_ip", return_value="192.168.1.20"):
+            got = self.req("GET", "/api/connect?qr=0")[1]
+        self.assertEqual([(a["kind"], a["url"]) for a in got["addresses"]],
+                         [("address", f"http://1.2.3.4:{self.port}/"), ("local", f"http://127.0.0.1:{self.port}/"),
+                          ("local", f"http://[::1]:{self.port}/")])
+        self.listen("0.0.0.0")
+        with mock.patch("starcast.server.lan_ip", return_value="192.168.1.20"):
+            got = self.req("GET", "/api/connect?qr=0")[1]
+        self.assertEqual([(a["kind"], a["url"]) for a in got["addresses"]],
+                         [("lan", f"http://192.168.1.20:{self.port}/"), ("local", f"http://127.0.0.1:{self.port}/")])
+
+
+class ConnectTokenTests(Base):
+    token = "s3cret-token-value-123"
+
+    def test_needs_the_token_and_the_links_carry_it(self):
+        self.app.listening[:] = [("127.0.0.1", self.port), ("192.168.1.20", self.port)]
+        self.assertEqual(self.req("GET", "/api/connect")[0], 401)
+        code, got, _ = self.req("GET", "/api/connect", headers={"Authorization": "Bearer " + self.token})
+        self.assertEqual(code, 200)
+        self.assertTrue(got["token"])
+        self.assertEqual([a["url"] for a in got["addresses"]],
+                         [f"http://192.168.1.20:{self.port}/?token={self.token}",
+                          f"http://127.0.0.1:{self.port}/?token={self.token}"])
+
+
 class CommandLineTests(unittest.TestCase):
     def test_named_starcast(self):
         from starcast.cli import build_parser
@@ -327,8 +396,36 @@ class TailscaleTests(unittest.TestCase):
                 mock.patch.object(server.sys, "platform", "linux"):
             t = time.time()
             self.assertIsNone(server.tailscale_ip())
+            self.assertIsNone(server.tailscale_name())
             self.assertFalse(server.tailscale_installed())
             self.assertLess(time.time() - t, 1)
+
+    def test_its_name_from_tailscale_status(self):
+        from starcast import server
+        done = mock.Mock(stdout=json.dumps({"Self": {"DNSName": "pc.tail1234.ts.net."}}))
+        with mock.patch.object(server, "_tailscale_exe", return_value="/bin/tailscale"), \
+                mock.patch.object(server.subprocess, "run", return_value=done) as run:
+            self.assertEqual(server.tailscale_name(), "pc.tail1234.ts.net")
+        self.assertEqual(run.call_args[0][0], ["/bin/tailscale", "status", "--json"])
+        for odd in ("", "bad name/", "x" * 300, None):
+            done.stdout = json.dumps({"Self": {"DNSName": odd}})
+            with mock.patch.object(server, "_tailscale_exe", return_value="/bin/tailscale"), \
+                    mock.patch.object(server.subprocess, "run", return_value=done):
+                self.assertIsNone(server.tailscale_name(), odd)
+
+    def test_no_console_window_on_windows(self):
+        from starcast import server
+        from starcast.proc import CREATE_NO_WINDOW, no_window
+        self.assertEqual(no_window("win32"), {"creationflags": CREATE_NO_WINDOW})
+        self.assertEqual(no_window("linux"), {})
+        done = mock.Mock(stdout="100.64.0.9\n")
+        with mock.patch.object(server, "_tailscale_exe", return_value="tailscale.exe"), \
+                mock.patch.object(server.sys, "platform", "win32"), \
+                mock.patch.object(server.subprocess, "run", return_value=done) as run:
+            self.assertEqual(server.tailscale_ip(), "100.64.0.9")
+            server.tailscale_name()
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs.get("creationflags"), CREATE_NO_WINDOW)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,19 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.10
+
+- Windows: YTM Starcast no longer opens a console window when it starts at login, and nothing flashes up every few
+  seconds while the desktop app is open (the tailscale and other commands it runs stay hidden). Its messages go to
+  `server.log` in `%APPDATA%\ytm-starcast`; the desktop app shows that log. Typed in a terminal, `ytm-starcast.exe
+  --version` still answers there.
+- Windows: the desktop app's "Start when I log in" starts YTM Starcast directly, without a PowerShell window.
+- New installer options: `-Port` (Windows) and `--port=` (Linux) for another port than 8777, and `-NoDesktopApp`
+  (Windows) and `--no-desktop-app` (Linux) to leave out the desktop app. Updates keep both.
+- Settings → Open on another device: a QR code to scan with your phone, and the addresses YTM Starcast can be opened at.
+  Apps can get the same from the new `GET /api/connect`.
+- The desktop app finds YTM Starcast on the port it was installed with, and lists the addresses it really listens on.
+
 ### What's new in 0.2.0-alpha.9
 
 - Refine's All settings: the Tab key stays inside it while it's open, and closing it puts you back where you opened it.

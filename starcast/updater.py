@@ -23,6 +23,7 @@ from urllib.parse import urljoin, urlsplit
 
 from . import __version__
 from .config import config_dir
+from .proc import no_window
 
 DEFAULT_REPO = "dash1101/ytm-starcast"
 LEGACY_REPO = "dash1101/pocketfader"
@@ -114,7 +115,7 @@ class Updater:
         exe = shutil.which("gh")
         if exe:
             try:
-                out = subprocess.run([exe, "auth", "token"], capture_output=True, text=True, timeout=5)
+                out = subprocess.run([exe, "auth", "token"], capture_output=True, text=True, timeout=5, **no_window())
                 if out.returncode == 0 and out.stdout.strip():
                     self._token = out.stdout.strip()
                     return self._token
@@ -264,7 +265,7 @@ class Updater:
         except Exception as e:
             return False, str(e)
         out = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--force-reinstall", "--quiet", str(wheel)],
-                             capture_output=True, text=True, timeout=300)
+                             capture_output=True, text=True, timeout=300, **no_window())
         if out.returncode != 0:
             lines = (out.stderr or out.stdout).strip().splitlines()
             return False, lines[-1] if lines else "pip failed"

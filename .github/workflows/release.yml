@@ -57,7 +57,8 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          pyinstaller --onefile --name ytm-starcast `
+          # No console window (it starts at logon): its messages go to server.log in its settings folder.
+          pyinstaller --onefile --windowed --name ytm-starcast `
             --add-data "starcast/static;starcast/static" --add-data "extension;starcast/extension" `
             --paths . --collect-submodules starcast --collect-all winrt `
             packaging/entry.py
@@ -66,10 +67,27 @@ jobs:
           pyinstaller --onefile --windowed --name ytm-starcast-gui `
             --paths . --collect-submodules starcast.gui `
             packaging/gui_entry.py
+      - name: Installer scripts parse
+        shell: powershell
+        run: |
+          foreach ($f in "packaging\install-exe.ps1", "packaging\install.ps1") {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs)
+            if ($errs) { $errs | ForEach-Object { Write-Host "$f : $_" }; throw "$f doesn't parse" }
+          }
       - name: Smoke test
         shell: pwsh
         run: |
-          .\dist\ytm-starcast.exe --version
+          # both programs are windowed (no console window pops up)
+          foreach ($f in "dist\ytm-starcast.exe", "dist\ytm-starcast-gui.exe") {
+            $b = [IO.File]::ReadAllBytes($f); $pe = [BitConverter]::ToInt32($b, 0x3C)
+            if ([BitConverter]::ToUInt16($b, $pe + 0x5C) -ne 2) { throw "$f opens a console window" }
+          }
+          $v = Start-Process .\dist\ytm-starcast.exe -ArgumentList "--version" -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput ver.txt
+          $ver = (Get-Content ver.txt -Raw).Trim()
+          Write-Host "version: $ver"
+          if ($v.ExitCode -ne 0 -or -not $ver) { throw "--version didn't print the version" }
           $p = Start-Process .\dist\ytm-starcast.exe -PassThru `
             -ArgumentList "--port 8799 --dry-run --audio none --media none" `
             -RedirectStandardOutput out.txt -RedirectStandardError err.txt
@@ -82,10 +100,26 @@ jobs:
             # Discord status (built in) must load in the packaged program too
             $b = (Invoke-WebRequest http://127.0.0.1:8799/api/beacon -UseBasicParsing).Content
             if ($b -notmatch '"headline"') { $ok = $false; Write-Host "no Discord status: $b" }
+            $c = (Invoke-WebRequest http://127.0.0.1:8799/api/connect -UseBasicParsing).Content
+            if ($c -notmatch '"addresses"') { $ok = $false; Write-Host "no addresses: $c" }
           }
           Get-Content out.txt, err.txt -ErrorAction SilentlyContinue
           Stop-Process $p -Force
           if (-not $ok) { throw "server did not start" }
+          # started with nowhere to write (as at logon): its messages go to server.log in its settings folder
+          $env:APPDATA = Join-Path $PWD "appdata"
+          $p = Start-Process .\dist\ytm-starcast.exe -PassThru -ArgumentList "--port 8798 --dry-run --audio none --media none"
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            Start-Sleep 1
+            try { [void](Invoke-WebRequest http://127.0.0.1:8798/api/info -UseBasicParsing); $ok = $true; break } catch {}
+          }
+          Start-Sleep 1
+          Stop-Process $p -Force
+          $log = Join-Path $env:APPDATA "ytm-starcast\server.log"
+          Get-Content $log -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "the server didn't start without a console" }
+          if (-not (Select-String -Path $log -Pattern "listening on" -Quiet)) { throw "nothing in server.log" }
       - name: Package
         shell: pwsh
         run: |
@@ -94,6 +128,64 @@ jobs:
           Compress-Archive ytm-starcast-windows-x64 ytm-starcast-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: ytm-starcast-windows-x64.zip }
+
+  # install-exe.ps1 on a real Windows machine (Windows PowerShell 5.1, as people run it): options, updates, uninstall.
+  install-windows:
+    needs: server-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: windows }
+      - name: Install, update, uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Expand-Archive ytm-starcast-windows-x64.zip .
+          $target = Join-Path $env:LOCALAPPDATA "Programs\YTM Starcast"
+          $lnk = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\YTM Starcast.lnk"
+          function Task-Args { [string](Get-ScheduledTask -TaskName "YTM Starcast").Actions[0].Arguments }
+          function Check($ok, $what) { if (-not $ok) { throw "failed: $what" } else { Write-Host "ok: $what" } }
+          # a stand-in for the old YTM Beacon app (any program that ends by itself), so its settings are taken over
+          $beacon = Join-Path $env:LOCALAPPDATA "ytm-beacon"
+          New-Item -ItemType Directory -Force $beacon | Out-Null
+          Copy-Item "$env:WINDIR\System32\cmd.exe" (Join-Path $beacon "ytm-beacon.exe")
+
+          $out = & .\ytm-starcast-windows-x64\install-exe.ps1 -NoDesktopApp -Port 8797 *>&1 | Out-String
+          Write-Host $out
+          Check ($out -match "Running YTM Beacon's own uninstaller") "the settings take-over was waited for and worked"
+          Check ((Task-Args) -match "--port 8797") "the task has the port"
+          Check (Test-Path (Join-Path $target "ytm-starcast.exe")) "the server is installed"
+          Check (-not (Test-Path (Join-Path $target "ytm-starcast-gui.exe"))) "no desktop app"
+          Check (-not (Test-Path $lnk)) "no Start menu entry"
+          $up = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep 1
+            try { [void](Invoke-WebRequest http://127.0.0.1:8797/api/info -UseBasicParsing); $up = $true; break } catch {}
+          }
+          if ($up) {
+            $log = Join-Path $env:APPDATA "ytm-starcast\server.log"
+            Get-Content $log
+            Check (Select-String -Path $log -Pattern "listening on" -Quiet) "the server writes server.log"
+            Check ((Invoke-WebRequest http://127.0.0.1:8797/api/connect -UseBasicParsing).Content -match '"addresses"') "/api/connect"
+          } else {
+            Write-Host "note: the scheduled task didn't start here: $((Get-ScheduledTaskInfo -TaskName 'YTM Starcast').LastTaskResult)"
+          }
+
+          $out = & .\ytm-starcast-windows-x64\install-exe.ps1 *>&1 | Out-String
+          Write-Host $out
+          Check ((Task-Args) -match "--port 8797") "an update keeps the port"
+          Check (-not (Test-Path (Join-Path $target "ytm-starcast-gui.exe"))) "an update keeps the desktop app out"
+
+          $out = & .\ytm-starcast-windows-x64\install-exe.ps1 -NoDesktopApp:$false -Port 8777 *>&1 | Out-String
+          Write-Host $out
+          Check (Test-Path (Join-Path $target "ytm-starcast-gui.exe")) "-NoDesktopApp:`$false brings the desktop app back"
+          Check (Test-Path $lnk) "with its Start menu entry"
+          Check (-not ((Task-Args) -match "--port")) "the default port needs no option"
+
+          $out = & .\ytm-starcast-windows-x64\install-exe.ps1 -Uninstall *>&1 | Out-String
+          Write-Host $out
+          Check (-not (Get-ScheduledTask -TaskName "YTM Starcast" -ErrorAction SilentlyContinue)) "uninstall removes the task"
+          Check (-not (Test-Path $target)) "and the program"
 
   python-package:
     runs-on: ubuntu-latest

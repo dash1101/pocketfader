@@ -99,6 +99,39 @@ class AddressTests(unittest.TestCase):
         self.assertEqual(urls["Cloudflare"], "https://music.example.com/")
         r.close()
 
+    def test_the_running_servers_own_list_comes_first(self):
+        r = Rig(http={"api/info": {"version": "x"},
+                      "api/connect?qr=0": {"addresses": [{"label": "Home network", "url": "http://192.168.1.20:8790/?token=t"},
+                                                         {"label": "This computer", "url": "http://127.0.0.1:8790/?token=t"},
+                                                         {"label": 5, "url": None}]}})
+        self.assertEqual(r.c.addresses(), [("Home network", "http://192.168.1.20:8790/?token=t"),
+                                           ("This computer", "http://127.0.0.1:8790/?token=t")])
+        self.assertFalse([c for c in r.calls if "tailscale" in c[0]])      # nothing had to be looked up here
+        r.close()
+
+    def test_tailscale_is_looked_up_once_a_minute(self):
+        r = Rig()
+        r.c.addresses()
+        r.c.addresses()
+        self.assertEqual(len([c for c in r.calls if c[-2:] == ["status", "--json"]]), 1)
+        r.c._ts_seen = (r.c._ts_seen[0] - core.TAILSCALE_TTL - 1,) + r.c._ts_seen[1:]
+        r.c.addresses()
+        self.assertEqual(len([c for c in r.calls if c[-2:] == ["status", "--json"]]), 2)
+        r.close()
+
+    def test_the_port_the_server_runs_on(self):
+        # an installer may have started it with --port: the window finds it there, unless it was given a port itself
+        r = Rig(http={})
+        (r.root / "cfg" / "server.json").write_text('{"port": 8790}')
+        self.assertEqual(r.c.settings()["port"], 8790)
+        self.assertIn("http://127.0.0.1:8790/", dict(r.c.addresses()).values())
+        r.c.update(port=8800)
+        self.assertEqual(r.c.settings()["port"], 8800)
+        (r.root / "cfg" / "server.json").write_text('{"port": "nonsense"}')
+        r.c.store.path.unlink()
+        self.assertEqual(r.c.settings()["port"], 8777)
+        r.close()
+
     def test_without_tailscale(self):
         r = Rig(tailscale=False)
         r.c._ts = lambda: None
@@ -252,9 +285,11 @@ class LegacyTests(unittest.TestCase):
             self.assertEqual(set(values), {"Other"})
             self.assertFalse(r.c.autostart_enabled())
 
-    def test_windows_run_value_quotes_a_folder_with_a_space(self):
+    def test_the_packaged_server_starts_at_login_as_it_is_with_its_folder_quoted(self):
+        # it has no console window, so nothing has to hide one (no PowerShell window flashing at login either)
         r = Rig(platform="win32")
         self.addCleanup(r.close)
+        r.c.update(port=8790)
         d = r.root / "Programs" / "YTM Starcast"
         d.mkdir(parents=True)
         (d / "ytm-starcast.exe").write_bytes(b"")
@@ -262,7 +297,18 @@ class LegacyTests(unittest.TestCase):
         with self.fake_winreg(values), mock.patch.object(sys, "frozen", True, create=True), \
                 mock.patch.object(sys, "executable", str(d / "ytm-starcast-gui.exe")):
             self.assertTrue(r.c.set_autostart(True))
-        self.assertIn(f"-FilePath '{d / 'ytm-starcast.exe'}'", values["YTM Starcast"])
+        self.assertEqual(values["YTM Starcast"], f'"{d / "ytm-starcast.exe"}" --port 8790')
+
+    def test_a_python_installation_starts_hidden_at_login_with_its_folder_quoted(self):
+        r = Rig(platform="win32")
+        self.addCleanup(r.close)
+        d = r.root / "Python's Scripts"
+        d.mkdir(parents=True)
+        values = {}
+        with self.fake_winreg(values), mock.patch.object(r.c, "launch_command", return_value=[str(d / "ytm-starcast.exe")]):
+            self.assertTrue(r.c.set_autostart(True))
+        self.assertIn("powershell.exe -NoProfile -WindowStyle Hidden", values["YTM Starcast"])
+        self.assertIn(f"-FilePath '{str(d / 'ytm-starcast.exe').replace(chr(39), chr(39) * 2)}'", values["YTM Starcast"])
 
     def test_packaged_window_finds_the_server_next_to_it(self):
         r = Rig(platform="win32")

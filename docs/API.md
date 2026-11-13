@@ -34,6 +34,7 @@ status, `capabilities.beacon`, the `pf_token` cookie), so apps already on phones
 | `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `kugou`, `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
 | `GET /api/media/audio/<videoId>` | The song's audio, fetched with yt-dlp on the computer and cached (Range requests supported). The phone uses it when it can't get a song itself. `capabilities.audio` says whether yt-dlp is available. |
 | `GET /api/beacon` | Discord status (see [Discord status](#discord-status)). |
+| `GET /api/connect[?qr=0]` | The addresses it can be opened at, best first, each with a QR code to scan with a phone (below). `qr=0` leaves the codes out. |
 
 ```jsonc
 // /api/state
@@ -54,6 +55,29 @@ status, `capabilities.beacon`, the `pf_token` cookie), so apps already on phones
   "parts": {"remote": true, "discord": true, "refine": true, "audio": true}
 }
 ```
+
+```jsonc
+// /api/connect
+{
+  "port": 8777,
+  "token": false,                           // true: it needs the access token, and every link below carries it
+  "addresses": [
+    {"kind": "tailscale-name", "label": "Tailscale name", "url": "http://pc.tail1234.ts.net:8777/", "phone": true,
+     "qr": "<svg …>"},
+    {"kind": "tailscale", "label": "Tailscale address", "url": "http://100.101.102.103:8777/", "phone": true, "qr": "<svg …>"},
+    {"kind": "lan", "label": "Home network", "url": "http://192.168.1.20:8777/", "phone": true, "qr": "<svg …>"},
+    {"kind": "local", "label": "This computer", "url": "http://127.0.0.1:8777/", "phone": false}
+  ],
+  "best": "http://pc.tail1234.ts.net:8777/",  // the first address a phone can use (null: only this computer can reach it)
+  "qr": "<svg …>"                            // the QR code for `best`
+}
+```
+
+The addresses are the ones it really listens on: `tailscale-name` and `tailscale` (Tailscale), `lan` (`--lan`), `proxy`
+(the `https://` names given with `--allow-host`), `address` (other `--bind` addresses) and `local`. The QR codes are SVG
+images (black on white, with the quiet zone), drawn by the server itself. Like the other routes it needs the access token
+when one is set; whoever asks has it already, so the links carry it. Settings → Open on another device in the web app
+shows the same. New in 0.2.0a10.
 
 `capabilities.discord` and `parts` are new in 0.2.0: an app that sees neither is talking to an older server, where
 every part counts as on. `capabilities.beacon` stays `true` because older apps show their Discord page only when it is set.

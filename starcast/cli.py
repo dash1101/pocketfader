@@ -108,6 +108,12 @@ def main(argv=None):
             print(f"could not bind {h}:{a.port} -- {e}")
     if not bound:
         sys.exit("nothing to listen on; is the port already in use? (try --port)")
+    if not a.dry_run:
+        # the port it runs on, for the desktop window (an installer may have started it with --port)
+        try:
+            JsonFile(config_dir() / "server.json").merge({"port": a.port})
+        except OSError:
+            pass
 
     q_for = lambda host: f"http://{host}:{a.port}{q}"  # noqa: E731
     if not ts and tailscale_installed():

@@ -100,10 +100,14 @@ current `yt-dlp` in YTM Starcast's own folder, which lets the computer fetch son
 | Option | Does |
 |---|---|
 | `./install.sh --lan` | Also listen on your home network (turns on the access token). |
+| `./install.sh --port=8790` | Another port than 8777. |
 | `./install.sh --token --allow-host=music.example.com` | For a reverse proxy or a [Cloudflare Tunnel](docs/CLOUDFLARE.md). |
+| `./install.sh --no-desktop-app` | Leave out the desktop app (the window in the application menu). `--desktop-app` brings it back. |
 | `./install.sh --no-systemd` | Install only; start it yourself with `ytm-starcast`. |
 | `./install.sh --keep-ytm-beacon` | Leave the separate YTM Beacon app installed. |
 | `./install.sh --uninstall` | Remove YTM Starcast. Your settings are kept in `~/.config/ytm-starcast`. |
+
+Installing again (to update) keeps the options it was installed with, and leaves the desktop app out if it was left out.
 
 Prefer not to install anything? `python3 -m starcast` in the source folder runs it in the foreground, and so does
 `./ytm-starcast` from the Linux download.
@@ -116,8 +120,13 @@ Prefer not to install anything? `python3 -m starcast` in the source folder runs 
 
 It copies YTM Starcast to `%LOCALAPPDATA%\Programs\YTM Starcast`, adds **YTM Starcast** to the Start menu, and starts it now and every time
 you log in. No admin rights needed. Options: `-Lan` (also listen on your home network, with an access token),
-`-Audio voicemeeter` (the optional [Voicemeeter](docs/VOICEMEETER.md) extras), `-KeepYtmBeacon`, and `-Uninstall`
-(your settings in `%APPDATA%\ytm-starcast` are kept).
+`-Port 8790` (another port than 8777), `-Audio voicemeeter` (the optional [Voicemeeter](docs/VOICEMEETER.md) extras),
+`-NoDesktopApp` (leave out the desktop app and its Start menu entry), `-KeepYtmBeacon`, and `-Uninstall` (your settings
+in `%APPDATA%\ytm-starcast` are kept). Installing again (to update) keeps `-Lan`, `-Port`, `-Audio` and `-NoDesktopApp`
+as they were; `-Lan:$false` or `-NoDesktopApp:$false` undoes one.
+
+YTM Starcast runs in the background without a window of its own. Its messages go to `server.log` in
+`%APPDATA%\ytm-starcast`, and the desktop app shows them too.
 
 With Python installed you can instead install from the source: `.\packaging\install.ps1` (same options). Windows
 support is experimental (see [What's tested](#whats-tested)).

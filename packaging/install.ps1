@@ -4,6 +4,7 @@
 #   .\packaging\install.ps1                         # Windows volume + media controls
 #   .\packaging\install.ps1 -Audio voicemeeter      # also use Voicemeeter (EQ, meter) -- optional extra
 #   .\packaging\install.ps1 -Lan                    # also listen on your home network (adds an access token)
+#   .\packaging\install.ps1 -Port 8790              # another port than 8777
 #   .\packaging\install.ps1 -KeepYtmBeacon          # leave the separate YTM Beacon app installed
 #   .\packaging\install.ps1 -Uninstall              # remove YTM Starcast from your Python (your settings are kept)
 #
@@ -15,6 +16,7 @@
 param(
     [ValidateSet("windows", "voicemeeter")][string]$Audio = "windows",
     [switch]$Lan,
+    [ValidateRange(1, 65535)][int]$Port = 8777,
     [switch]$KeepYtmBeacon,
     [switch]$Uninstall
 )
@@ -73,6 +75,10 @@ $oldArgs = Get-TaskArguments $TaskName
 if (-not $oldArgs) { $oldArgs = Get-TaskArguments $LegacyTask }
 if (-not $PSBoundParameters.ContainsKey("Lan") -and $oldArgs -match '(^|\s)--lan(\s|$)') { $Lan = $true }
 if (-not $PSBoundParameters.ContainsKey("Audio") -and $oldArgs -match '--audio\s+voicemeeter') { $Audio = "voicemeeter" }
+if (-not $PSBoundParameters.ContainsKey("Port") -and $oldArgs -match '--port\s+(\d{1,5})(\s|$)') {
+    $old = [int]$Matches[1]
+    if ($old -ge 1 -and $old -le 65535) { $Port = $old }
+}
 
 # YTM Starcast's old name: stop it and take it out of start-at-logon before installing the new one.
 $hadOld = Remove-Task $LegacyTask
@@ -129,6 +135,7 @@ if ($beacon -and (Test-Path $beacon) -and -not $KeepYtmBeacon) {
 
 $argsList = "-m starcast --audio $Audio"
 if ($Lan) { $argsList += " --lan" }
+if ($Port -ne 8777) { $argsList += " --port $Port" }
 
 # Delay 30s so Tailscale (and Voicemeeter, if used) are up first. The server retries either way.
 # Python's path may have a space in it (C:\Program Files\...), so the task's command is quoted.
@@ -162,4 +169,4 @@ Write-Host "  3. Click 'Load unpacked' and choose this folder:"
 Write-Host "       $extDir"
 Write-Host "  4. Open music.youtube.com in that browser (or refresh its tab)."
 Write-Host "The same steps, with buttons that open the page and the folder: Settings > Browser extension in the app"
-Write-Host "(http://127.0.0.1:8777/#extension)."
+Write-Host "(http://127.0.0.1:$Port/#extension)."

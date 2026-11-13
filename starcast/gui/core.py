@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 from ..config import DEFAULT_PORT, JsonFile, config_dir, get_or_create_token
+from ..proc import no_window
 
 SERVICE = "ytm-starcast.service"
 DESKTOP_NAME = "ytm-starcast.desktop"
@@ -31,6 +32,7 @@ PART_ROWS = (
     ("audio", "Computer audio", "This computer's volume, outputs and equalizer in the apps."),
 )
 PARTS = tuple(k for k, _, _ in PART_ROWS)
+TAILSCALE_TTL = 60
 
 
 def _http(url, headers=None, timeout=1.2):
@@ -64,7 +66,7 @@ def _clean_parts(p):
 def _sh(argv, timeout=6):
     """Run a command -> (returncode, stdout+stderr). Replaceable in tests."""
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, **no_window())
         return r.returncode, (r.stdout or "") + (r.stderr or "")
     except (OSError, subprocess.SubprocessError) as e:
         return 127, str(e)
@@ -80,16 +82,21 @@ class Controller:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.store = JsonFile(self.dir / "gui.json")
         self.cfg = JsonFile(self.dir / "config.json")
+        self.server_file = JsonFile(self.dir / "server.json")       # written by the server: the port it runs on
         if tailscale_ip is None or lan_ip is None:
             from ..server import lan_ip as _lan, tailscale_ip as _ts
             tailscale_ip, lan_ip = tailscale_ip or _ts, lan_ip or _lan
         self._ts, self._lan = tailscale_ip, lan_ip
+        self._ts_seen = None            # (when, Tailscale name, Tailscale address): each look-up runs tailscale
 
     # ------------------------------------------------------------------ settings
     def settings(self):
         d = self.store.load()
+        # the port: the window's own when it was given one, else the one the server last ran on (the installer may
+        # have started it with --port)
+        port = d.get("port", self.server_file.load().get("port", DEFAULT_PORT))
         try:
-            port = int(d.get("port", DEFAULT_PORT))
+            port = int(port)
         except (TypeError, ValueError):
             port = DEFAULT_PORT
         return {"port": port if 1 <= port <= 65535 else DEFAULT_PORT, "lan": bool(d.get("lan")),
@@ -166,15 +173,25 @@ class Controller:
         return _clean_parts((got or {}).get("parts"))
 
     def addresses(self):
-        """[(label, url)] the phone can use, best first."""
+        """[(label, url)] the phone can use, best first: the running server's own list (what it really listens on),
+        or, while it isn't running, what these settings will give."""
+        info = self.probe()
+        if info:
+            got = self.http(self._base() + "/api/connect?qr=0", self._auth(info))
+            found = [(a.get("label"), a.get("url")) for a in (got or {}).get("addresses") or []
+                     if isinstance(a, dict) and isinstance(a.get("label"), str) and isinstance(a.get("url"), str)]
+            if found:
+                return found
         s = self.settings()
         port, tok = s["port"], self.token()
         suffix = f"/?token={tok}" if tok and s["lan"] else "/"
         out = []
-        dns = self._tailscale_name()
+        # the window asks every few seconds; Tailscale's name and address are looked up once a minute
+        if self._ts_seen is None or time.monotonic() - self._ts_seen[0] > TAILSCALE_TTL:
+            self._ts_seen = (time.monotonic(), self._tailscale_name(), self._ts())
+        _, dns, ip = self._ts_seen
         if dns:
             out.append(("Tailscale name", f"http://{dns}:{port}/"))
-        ip = self._ts()
         if ip:
             out.append(("Tailscale address", f"http://{ip}:{port}/"))
         if s["lan"]:
@@ -386,18 +403,23 @@ class Controller:
                     except OSError:
                         pass
                 if on:
-                    exe, *args = self.launch_command() + self.server_args()
-                    # start it hidden, so no console window opens at every login. The program's path is quoted
-                    # (the packaged one lives in "Programs\YTM Starcast"), with PowerShell's '' for a quote inside it.
-                    arglist = " ".join(args).replace("'", "''")
-                    path = str(exe).replace("'", "''")
-                    cmd = ("powershell.exe -NoProfile -WindowStyle Hidden -Command "
-                           f"\"Start-Process -WindowStyle Hidden -FilePath '{path}'"
-                           + (f" -ArgumentList '{arglist}'" if args else "") + "\"")
-                    winreg.SetValueEx(k, RUN_VALUE, 0, winreg.REG_SZ, cmd)
+                    winreg.SetValueEx(k, RUN_VALUE, 0, winreg.REG_SZ, self._win_run_command())
             return True
         except (ImportError, OSError):
             return False
+
+    def _win_run_command(self):
+        exe, *args = self.launch_command() + self.server_args()
+        if getattr(sys, "frozen", False):
+            # the packaged server has no console window: it is started as it is (its path quoted, it has a space)
+            return " ".join(f'"{a}"' if (" " in a or not a) else a for a in [str(exe)] + args)
+        # a Python installation's ytm-starcast.exe opens a console window: started hidden through PowerShell. The
+        # program's path is quoted, with PowerShell's '' for a quote inside it.
+        arglist = " ".join(args).replace("'", "''")
+        path = str(exe).replace("'", "''")
+        return ("powershell.exe -NoProfile -WindowStyle Hidden -Command "
+                f"\"Start-Process -WindowStyle Hidden -FilePath '{path}'"
+                + (f" -ArgumentList '{arglist}'" if args else "") + "\"")
 
     # ------------------------------------------------------------------ updates
     def update_info(self, refresh=False):

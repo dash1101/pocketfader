@@ -22,6 +22,8 @@ import subprocess
 import threading
 import time
 
+from ...proc import no_window
+
 DLL_PATH = r"C:\Program Files (x86)\VB\Voicemeeter\VoicemeeterRemote64.dll"
 
 STRIP_VAIO = 2
@@ -46,7 +48,7 @@ def relaunch_vmwv():
     )
     try:
         out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                             capture_output=True, text=True, timeout=20)
+                             capture_output=True, text=True, timeout=20, **no_window())
         return {"ok": True} if out.stdout.strip().startswith("ok") else {"ok": False, "error": "VMWV not found — is it running?"}
     except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "error": str(e)}

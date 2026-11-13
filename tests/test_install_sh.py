@@ -581,6 +581,41 @@ class Sandbox(unittest.TestCase):
         entry = (auto / "ytm-starcast.desktop").read_text()
         self.assertIn(f"Exec={self.app}/venv/bin/ytm-starcast --lan\n", entry)
 
+    def test_without_the_desktop_app(self):
+        self.run_install("--no-desktop-app")
+        self.assertTrue((self.app / "venv" / "bin" / "ytm-starcast").exists())
+        self.assertTrue((self.bin / "ytm-starcast").is_symlink())
+        self.assertFalse((self.bin / "ytm-starcast-gui").exists())
+        self.assertFalse((self.apps / "ytm-starcast.desktop").exists())
+        self.assertIn("The desktop app is left out", self.out)
+        self.assertTrue((self.units / "ytm-starcast.service").exists())      # the server is installed as always
+        # an update leaves it out too, until --desktop-app brings it back
+        self.run_install()
+        self.assertFalse((self.bin / "ytm-starcast-gui").exists())
+        self.assertFalse((self.apps / "ytm-starcast.desktop").exists())
+        self.run_install("--desktop-app")
+        self.assert_starcast_installed()
+        self.run_install()
+        self.assert_starcast_installed()
+
+    def test_leaving_out_a_desktop_app_installed_before(self):
+        self.run_install()
+        self.assert_starcast_installed()
+        self.run_install("--no-desktop-app")
+        self.assertFalse((self.bin / "ytm-starcast-gui").exists())
+        self.assertFalse((self.apps / "ytm-starcast.desktop").exists())
+        self.assertFalse((self.icons / "ytm-starcast.svg").exists())
+
+    def test_a_port(self):
+        self.run_install("--port=8790")
+        self.assertIn("/venv/bin/ytm-starcast --port 8790\n", (self.units / "ytm-starcast.service").read_text())
+        self.assertIn("(http://127.0.0.1:8790/#extension)", self.out)
+        self.run_install()                                       # kept on an update
+        self.assertIn("/venv/bin/ytm-starcast --port 8790\n", (self.units / "ytm-starcast.service").read_text())
+        for bad in ("--port=0", "--port=65536", "--port=80a", "--port="):
+            self.run_install(bad, rc=2)
+            self.assertIn("--port needs a number", self.out)
+
     def test_help(self):
         p = subprocess.run([BASH, str(SCRIPT), "--help"], env=self.env, capture_output=True, text=True, timeout=30)
         self.assertEqual(p.returncode, 0)

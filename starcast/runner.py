@@ -11,6 +11,8 @@ import os
 import subprocess
 import threading
 
+from .proc import no_window
+
 
 class Result:
     __slots__ = ("ok", "out", "err")
@@ -42,7 +44,7 @@ class Runner:
     def _exec(self, argv, timeout) -> Result:
         try:
             p = subprocess.run(argv, capture_output=True, text=True,
-                               timeout=timeout or self.timeout, env=self.env)
+                               timeout=timeout or self.timeout, env=self.env, **no_window())
             return Result(p.returncode == 0, p.stdout, p.stderr)
         except (OSError, subprocess.SubprocessError) as e:
             return Result(False, "", str(e))
