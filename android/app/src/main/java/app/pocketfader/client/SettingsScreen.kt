@@ -331,8 +331,9 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             ) { v -> Remote.setPlayOn(v, carryOver = false) }
             Choice(
                 "Download quality",
-                "For songs saved from now on. Best is about 1.2 MB a minute, Standard about 1 MB, Data saver about 0.4 MB.",
-                listOf("best" to "Best", "normal" to "Standard", "saver" to "Data saver"), p.dlQuality,
+                "For songs saved from now on: about 1.2 MB a minute at Best, 1 MB at Standard, 0.4 MB at Data saver. Best is " +
+                    "usually Opus, Standard AAC (plays everywhere).",
+                listOf("best" to "Best · 160 kbps", "normal" to "Standard · 128 kbps", "saver" to "Data saver · 50 kbps"), p.dlQuality,
             ) { v -> Settings.update { it.copy(dlQuality = v) }; AutoDownload.soon() }
             Info("Saved on this phone", "${saved.size} songs · ${formatBytes(saved.sumOf { it.size })}")
             Text(
@@ -383,6 +384,9 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 val song = remember(p.dlQuality, saved) { AutoDownload.typicalSong() }
                 val limitBytes = p.autoDlLimitMb * 1_048_576L
                 val songsNeed = p.smartDownloads.coerceAtLeast(0) * song
+                // room for automatic downloads: what's free, plus what they take now (they make way for each other)
+                val freeNow = remember(saved) { Downloads.freeBytes() }
+                val room = if (freeNow < 0) Long.MAX_VALUE else freeNow + saved.filter { it.auto }.sumOf { it.size }
                 NumberChoice(
                     "Smart downloads",
                     when {
@@ -390,7 +394,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                             "As many as fit in the space below: your most played songs and quick picks first, then liked songs, " +
                                 "what you play most and your playlists." +
                                 if (p.autoDlLimitMb > 0) " About ${limitBytes / song} songs at this quality." else
-                                    " With no limit, it stops 2 GB short of filling the phone."
+                                    " With no limit, it stops 1 GB short of filling the phone."
                         else ->
                             "Keep up to this many of your most played songs and today's quick picks on the phone, refreshed as your " +
                                 "taste changes (fewer while your listening history is short)." +
@@ -399,6 +403,9 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     },
                     presets = listOf(0 to "Off", 25 to "25", 50 to "50", 100 to "100", 250 to "250", 500 to "500", 1000 to "1000", -1 to "Fill the space"),
                     value = p.smartDownloads, range = 1..1000, unit = "songs", custom = { "$it songs" },
+                    warning = if (p.smartDownloads > 0 && songsNeed > room)
+                        "That many need about ${gb(songsNeed)}, more than the phone has room for (${gb(room)})." else null,
+                    warnAbove = if (room == Long.MAX_VALUE) null else (room / song).toInt().coerceAtLeast(1),
                 ) { v -> Settings.update { it.copy(smartDownloads = v) }; Recommend.refreshIfStale(); AutoDownload.soon() }
                 Info("Playlists kept on this phone", if (keep.isEmpty()) "None. Open a playlist and turn on “Keep on this phone”." else "${keep.size}: " +
                     keep.mapNotNull { k -> if (k == "LM") "Liked music" else lists.firstOrNull { it.id == k }?.title }.joinToString(", "))
@@ -411,6 +418,14 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     presets = listOf(1 to "1 GB", 2 to "2 GB", 5 to "5 GB", 10 to "10 GB", 25 to "25 GB", 50 to "50 GB", 100 to "100 GB", 0 to "No limit"),
                     value = if (p.autoDlLimitMb <= 0) 0 else (p.autoDlLimitMb + 1023) / 1024,
                     range = 1..2000, unit = "GB", custom = { "$it GB" },
+                    warning = when {
+                        p.autoDlLimitMb > 0 && limitBytes > room ->
+                            "More than the phone has room for (${gb(room)}): downloads stop a little before it's full."
+                        p.autoDlLimitMb <= 0 && room != Long.MAX_VALUE ->
+                            "Downloads stop a little before the phone is full (${gb(room)} free for them now)."
+                        else -> null
+                    },
+                    warnAbove = if (room == Long.MAX_VALUE) null else (room / 1_073_741_824L).toInt(),
                 ) { v -> Settings.update { it.copy(autoDlLimitMb = v * 1024) }; AutoDownload.soon() }
                 Toggle("Only on Wi-Fi", "Automatic downloads wait for Wi-Fi (or another connection that isn't metered).", p.dlWifiOnly) { v ->
                     Settings.update { it.copy(dlWifiOnly = v) }; AutoDownload.soon()
@@ -620,6 +635,8 @@ private fun NumberChoice(
     range: IntRange,
     unit: String,
     custom: (Int) -> String,
+    warning: String? = null,
+    warnAbove: Int? = null,
     onSet: (Int) -> Unit,
 ) {
     var asking by remember { mutableStateOf(false) }
@@ -627,6 +644,7 @@ private fun NumberChoice(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (warning != null) Text(warning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.forEach { (v, label) ->
                 FilterChip(selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
@@ -650,7 +668,13 @@ private fun NumberChoice(
                     onValueChange = { t -> text = t.filter { it.isDigit() }.take(6) },
                     singleLine = true,
                     label = { Text(unit.replaceFirstChar { it.uppercase() }) },
-                    supportingText = { Text("From ${range.first} to ${range.last} $unit.") },
+                    supportingText = {
+                        if (n != null && warnAbove != null && n > warnAbove) {
+                            Text("More than fits on the phone now (about $warnAbove $unit).", color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text("From ${range.first} to ${range.last} $unit.")
+                        }
+                    },
                     isError = text.isNotEmpty() && !ok,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,

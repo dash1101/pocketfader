@@ -71,11 +71,18 @@ class DownloadService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val count = active.size
-        val pct = if (count == 0) 100 else (active.values.average() * 100).toInt()
+        val sum = Downloads.summary()
+        val pct = if (count == 0) 100 else (sum.fraction * 100).toInt()
+        val all = sum.count + sum.finished
+        val detail = listOfNotNull(
+            if (sum.totalBytes > 0) formatBytes(sum.doneBytes) + " of about " + formatBytes(sum.totalBytes) else null,
+            if (sum.bps > 0) formatSpeed(sum.bps) else null,
+            sum.secondsLeft?.let { formatLeft(it) },
+        ).joinToString(" · ").ifBlank { "For listening with no connection" }
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(if (count == 1) "Downloading 1 song" else "Downloading $count songs")
-            .setContentText("For listening with no connection")
+            .setContentTitle(if (all <= 1) "Downloading 1 song" else "Downloading ${sum.finished + 1} of $all songs")
+            .setContentText(detail)
             .setProgress(100, pct, count > 0 && pct == 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -119,7 +126,7 @@ object AutoDownload {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private var job: Job? = null
     private const val TYPICAL_SECONDS = 210.0   // a song whose length isn't known
-    private const val RESERVE = 2L * 1_073_741_824L   // "fill the space" with no limit leaves this much of the phone free
+    private const val RESERVE = 1_073_741_824L   // automatic downloads leave this much of the phone free
 
     /** Bytes a second of audio takes at a download quality: what this phone's own downloads at that quality turned out to
      *  be once there are a few, else what YouTube's streams usually are (container included). */
@@ -177,12 +184,10 @@ object AutoDownload {
             Library.playlists.value.forEach { l -> l.tracks.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } } }
         }
         val have = Downloads.items.value.associateBy { it.videoId }
-        val limit = when {
-            p.autoDlLimitMb > 0 -> p.autoDlLimitMb * 1_048_576L
-            // no limit set: fill what the phone has, keeping some of it free (what automatic downloads hold counts as theirs)
-            fill -> (Downloads.freeBytes() + have.values.filter { it.auto }.sumOf { it.size } - RESERVE).coerceAtLeast(0L)
-            else -> Long.MAX_VALUE
-        }
+        // never more than the phone has room for, keeping some of it free (what automatic downloads hold counts as theirs)
+        val free = Downloads.freeBytes()
+        val room = if (free < 0) Long.MAX_VALUE else (free + have.values.filter { it.auto }.sumOf { it.size } - RESERVE).coerceAtLeast(0L)
+        val limit = minOf(if (p.autoDlLimitMb > 0) p.autoDlLimitMb * 1_048_576L else Long.MAX_VALUE, room)
         val bps = bytesPerSecond()
         var used = 0L
         val kept = ArrayList<LocalItem>()

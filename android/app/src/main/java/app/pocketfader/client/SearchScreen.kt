@@ -457,9 +457,17 @@ private fun DeviceTab() {
                 Text("Downloaded · ${saved.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text(
                     if (saved.isEmpty()) "Save songs from search, a playlist or the queue (⋮ → Download) to play them with no connection."
-                    else "Plays with no connection, lyrics included. " + formatBytes(saved.sumOf { it.size }),
+                    else "Plays with no connection, lyrics included. " + formatBytes(saved.sumOf { it.size }) +
+                        Downloads.freeBytes().let { f -> if (f >= 0) " · " + formatBytes(f) + " free on the phone" else "" },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val free = Downloads.freeBytes()
+                if (free in 0 until 1_073_741_824L) {
+                    Text(
+                        "The phone is almost full (${formatBytes(free)} free): downloads stop when it is.",
+                        Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 if (saved.isNotEmpty()) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { playOnPhone(savedItems, 0); AppNav.showPlayer() }) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play") }
                     FilledTonalButton(onClick = { playOnPhone(savedItems, savedItems.indices.random(), shuffle = true); AppNav.showPlayer() }) { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle") }
@@ -467,10 +475,7 @@ private fun DeviceTab() {
             }
         }
         if (active.isNotEmpty()) item(key = "dl-active") {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("Downloading ${active.size}…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LinearProgressIndicator(progress = { active.values.average().toFloat() }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-            }
+            DownloadsInProgress(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
         itemsIndexed(saved, key = { _, d -> "dl-" + d.videoId }) { i, d ->
             DeviceRow(d.art, d.title, d.artist, onClick = { playOnPhone(savedItems, i) }) {

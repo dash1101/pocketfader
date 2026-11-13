@@ -36,6 +36,30 @@ data class Download(
     fun toLocal() = LocalItem(videoId, File(file).toURI().toString(), title, artist, art, durationSec)
 }
 
+/** A song being saved: what it is, how far along (bytes; [total] -1 until known), and how fast (bytes a second, smoothed).
+ *  [started] is 0 while it waits its turn. */
+@androidx.compose.runtime.Immutable
+data class DlProgress(val item: LocalItem, val done: Long = 0, val total: Long = -1, val started: Long = 0, val bps: Double = 0.0) {
+    val fraction: Float get() = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f
+}
+
+/** All downloads at once: [count] songs to go ([running] of them now), [finished] already this round. */
+@androidx.compose.runtime.Immutable
+data class DlSummary(val count: Int, val running: Int, val finished: Int, val doneBytes: Long, val totalBytes: Long, val bps: Double,
+                     val secondsLeft: Long?) {
+    val fraction: Float get() = if (totalBytes > 0) (doneBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
+}
+
+/** "1.8 MB/s" */
+fun formatSpeed(bps: Double): String = if (bps >= 1_048_576) "%.1f MB/s".format(bps / 1_048_576) else "${(bps / 1024).toInt()} KB/s"
+
+/** "about 25 s left", "about 3 min left", "about 1 h 5 min left" */
+fun formatLeft(seconds: Long): String = when {
+    seconds < 60 -> "about ${seconds.coerceAtLeast(1)} s left"
+    seconds < 3600 -> "about ${(seconds + 30) / 60} min left"
+    else -> "about ${seconds / 3600} h ${(seconds % 3600 + 30) / 60} min left"
+}
+
 /**
  * Saving songs for offline listening. Files live in the app's own music folder (no storage permission needed; removed with
  * the app). The audio comes from the phone's own YouTube lookup, or from the computer when that fails.
@@ -51,6 +75,9 @@ object Downloads {
     /** Songs being saved now: video id -> progress 0..1 (0 while it starts). */
     private val _active = MutableStateFlow<Map<String, Float>>(emptyMap())
     val active: StateFlow<Map<String, Float>> = _active
+    /** The same songs with the details the screen shows: which song, bytes so far, speed. In the order they were asked for. */
+    private val _progress = MutableStateFlow<Map<String, DlProgress>>(emptyMap())
+    val progress: StateFlow<Map<String, DlProgress>> = _progress
 
     fun init(ctx: Context) {
         if (::dir.isInitialized) return
@@ -127,6 +154,7 @@ object Downloads {
         val todo = songs.filter { isYtId(it.videoId) && !isDownloaded(it.videoId) && it.videoId !in _active.value }.distinctBy { it.videoId }
         if (todo.isEmpty()) return
         _active.update { m -> m + todo.associate { it.videoId!! to 0f } }
+        _progress.update { m -> m + todo.associate { it.videoId!! to DlProgress(it) } }
         if (!auto || todo.size > 1) {
             Remote.notify(
                 if (todo.size == 1) "Downloading “${todo[0].title}”"
@@ -149,15 +177,30 @@ object Downloads {
         if (!_active.value.containsKey(item.videoId)) return         // cancelled while waiting
         val id = item.videoId ?: return
         try {
+            _progress.update { m -> m[id]?.let { m + (id to it.copy(started = android.os.SystemClock.elapsedRealtime())) } ?: m }
             // what we know about the song; fill the gaps from YouTube when needed
             val meta = if (item.title.isBlank() || item.artist.isBlank()) runCatching { Streams.details(id) }.getOrNull() ?: item else item
             val quality = Settings.prefs.value.dlQuality
             val src = try { Streams.fromPhone(id, quality) } catch (e: Exception) { Streams.fromComputer(id) ?: throw e }
             val audio = File(dir, "$id.${src.ext}")
-            fetch(src.url, src.headers, audio) { p -> _active.update { it + (id to p) } }
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            var lastT = t0
+            var lastDone = 0L
+            fetch(src.url, src.headers, audio) { got, total ->
+                val now = android.os.SystemClock.elapsedRealtime()
+                val dt = (now - lastT).coerceAtLeast(1)
+                val rate = (got - lastDone) * 1000.0 / dt
+                lastT = now; lastDone = got
+                _progress.update { m ->
+                    val p = m[id] ?: return@update m
+                    // smoothed, so the speed and the time left don't jump about with every piece
+                    m + (id to p.copy(done = got, total = total, bps = if (p.bps <= 0) rate else p.bps * 0.7 + rate * 0.3))
+                }
+                if (total > 0) _active.update { it + (id to (got.toFloat() / total).coerceIn(0f, 1f)) }
+            }
             // the cover, as large as YouTube gives it
             val artUrl = bigArt(meta.art ?: item.art)
-            val artFile = artUrl?.let { u -> runCatching { File(dir, "$id.jpg").also { fetch(u, emptyMap(), it) {} } }.getOrNull() }
+            val artFile = artUrl?.let { u -> runCatching { File(dir, "$id.jpg").also { fetch(u, emptyMap(), it) { _, _ -> } } }.getOrNull() }
             // the lyrics: from the computer if it's there (more sources, word timing), else straight from LRCLIB
             val lyrics = runCatching { Remote.lyricsJson(meta.title, meta.artist, meta.durationSec, id) }.getOrNull()
                 ?: runCatching { Lrclib.lookup(meta.title, meta.artist, meta.durationSec) }.getOrNull()
@@ -175,6 +218,7 @@ object Downloads {
             if (!quiet) Remote.notify("Couldn't download “${item.title}”: ${e.friendly()}")
         } finally {
             _active.update { it - id }
+            _progress.update { it - id }
             if (_active.value.isEmpty() && quiet && (done > 0 || failed > 0)) {
                 Remote.notify(if (failed == 0) "Downloads finished ($done)" else "Downloads finished: $done saved, $failed couldn't be downloaded")
                 done = 0; failed = 0
@@ -185,15 +229,39 @@ object Downloads {
     @Volatile private var done = 0
     @Volatile private var failed = 0
 
+    /** Songs saved since this round of downloads began (it ends when none are left). */
+    val finishedInRound: Int get() = done
+
+    /** Everything being saved, as one: songs, bytes so far and expected (a song not started yet counts by its length and
+     *  the download quality), speed, and seconds left (null until the speed is known). */
+    fun summary(p: Map<String, DlProgress> = _progress.value): DlSummary {
+        val bpsAudio = AutoDownload.bytesPerSecond()
+        var doneBytes = 0L
+        var total = 0L
+        var bps = 0.0
+        var running = 0
+        for (d in p.values) {
+            val expect = if (d.total > 0) d.total else AutoDownload.estimate(d.item, bpsAudio)
+            total += expect
+            doneBytes += d.done.coerceAtMost(expect)
+            if (d.started > 0) { running++; bps += d.bps }
+        }
+        val left = if (bps > 2_000) ((total - doneBytes) / bps).toLong() else null
+        return DlSummary(p.size, running, done, doneBytes, total, bps, left)
+    }
+
     /** Stop the downloads that haven't started yet (the one in progress finishes). */
-    fun cancelPending() { _active.update { m -> m.filterValues { it > 0f } } }
+    fun cancelPending() {
+        _progress.update { m -> m.filterValues { it.started > 0 } }
+        _active.update { m -> m.filterKeys { it in _progress.value } }
+    }
 
     /**
      * Fetches [url] into [to]. The file is asked for in pieces of a megabyte (Range requests): YouTube serves a whole
      * audio file in one request only at about playback speed, but pieces at full speed. Servers that don't do ranges get
      * one plain request.
      */
-    private fun fetch(url: String, headers: Map<String, String>, to: File, progress: (Float) -> Unit) {
+    private fun fetch(url: String, headers: Map<String, String>, to: File, progress: (done: Long, total: Long) -> Unit) {
         val part = File(to.path + ".part")
         val chunk = 1L shl 20
         var total = -1L
@@ -227,7 +295,7 @@ object Downloads {
                             out.write(buf, 0, n)
                             done += n
                             got += n
-                            if (total > 0 && done - lastShown > 256 * 1024) { lastShown = done; progress(done.toFloat() / total) }
+                            if (done - lastShown > 256 * 1024) { lastShown = done; progress(done, total) }
                         }
                     }
                     if (whole || total < 0) break                 // one plain answer, or a length we can't know: that was all
