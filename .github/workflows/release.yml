@@ -280,6 +280,7 @@ jobs:
         # newest release always work.
         run: |
           cd artifacts
+          rm -f dark-*.png light-*.png       # the pictures of the desktop window are for checking it, not for the release
           mv ytm-starcast-linux-x86_64.tar.gz "ytm-starcast-${GITHUB_REF_NAME}-linux-x86_64.tar.gz"
           mv ytm-starcast-windows-x64.zip "ytm-starcast-${GITHUB_REF_NAME}-windows-x64.zip"
           sha256sum * > SHA256SUMS.txt
