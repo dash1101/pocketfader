@@ -141,7 +141,7 @@ object Remote {
             if (carryOver && before.now?.videoId != null && list.isNotEmpty()) {
                 if (before.now.playing) transportComputer("playpause")
                 LocalPlayer.playItems(list, 0)
-                LocalPlayer.seek(pos.position + if (before.now.playing) (SystemClock.elapsedRealtime() - pos.at) / 1000.0 else 0.0)
+                LocalPlayer.seek(pos.positionAt(SystemClock.elapsedRealtime(), before.now.playing))
             } else {
                 LocalPlayer.publish()
             }
@@ -278,7 +278,7 @@ object Remote {
         val nowJson = if (remoteOn) ytm.optJSONObject("now") else null
         val now = parseNow(nowJson)
         val loc = local
-        if (!loc) _progress.value = Progress(parsePosition(nowJson), sampled)
+        if (!loc) _progress.value = Progress(parsePosition(nowJson), sampled, parseSpeed(nowJson))
         if (!loc && remoteOn && ytm.str("source") == "ytm") Library.observeComputer(now, parsePosition(nowJson))
         val queue = if (remoteOn) parseQueue(ytm) else emptyList()
         val source = if (remoteOn) ytm.str("source") else null

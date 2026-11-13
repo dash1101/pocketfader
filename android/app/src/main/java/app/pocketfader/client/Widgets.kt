@@ -281,11 +281,12 @@ object Widgets {
             val p = Remote.progress.value
             val playing = now?.playing == true
             val dur = now?.duration ?: 0.0
-            val pos = (p.position + if (playing) (SystemClock.elapsedRealtime() - p.at) / 1000.0 else 0.0).coerceIn(0.0, if (dur > 0) dur else 0.0)
+            val pos = p.positionAt(SystemClock.elapsedRealtime(), playing).coerceIn(0.0, if (dur > 0) dur else 0.0)
             v.setProgressBar(R.id.progress, 1000, if (dur > 0) ((pos / dur) * 1000).toInt().coerceIn(0, 1000) else 0, false)
-            // the elapsed time counts by itself on the home screen; the bar follows every few seconds
-            v.setChronometer(R.id.pos, SystemClock.elapsedRealtime() - (pos * 1000).toLong(), null, playing)
-            v.setTextViewText(R.id.dur, if (dur > 0) formatTime(dur) else "0:00")
+            // the elapsed time counts by itself on the home screen; the bar follows every few seconds. At another speed
+            // both times are how long it takes to hear, so the clock still runs at one second per second.
+            v.setChronometer(R.id.pos, SystemClock.elapsedRealtime() - (pos / p.rate * 1000).toLong(), null, playing)
+            v.setTextViewText(R.id.dur, if (dur > 0) formatTime(dur / p.rate) else "0:00")
             val canLike = s.ytm && isYtId(now?.videoId)
             v.setViewVisibility(R.id.like, if (canLike) android.view.View.VISIBLE else android.view.View.GONE)
             v.setImageViewResource(R.id.like, if (now?.liked == true) R.drawable.ic_w_like else R.drawable.ic_w_like_off)

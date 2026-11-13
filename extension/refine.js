@@ -688,6 +688,15 @@
     ytmusic-queue-header-renderer button:hover, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer:hover .gradient-box { filter: brightness(1.12); }
     ytmusic-queue-header-renderer button:active, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer:active a { border-radius: var(--pf-r-sm) !important; }
     ytmusic-queue-header-renderer button *, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer a * { color: inherit !important; fill: currentColor !important; }
+    ytmusic-responsive-header-renderer ytmusic-play-button-renderer, ytmusic-immersive-header-renderer ytmusic-play-button-renderer,
+    ytmusic-detail-header-renderer ytmusic-play-button-renderer {
+      background-color: var(--pf-accent) !important; color: var(--pf-on-accent) !important; --ytmusic-play-button-icon-color: var(--pf-on-accent);
+      border-radius: 30% !important; transition: border-radius var(--pf-t-long) var(--pf-spring), transform .15s, background-color .5s !important; }
+    ytmusic-responsive-header-renderer ytmusic-play-button-renderer:hover, ytmusic-immersive-header-renderer ytmusic-play-button-renderer:hover,
+    ytmusic-detail-header-renderer ytmusic-play-button-renderer:hover { border-radius: 50% !important; }
+    ytmusic-responsive-header-renderer ytmusic-play-button-renderer:active, ytmusic-immersive-header-renderer ytmusic-play-button-renderer:active { transform: scale(.92); }
+    ytmusic-responsive-header-renderer ytmusic-play-button-renderer *, ytmusic-immersive-header-renderer ytmusic-play-button-renderer *,
+    ytmusic-detail-header-renderer ytmusic-play-button-renderer * { color: var(--pf-on-accent) !important; fill: var(--pf-on-accent) !important; }
     tp-yt-paper-toggle-button #toggleContainer { width: 52px !important; height: 32px !important; }
     tp-yt-paper-toggle-button #toggleBar { box-sizing: border-box; top: 0 !important; height: 32px !important; border-radius: 16px !important; opacity: 1 !important;
       background: var(--pf-surface2) !important; border: 2px solid var(--pf-outline); transition: background-color .2s, border-color .2s; }

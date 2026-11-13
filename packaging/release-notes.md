@@ -6,6 +6,15 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.7
+
+- The Android app and the web app follow the playback speed too: at 0.8x a 3:00 song shows 3:45 in the player, the
+  mini player and the home-screen widget, as it does in YouTube Music and on Discord. The phone's lock screen moves its
+  progress at the speed the song plays.
+- Album and playlist pages' big play button takes the album's colours and shape (with Material You page parts on).
+- If an older, greyed-out YTM Starcast stays on the browser's extensions page after reloading, the setup steps in the
+  apps now say to remove it.
+
 ### What's new in 0.2.0-alpha.6
 
 Fixes from checking Refine on YouTube Music itself:

@@ -189,7 +189,7 @@ class PlaybackService : Service() {
                 )
                 .setState(
                     if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
-                    posMs, if (playing) 1f else 0f,
+                    posMs, if (playing) prog.rate.toFloat() else 0f,
                 )
                 .build()
         )

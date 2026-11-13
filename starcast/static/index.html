@@ -986,6 +986,10 @@ const PLAY = 'M8 5v14l11-7z', PAUSE = 'M6 5h4v14H6zm8 0h4v14h-4z';
 const ART_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#20212a"/><path d="M32 26v20a7 7 0 11-3-5.7V22l18-4v18a7 7 0 11-3-5.7V17z" fill="#4a4c5c"/></svg>');
 const fmt = s => { if (!isFinite(s) || s < 0) s = 0; const m = Math.floor(s/60), r = Math.floor(s%60); return m + ':' + String(r).padStart(2,'0'); };
+// At another speed the song's times are how long it takes to hear (0.8x: a 3:00 song shows 3:45), as in YouTube Music
+// and on Discord. Positions themselves stay in the song's time (seeking and the bar use them).
+const rateOf = (n) => { const r = n && Number(n.speed); return r >= 0.25 && r <= 4 ? r : 1; };
+const fmtAt = (s, n) => fmt(s / rateOf(n));
 
 let toastT;
 const WIDE_MQ = window.matchMedia('(min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape)');
@@ -1685,7 +1689,7 @@ function updateControlWidgets() {
     if (prog) {
       prog.hidden = !dur;
       const pos = Math.max(0, Math.min(dur, now.position || 0));
-      put(prog.querySelector('.pos'), fmt(pos)); put(prog.querySelector('.dur'), fmt(dur));
+      put(prog.querySelector('.pos'), fmtAt(pos, now)); put(prog.querySelector('.dur'), fmtAt(dur, now));
       prog.querySelector('i').style.width = (dur ? pos / dur * 100 : 0).toFixed(2) + '%';
     }
     w.querySelectorAll('.wcbtns button').forEach(b => { b.disabled = !live; });
@@ -2592,7 +2596,7 @@ function setRailTab() { paintRailBody(); }
 let holdSeek = false, lastNow = null, lastQueue = [];
 const seek = $('#seek');
 seek.addEventListener('pointerdown', () => holdSeek = true);
-seek.addEventListener('input', () => { const d = lastNow && lastNow.duration; if (d) $('#tpos').textContent = fmt(seek.value/1000*d); });
+seek.addEventListener('input', () => { const d = lastNow && lastNow.duration; if (d) $('#tpos').textContent = fmtAt(seek.value/1000*d, lastNow); });
 const endSeek = () => { if (!holdSeek) return; holdSeek = false; const d = lastNow && lastNow.duration;
   if (d) { const pos = seek.value / 1000 * d; ytm({ type:'transport', action:'seek', position: pos }, true);
     if (lastNow) lastNow.position = pos; seekSettleUntil = Date.now() + 1600; } };
@@ -2875,7 +2879,7 @@ $('.artwrap').addEventListener('click', (ev) => {
       const pos = Math.max(0, Math.min(lastNow.duration, (lastNow.position || 0) + side * seekSecs));
       ytm({ type:'transport', action:'seek', position: pos }, true);
       lastNow.position = pos; seekSettleUntil = Date.now() + 1600;
-      if (!holdSeek) { seek.value = Math.round(pos / lastNow.duration * 1000); $('#tpos').textContent = fmt(pos); }
+      if (!holdSeek) { seek.value = Math.round(pos / lastNow.duration * 1000); $('#tpos').textContent = fmtAt(pos, lastNow); }
     }
     flashSeek(side);
   } else { lastTap = now; lastSide = side; }
@@ -3069,7 +3073,7 @@ function paintNow(now, queue) {
   $('#mini-t').textContent = has ? now.title : 'Nothing playing';
   $('#mini-s').textContent = has ? (now.artist || '') : '';
   $('#mini-pp-icon').firstElementChild.setAttribute('d', now && now.playing ? PAUSE : PLAY);
-  $('#mini-time').textContent = (has && now.duration) ? fmt(now.position || 0) + ' - ' + fmt(now.duration) : '';
+  $('#mini-time').textContent = (has && now.duration) ? fmtAt(now.position || 0, now) + ' - ' + fmtAt(now.duration, now) : '';
   // Hidden when nothing's playing, and stays hidden after you swipe it away until
   // playback actually starts again.
   if (cardDismissed && now && now.playing) cardDismissed = false;
@@ -3079,8 +3083,8 @@ function paintNow(now, queue) {
   $('#npbar-t').textContent = has ? now.title : '';
   $('#npbar-pp-icon').firstElementChild.setAttribute('d', now && now.playing ? PAUSE : PLAY);
   const dur = (now && now.duration) || 0;
-  $('#tdur').textContent = fmt(dur); seek.disabled = !dur;
-  if (!holdSeek && Date.now() > seekSettleUntil) { $('#tpos').textContent = fmt((now && now.position) || 0);
+  $('#tdur').textContent = fmtAt(dur, now); seek.disabled = !dur;
+  if (!holdSeek && Date.now() > seekSettleUntil) { $('#tpos').textContent = fmtAt((now && now.position) || 0, now);
     seek.value = dur ? Math.round(((now && now.position)||0)/dur*1000) : 0; }
   updateControlWidgets();
   markNowPlaying();

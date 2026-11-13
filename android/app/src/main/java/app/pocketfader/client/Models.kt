@@ -27,9 +27,14 @@ data class Now(
     val autoplay: Boolean? = null,     // null: this extension version doesn't report it
 )
 
-/** Playback position as last reported by the computer, and when (SystemClock.elapsedRealtime). */
+/** Playback position as last reported by the computer, when (SystemClock.elapsedRealtime), and how fast the song plays
+ *  (1 = its own speed; 0.8 = slowed down: the position moves 0.8 s per second). */
 @Immutable
-data class Progress(val position: Double = 0.0, val at: Long = 0L)
+data class Progress(val position: Double = 0.0, val at: Long = 0L, val rate: Double = 1.0)
+
+/** Where the song is at [clock], counting on from the last report while it plays. */
+fun Progress.positionAt(clock: Long, playing: Boolean): Double =
+    position + if (playing) (clock - at) / 1000.0 * rate else 0.0
 
 @Immutable
 data class Track(
@@ -148,6 +153,10 @@ fun parseNow(o: JSONObject?): Now? {
 
 fun parsePosition(o: JSONObject?): Double =
     o?.optDouble("position", 0.0)?.let { if (it.isNaN()) 0.0 else it } ?: 0.0
+
+/** The playback speed YouTube Music reports (1 when it says nothing sensible). */
+fun parseSpeed(o: JSONObject?): Double =
+    o?.optDouble("speed", 1.0)?.let { if (it.isNaN() || it < 0.25 || it > 4.0) 1.0 else it } ?: 1.0
 
 fun parseQueue(o: JSONObject): List<Track> =
     o.optJSONArray("queue").mapObjects { q ->

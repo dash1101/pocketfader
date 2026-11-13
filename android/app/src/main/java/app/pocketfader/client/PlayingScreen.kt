@@ -313,10 +313,11 @@ private fun SeekBar(duration: Double, playing: Boolean, wavy: Boolean) {
         }
     }
     val clock = maxOf(tick, progress.at)
-    val elapsed = if (playing) (clock - progress.at) / 1000.0 else 0.0
-    val pos = (progress.position + elapsed).coerceIn(0.0, if (duration > 0) duration else 0.0)
+    val pos = progress.positionAt(clock, playing).coerceIn(0.0, if (duration > 0) duration else 0.0)
     val fraction = if (duration > 0) (pos / duration).toFloat() else 0f
     val shown = drag ?: fraction
+    // at another speed the times are how long it takes to hear (0.8x: a 3:00 song shows 3:45), as in YouTube Music
+    val rate = progress.rate
 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         WavySeekBar(
@@ -333,8 +334,8 @@ private fun SeekBar(duration: Double, playing: Boolean, wavy: Boolean) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             // figures of one width, so the time doesn't shiver as the seconds change
             val timeStyle = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
-            Text(formatTime(shown * duration), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(formatTime(duration), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatTime(shown * duration / rate), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatTime(duration / rate), style = timeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -548,8 +549,7 @@ private fun rememberTrackFraction(duration: Double, playing: Boolean, everyMs: L
         }
     }
     val clock = maxOf(tick, progress.at)
-    val elapsed = if (playing) (clock - progress.at) / 1000.0 else 0.0
-    val pos = (progress.position + elapsed).coerceIn(0.0, if (duration > 0) duration else 0.0)
+    val pos = progress.positionAt(clock, playing).coerceIn(0.0, if (duration > 0) duration else 0.0)
     return if (duration > 0) (pos / duration).toFloat() else 0f
 }
 

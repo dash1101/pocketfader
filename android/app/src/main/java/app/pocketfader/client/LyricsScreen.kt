@@ -129,7 +129,7 @@ fun rememberActiveLine(lines: List<LyricLine>, synced: Boolean, playing: Boolean
             if (!synced) return@derivedStateOf -1
             val p = progress.value
             val clock = maxOf(tick, p.at)
-            val pos = p.position + (if (playing) (clock - p.at) / 1000.0 else 0.0) + offsetMs / 1000.0 + 0.1
+            val pos = p.positionAt(clock, playing) + offsetMs / 1000.0 + 0.1
             var lo = 0
             var hi = lines.size - 1
             var found = -1
@@ -337,7 +337,7 @@ private fun WordLine(ln: LyricLine, size: Int, playing: Boolean, offsetMs: Int, 
     val off = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
     val p = progress.value
     val clock = maxOf(tick, p.at)
-    val pos = p.position + (if (playing) (clock - p.at) / 1000.0 else 0.0) + offsetMs / 1000.0 + 0.1
+    val pos = p.positionAt(clock, playing) + offsetMs / 1000.0 + 0.1
     val text = buildAnnotatedString {
         for (w in ln.words.orEmpty()) {
             val f = ((pos - w.start) / (w.end - w.start).coerceAtLeast(0.05)).coerceIn(0.0, 1.0)
