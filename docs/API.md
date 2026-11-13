@@ -28,7 +28,7 @@ status, `capabilities.beacon`, the `pf_token` cookie), so apps already on phones
 | `GET /api/outputs` | `{outputs: [{name, description, percent, muted, default, kind, form_factor, state}], default}`: every playback device with its own level. `501` when the audio backend can't switch outputs (`capabilities.outputs`). |
 | `GET /api/update[?refresh=1]` | The newest release on GitHub and whether it's newer than this server: `{current, latest, available, notes, url, apk, wheel, self_update}`. The computer does the asking, so phones need no GitHub login. |
 | `GET /api/update/apk` | The newest Android app (checked against the release's `SHA256SUMS.txt`) for the app to install. |
-| `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
+| `GET /api/lyrics?title=&artist=&album=&duration=&videoId=&source=&refresh=1` | Lyrics for a track (below). `title` is required; `source` is `kugou`, `lrclib`, `netease` or `ytm`; `refresh=1` asks every source again. |
 | `GET /api/media/audio/<videoId>` | The song's audio, fetched with yt-dlp on the computer and cached (Range requests supported). The phone uses it when it can't get a song itself. `capabilities.audio` says whether yt-dlp is available. |
 | `GET /api/beacon` | Discord status (see [Discord status](#discord-status)). |
 
@@ -60,9 +60,10 @@ every part counts as on. `capabilities.beacon` stays `true` because older apps s
 {
   "found": true,
   "source": "lrclib",                       // the one returned in `lyrics`
-  "sources": [{"id": "lrclib", "label": "LRCLIB", "found": true, "synced": true},
-              {"id": "netease", "label": "NetEase", "found": true, "synced": true},
-              {"id": "ytm", "label": "YouTube Music", "found": false, "synced": false}],
+  "sources": [{"id": "kugou", "label": "KuGou", "found": false, "pending": false, "synced": false, "words": false},
+              {"id": "lrclib", "label": "LRCLIB", "found": true, "pending": false, "synced": true, "words": false},
+              {"id": "netease", "label": "NetEase", "found": true, "pending": false, "synced": true, "words": true},
+              {"id": "ytm", "label": "YouTube Music", "found": false, "pending": false, "synced": false, "words": false}],
   "lyrics": {
     "source": "lrclib", "label": "LRCLIB", "synced": true, "credit": "Source: LyricFind",   // credit is optional
     "lines": [{"t": 12.4, "text": "…", "rom": "…romanized…", "tr": "…translation…",
@@ -72,8 +73,11 @@ every part counts as on. `capabilities.beacon` stays `true` because older apps s
 }
 ```
 
-The server asks the sources at the same time (`kugou` gives word-by-word timing), answers as soon as something
-time-synced is in, and keeps everything for a few hours, so switching `source` is instant. It also looks up the current
+The server asks the sources at the same time (`kugou` and `netease` give word-by-word timing for many songs; LRCLIB's
+"enhanced" lyrics keep theirs too), answers as soon as something time-synced is in, and keeps everything for a few hours,
+so switching `source` is instant. Without `source`, word by word beats line by line beats plain text; a time-synced
+answer with less than half the lines of another one (a wrong song, an "instrumental" placeholder) comes last. Credit
+lines some sources put before the lyrics ("Composer: …") are left out. It also looks up the current
 track and the next two in the background when the track changes. When the chosen source has no romanization or
 translation, the lines borrow them from another source by timestamp. Only the title, artist, album and length are sent
 to those services. Sources are third-party and best-effort. `capabilities.lyrics` is `true` on servers that have this
@@ -214,7 +218,7 @@ times out is dropped, not run later.
 | Endpoint | Body | Notes |
 |---|---|---|
 | `GET /ext/poll?i=<tab>` | — | Long poll (≤ 25 s). Replies with a command `{id, type, …}`, or with no `id` when there is none; both carry `"cfg": {"remote", "discord", "refine"}`. A waiting poll is answered at once when one of those switches changes or another tab says goodbye. Each poll also tells Discord status the tab is still open (a paused tab sends nothing else). A tab that hasn't reported since the server started gets `"resend": true` once, at once, and answers by sending its whole state again. |
-| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. |
+| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, speed, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Discord status divides `position` and `duration` by `speed` (the playback rate, 0.25 to 4; anything else counts as 1), so its times run at the pace the song is heard. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. |
 | `POST /ext/result` | `{id, data}` | The answer to a command. |
 | `POST /ext/bye` | `{"instance": "<tab>"}` | The tab is closing or leaving the page (sent on `pagehide`, as `text/plain`). The server forgets that tab at once, and clears its Discord card. Replies `{"ok": true}`; `400` without `instance`. |
 | `GET /ext/discord` | — | For the extension's Discord status options: the same reply as `GET /api/beacon`. |
@@ -222,6 +226,8 @@ times out is dropped, not run later.
 | `GET /ext/status` | — | For the extension's toolbar button and Refine's panel: `{"app": "YTM Starcast", "version", "parts": {...all four}, "discord": {"headline", "visible", "state"}}`. `headline` uses the values above; it is `off` while `parts.discord` is off. |
 | `POST /ext/parts` | any subset of `remote`, `discord`, `refine` (booleans) | Same as `POST /api/parts`; replies `{"parts": {...}}`. The extension may not switch `audio` (`400`). |
 | `GET /ext/lyrics` | — | `/api/lyrics` for the extension's live lyrics inside YouTube Music (same parameters and answer). |
+| `GET /ext/sound` | — | The computer's sound for Refine's panel: `{"audio": true, "volume": {...}, "outputs": [...] or null, "engine": {...}, "engineLabel", "limits": {"eq_min", "eq_max"}, "capabilities": {"volume", "eq", "eq_toggle", "outputs"}}`, the same values as `/api/state` and `/api/outputs`. Only `{"audio": false}` while the "Computer audio" part is off. |
+| `POST /ext/sound/volume`, `/ext/sound/output`, `/ext/sound/output/volume`, `/ext/sound/eq` | as `/api/volume`, `/api/output`, `/api/output/volume`, `/api/eq` | The extension's copies of those routes (YouTube Music's origin, loopback only), with the same checks and replies; `409 {"error": "part_off"}` while "Computer audio" is off. From the page, the extension's script passes a change on only right after a real press, drag or key inside Refine's sound controls. |
 
 POSTs must come from `https://music.youtube.com` (the extension's content script) or send no `Origin`; requests from the
 extension's own pages are refused, so its toolbar button goes through an open YouTube Music tab.

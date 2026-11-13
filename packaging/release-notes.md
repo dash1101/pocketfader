@@ -6,6 +6,32 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.4
+
+**Live lyrics, word by word, in YouTube Music's Lyrics tab**
+- Refine's lyrics now fill YouTube Music's own Lyrics tab next to Up next, also for songs where YouTube Music has none;
+  the separate lyrics button is gone.
+- One button moves them into a window that can be dragged anywhere, resized, pinned (it stays put and comes back after a
+  reload) or kept above other windows, and back into the tab.
+- Many more songs are timed word by word: NetEase's word timings are used now, alongside KuGou's. Songs timed only line
+  by line get their words estimated, so the line still fills as it is sung (Options → Words).
+- Options per song: pick the source, and move the lyrics earlier or later.
+- Fixed: after starting another song from the home page, the lyrics could keep saying "Play a song to see its lyrics".
+- A one-line "instrumental" placeholder no longer wins over real lyrics, and credit lines ("Composer: …") are left out.
+
+**Slowed songs**
+- The speed now stays from song to song (and after a reload) until it is changed; YouTube Music used to put its own back.
+- **Clear slowed sound**: slowed songs keep their pitch without the smeared, warbly sound of the browser's own way.
+- **Room**: a soft reverb for a "slowed + reverb" sound.
+- At another speed the times follow it, in the player bar and on Discord: a 3:00 song at 0.8x shows 3:45.
+
+**Refine**
+- Animations: new pages rise in shelf by shelf, cards and buttons answer a press, menus drop in, a new song slides into
+  the player bar, and the tabs beside the player move into place. They follow the system's reduced-motion setting.
+- **Computer sound** in the ✦ menu: the computer's volume, output and equalizer (on/off, presets, bass, mid, treble), as
+  in YTM Starcast's mixer.
+- The extension's toolbar button takes on Refine's look and the colours of the album that plays.
+
 ### What's new in 0.2.0-alpha.3
 
 **Discord status: everything YTM Beacon had, and more**

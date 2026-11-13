@@ -43,6 +43,11 @@ def _json(text):
 
 
 # ------------------------------------------------------------------ LRC
+# Credit lines some providers put before the lyrics ("作词 : ...", "Composer: ...") aren't lyrics.
+_CREDIT = re.compile(r"^\s*(作词|作曲|编曲|制作人|監製|监制|混音|母带|和声|吉他|贝斯|鼓|录音|出品|发行|词|曲|"
+                     r"lyricist|lyrics by|composer|composed by|producer|produced by|arranger|arranged by)\s*[:：]", re.I)
+
+
 _STAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 _TAG = re.compile(r"^\[[A-Za-z]+:[^\]]*\]$")
 _WORD = re.compile(r"<\d+:\d+(?:[.:]\d+)?>")
@@ -64,6 +69,43 @@ def parse_lrc(text):
             t = int(m) * 60 + int(s) + (int(frac.ljust(3, "0")[:3]) / 1000.0 if frac else 0.0)
             out.append((t, body))
     out.sort(key=lambda x: x[0])
+    return out
+
+
+_ELRC_WORD = re.compile(r"<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>")
+
+
+def _stamp(m, s, frac):
+    return int(m) * 60 + int(s) + (int(frac.ljust(3, "0")[:3]) / 1000.0 if frac else 0.0)
+
+
+def lrc_words(text):
+    """Word timings from an "enhanced" LRC ([mm:ss.xx] <mm:ss.xx>word <mm:ss.xx>word ...), keyed by line time:
+    {seconds: [[start, end, word], ...]}. A word ends where the next one starts; the last one where the next line
+    starts (at most 2 s later). Lines without word stamps are left out."""
+    rows = []
+    for raw in (text or "").splitlines():
+        raw = raw.strip()
+        stamps = _STAMP.findall(raw)
+        if not stamps or "<" not in raw:
+            continue
+        body = _STAMP.sub("", raw)
+        parts = _ELRC_WORD.split(body)
+        # parts: [lead, m, s, frac, word, m, s, frac, word, ...]
+        words = [[_stamp(parts[i], parts[i + 1], parts[i + 2]), parts[i + 3]] for i in range(1, len(parts) - 3, 4)]
+        words = [w for w in words if w[1].strip()]
+        if words:
+            for st in stamps:
+                rows.append((_stamp(*st), words))
+    rows.sort(key=lambda r: r[0])
+    out = {}
+    for i, (t, words) in enumerate(rows):
+        nxt = rows[i + 1][0] if i + 1 < len(rows) else words[-1][0] + 2.0
+        w = []
+        for k, (start, word) in enumerate(words):
+            end = words[k + 1][0] if k + 1 < len(words) else min(nxt, start + 2.0)
+            w.append([round(start, 2), round(max(end, start), 2), word])
+        out[round(t, 2)] = w
     return out
 
 
@@ -90,9 +132,14 @@ def _result(source, label, synced_text=None, plain_text=None, translation=None, 
     lines = list(lines) if lines else []
     if synced_text:
         lines = [{"t": round(t, 2), "text": s} for t, s in parse_lrc(synced_text)]
+        words = lrc_words(synced_text) if "<" in synced_text else {}
+        for ln in lines:
+            if ln["t"] in words and ln["text"]:
+                ln["w"] = words[ln["t"]]
     synced = bool(lines) and any(ln.get("t") is not None for ln in lines)
     if not lines and plain_text:
         lines = _plain_lines(plain_text)
+    lines = [ln for ln in lines if not _CREDIT.match(ln["text"])]
     if not any(ln["text"].strip() for ln in lines):
         return None
     _attach(lines, translation, "tr")
@@ -180,12 +227,18 @@ def netease(fetch, title, artist, album, duration, **_):
             best, best_score = c, sc
     if not best:
         return None
-    lyr = _json(fetch("https://music.163.com/api/song/lyric?" +
-                      urlencode({"id": best["id"], "lv": 1, "kv": 1, "tv": -1, "rv": 1}), _NE_HEADERS))
+    lyr = _json(fetch("https://music.163.com/api/song/lyric/v1?" +
+                      urlencode({"id": best["id"], "lv": 1, "kv": 1, "tv": -1, "rv": -1, "yv": 1}), _NE_HEADERS))
+    if not isinstance(lyr, dict) or not ((lyr.get("lrc") or {}).get("lyric")):
+        lyr = _json(fetch("https://music.163.com/api/song/lyric?" +
+                          urlencode({"id": best["id"], "lv": 1, "kv": 1, "tv": -1, "rv": 1}), _NE_HEADERS))
     if not isinstance(lyr, dict):
         return None
     pick = lambda k: ((lyr.get(k) or {}).get("lyric") or "")  # noqa: E731
     main = pick("lrc")
+    words = parse_yrc(pick("yrc"))
+    if words and any(ln["text"] for ln in words):
+        return _result("netease", "NetEase", lines=words, translation=pick("tlyric"), roman=pick("romalrc"))
     if not main:
         return None
     return _result("netease", "NetEase", synced_text=main if _STAMP.search(main) else None,
@@ -211,6 +264,18 @@ _KRC_WORD = re.compile(r"<(\d+),(\d+),\d+>([^<]*)")
 _KG_HEADERS = {"User-Agent": _BROWSER_UA}
 
 
+def _with_gaps(out):
+    """Lines (each with an "end") -> lines with a ♪ line wherever the music plays on its own for a while."""
+    lines = []
+    prev_end = 0.0
+    for ln in out:
+        if ln["t"] - prev_end > 5.0:
+            lines.append({"t": round(prev_end + 0.5, 2), "text": ""})
+        lines.append({k: v for k, v in ln.items() if k != "end"})
+        prev_end = ln["end"]
+    return lines
+
+
 def parse_krc(text):
     """KRC text -> lines with per-word timings, plus gap lines for long instrumental breaks."""
     out = []
@@ -222,17 +287,33 @@ def parse_krc(text):
         words = [[round((start + int(o)) / 1000.0, 2), round((start + int(o) + int(d)) / 1000.0, 2), w]
                  for o, d, w in _KRC_WORD.findall(body)]
         line = "".join(w[2] for w in words).strip() if words else _KRC_WORD.sub("", body).strip()
-        if not line:
+        if not line or _CREDIT.match(line):
             continue
         out.append({"t": round(start / 1000.0, 2), "end": round((start + dur) / 1000.0, 2), "text": line, "w": words})
-    lines = []
-    prev_end = 0.0
-    for ln in out:                                  # a ♪ line wherever the music plays on its own for a while
-        if ln["t"] - prev_end > 5.0:
-            lines.append({"t": round(prev_end + 0.5, 2), "text": ""})
-        lines.append({k: v for k, v in ln.items() if k != "end"})
-        prev_end = ln["end"]
-    return lines
+    return _with_gaps(out)
+
+
+_YRC_LINE = re.compile(r"^\[(\d+),(\d+)\](.*)$")
+_YRC_WORD = re.compile(r"\((\d+),(\d+),-?\d+\)([^(]*)")
+
+
+def parse_yrc(text):
+    """NetEase's word-by-word format ([start,duration](start,duration,0)word ...; times in milliseconds, credits as
+    JSON lines, which are skipped) -> lines with per-word timings, plus gap lines."""
+    out = []
+    for raw in (text or "").splitlines():
+        m = _YRC_LINE.match(raw.strip())
+        if not m:
+            continue
+        start, dur, body = int(m.group(1)), int(m.group(2)), m.group(3)
+        words = [[round(int(a) / 1000.0, 2), round((int(a) + int(d)) / 1000.0, 2), w] for a, d, w in _YRC_WORD.findall(body)]
+        words = [w for w in words if w[2]]
+        line = "".join(w[2] for w in words).strip()
+        if not line or _CREDIT.match(line):
+            continue
+        out.append({"t": round(start / 1000.0, 2), "end": round((start + dur) / 1000.0, 2), "text": line, "w": words})
+    out.sort(key=lambda ln: ln["t"])
+    return _with_gaps(out)
 
 
 def kugou(fetch, title, artist, album, duration, **_):
@@ -262,7 +343,8 @@ def kugou(fetch, title, artist, album, duration, **_):
     except (KeyError, ValueError, zlib.error):
         return None
     lines = parse_krc(text)
-    if not any(ln["text"] for ln in lines):
+    real = [ln for ln in lines if ln["text"]]
+    if not real or (len(real) <= 2 and any("纯音乐" in ln["text"] for ln in real)):
         return None
     return _result("kugou", "KuGou", lines=lines)
 
@@ -271,14 +353,21 @@ _FUNCS = {"kugou": kugou, "lrclib": lrclib, "netease": netease, "ytm": ytm}
 
 
 # ------------------------------------------------------------------ service
+def _lines(r):
+    return sum(1 for ln in r["lines"] if ln["text"].strip())
+
+
 def _best(results):
-    """word-by-word beats line-synced beats plain, in provider order."""
+    """word-by-word beats line-synced beats plain, in provider order. A time-synced result with less than half the
+    lines of another one (a wrong song, an "instrumental" placeholder) only comes after the others."""
     found = [results[p] for p, _ in PROVIDERS if results.get(p)]
+    most = max((_lines(r) for r in found if r["synced"]), default=0)
+    good = [r for r in found if not (r["synced"] and _lines(r) * 2 < most)]
     for pred in (lambda r: r["synced"] and any("w" in ln for ln in r["lines"]), lambda r: r["synced"], lambda r: True):
-        for r in found:
+        for r in good:
             if pred(r):
                 return r
-    return None
+    return found[0] if found else None
 
 
 class _Entry:

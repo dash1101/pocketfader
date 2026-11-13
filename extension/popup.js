@@ -25,6 +25,30 @@ const DISCORD_TEXT = {
 };
 const DISCORD_DEFAULT = $("discord").textContent;
 
+// ------------------------------------------------------------------ colours: the same as Refine's in YouTube Music
+// Refine picks a hue from the album art of the song playing; the extension's script keeps the last one, and the
+// popup takes on the same tones (and follows along while it is open).
+const hsl = (h, s, l, a) => `hsl(${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%${a != null ? " / " + a : ""})`;
+function palette(hue, vivid) {
+  const c = vivid < 0.12 ? 0.3 : 1;   // a grey cover gives nearly neutral tones
+  return {
+    accent: hsl(hue, 78 * c, 76), onAccent: hsl(hue, 62 * c, 15), track: hsl(hue, 40 * c, 76, 0.28),
+    container: hsl(hue, 42 * c, 27), onContainer: hsl(hue, 78 * c, 90),
+    surface: hsl(hue, 14 * c, 7), surface1: hsl(hue, 14 * c, 10), surface2: hsl(hue, 15 * c, 13), surface3: hsl(hue, 16 * c, 17),
+    outline: hsl(hue, 10 * c, 34), text: hsl(hue, 18 * c, 93), muted: hsl(hue, 10 * c, 72), glow: hsl(hue, 85 * c, 55, 0.55),
+  };
+}
+function takePalette(p) {
+  const ok = p && typeof p === "object" && isFinite(p.h) && isFinite(p.s);
+  const pal = ok ? palette(Number(p.h), Number(p.s)) : palette(352, 1);
+  const st = document.documentElement.style;
+  for (const [k, v] of Object.entries(pal)) st.setProperty("--pf-" + k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()), v);
+}
+try {
+  Promise.resolve(ext.storage.local.get("palette")).then((r) => takePalette(r && r.palette)).catch(() => {});
+  ext.storage.onChanged.addListener((changes, area) => { if (area === "local" && changes.palette) takePalette(changes.palette.newValue); });
+} catch (e) { /* no storage: Refine's default colours from popup.css */ }
+
 let lastTab = null;          // the tab that answered last time is asked first
 let parts = null;            // the switches as the app last said (null: not known, or an older app = all on)
 let ok = false;              // the switches can be changed right now

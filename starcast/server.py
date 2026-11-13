@@ -150,6 +150,23 @@ class App:
             "extension": self.extension_brief(),
         }
 
+    def sound_brief(self):
+        """The computer's sound for Refine's panel: the same volume, outputs and EQ the remote's mixer shows. With the
+        "Computer audio" part switched off it says only that."""
+        if not self.parts()["audio"]:
+            return {"audio": False}
+        st = self.state()
+        outs = None
+        if hasattr(self.audio, "outputs"):
+            try:
+                outs = self.audio.outputs()
+            except Exception:
+                outs = None
+        caps = st["capabilities"]
+        return {"audio": True, "volume": st["volume"], "outputs": outs, "engine": st["engine"],
+                "engineLabel": self.engine.label, "limits": st["limits"],
+                "capabilities": {k: caps[k] for k in ("volume", "eq", "eq_toggle", "outputs")}}
+
     def extension_brief(self):
         """Enough for the apps to know whether to show the extension's setup (the full status: /api/extension)."""
         try:
@@ -616,6 +633,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, reply)
         if path == "/ext/discord":   # every Discord status option, for the extension's popup and Refine's panel
             return self._json(200, app.beacon.status())
+        if path == "/ext/sound":   # the computer's sound (volume, outputs, EQ) for Refine's panel
+            return self._json(200, app.sound_brief())
         if path == "/ext/status":   # the extension's toolbar popup and Refine's panel
             parts = app.parts()
             return self._json(200, {"app": APP_NAME, "version": __version__, "parts": parts,
@@ -790,6 +809,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "minutes must be 1 to 720, \"track\", or 0 to cancel"})
             return self._json(200, {"remainingSec": app.sleep_left()})
 
+        # Refine's panel changes the computer's sound through its own copies of these routes (the same checks and
+        # replies), and only while the "Computer audio" part is on.
+        if path in ("/ext/sound/volume", "/ext/sound/output", "/ext/sound/output/volume", "/ext/sound/eq"):
+            if not app.parts()["audio"]:
+                return self._json(409, {"error": "part_off"})
+            path = "/api/" + path[len("/ext/sound/"):]
         if path == "/api/volume":
             if not app.audio.snapshot().get("available"):
                 return self._json(503, {"error": "no audio output available"})

@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "YTM Starcast",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "http://127.0.0.1:8777/*",
     "http://localhost:8777/*",
@@ -26,6 +29,7 @@
       "js": [
         "ytm_main.js",
         "discord_ui.js",
+        "stretch.js",
         "refine.js"
       ],
       "world": "MAIN",
@@ -40,6 +44,16 @@
       ],
       "world": "ISOLATED",
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "stretch.js"
+      ],
+      "matches": [
+        "https://music.youtube.com/*"
+      ]
     }
   ],
   "icons": {

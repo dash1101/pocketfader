@@ -50,6 +50,13 @@
       if (cfg) window.postMessage({ __vmr: "cfg", cfg }, "*");
     } else if (d.__vmr === "starcast" && typeof d.id === "string") {
       starcastForPage(d.id.slice(0, 40), d);
+    } else if (d.__vmr === "palette") {
+      keepPalette(d.palette);
+    } else if (d.__vmr === "asset" && typeof d.id === "string") {
+      // the address of the clear-slowed-sound processor (the only file the page may ask for)
+      let url = null;
+      try { if (d.name === "stretch.js") url = chrome.runtime.getURL("stretch.js"); } catch (e) {}
+      window.postMessage({ __vmr: "asset-result", id: d.id.slice(0, 40), url }, "*");
     }
   });
 
@@ -69,6 +76,18 @@
       data = { error: "offline" };
     }
     window.postMessage({ __vmr: "lyrics-result", id, data }, "*");
+  }
+
+  // Refine's colours (a hue and how vivid the cover is), kept for the toolbar popup, which takes on the same look.
+  let paletteT = 0;
+  function keepPalette(p) {
+    if (!p || typeof p !== "object") return;
+    const h = Number(p.h), s = Number(p.s);
+    if (!isFinite(h) || !isFinite(s)) return;
+    clearTimeout(paletteT);
+    paletteT = setTimeout(() => {
+      try { chrome.storage.local.set({ palette: { h: ((Math.round(h) % 360) + 360) % 360, s: Math.max(0, Math.min(1, s)), at: Date.now() } }); } catch (e) {}
+    }, 300);
   }
 
   function post(path, obj) {
@@ -124,7 +143,7 @@
   function twin() {
     try { return !!document.documentElement.getAttribute("data-starcast-twin"); } catch (e) { return false; }
   }
-  // Only the three switches, only as true/false; the computer's audio controls can't be changed from here.
+  // Only the three switches, only as true/false (the "Computer audio" switch itself can't be changed from here).
   async function setParts(parts) {
     const body = {};
     if (parts && typeof parts === "object") for (const k of PARTS) if (typeof parts[k] === "boolean") body[k] = parts[k];
@@ -208,11 +227,49 @@
     dcPressAt = 0;
     return !!ok;
   }
+  // ---- the computer's sound (volume, output, equalizer), for Refine's panel ----
+  async function sound() {
+    try {
+      const r = await call("/ext/sound", { method: "GET" });
+      if (r.status === 404) return { error: "old_app", app: await appInfo() };
+      const j = await r.json().catch(() => null);
+      return r.ok && j && typeof j === "object" ? { sound: j } : { error: "failed" };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+  const SOUND_ROUTES = { volume: "volume", output: "output", outputVolume: "output/volume", eq: "eq" };
+  async function soundSet(kind, body) {
+    if (!Object.prototype.hasOwnProperty.call(SOUND_ROUTES, kind)) return { error: "bad_request" };
+    const b = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+    try {
+      const r = await call("/ext/sound/" + SOUND_ROUTES[kind], { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+      if (r.status === 404 && kind !== "output") return { error: "old_app", app: await appInfo() };
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return { error: (j && (j.message || j.error)) || "failed" };
+      return { ok: true };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+  // From the page, the computer's sound changes only while someone is really using Refine's sound controls: a press, a
+  // drag or a key the browser itself made (isTrusted) inside them in the last moment. Sliders send many changes per drag,
+  // so a press isn't used up by one.
+  let sndPressAt = 0;
+  function noteSndPress(ev) {
+    if (!ev.isTrusted) return;
+    try { if (ev.target && ev.target.closest && ev.target.closest("[data-pf-snd]")) sndPressAt = performance.now(); } catch (e) {}
+  }
+  for (const type of ["pointerdown", "pointermove", "pointerup", "keydown", "input", "change"]) document.addEventListener(type, noteSndPress, true);
+  const sndPressed = () => !!sndPressAt && performance.now() - sndPressAt < 1500;
+
   async function starcastForPage(id, d) {
     const data = d.op === "status" ? await status()
       : d.op === "parts" ? (pressedFor(d.parts) ? await setParts(d.parts) : { error: "needs_press" })
       : d.op === "discord" ? await discord()
       : d.op === "discordSet" ? (dcPressed() ? await discordSet(d.kind, d.body) : { error: "needs_press" })
+      : d.op === "sound" ? await sound()
+      : d.op === "soundSet" ? (sndPressed() ? await soundSet(d.kind, d.body) : { error: "needs_press" })
       : { error: "bad_request" };
     window.postMessage({ __vmr: "starcast-result", id, data }, "*");
   }

@@ -118,6 +118,16 @@ class BridgeTests(Base):
         np = p.status()["nowPlaying"]
         self.assertEqual((np["position"], np["duration"]), (0.0, 0.0), "numbers of the wrong type become 0")
 
+    def test_times_follow_the_playback_speed(self):
+        p = self.presence()
+        p.update_from_bridge("t", now_obj(position=40, duration=200, speed=0.8))
+        np = p.status()["nowPlaying"]
+        self.assertEqual((np["position"], np["duration"]), (50.0, 250.0), "slowed to 0.8x: 200 s of song take 250 s")
+        for odd in (0, -1, 9, "2", True, None):
+            p.update_from_bridge("t", now_obj(position=40, duration=200, speed=odd))
+            np = p.status()["nowPlaying"]
+            self.assertEqual((np["position"], np["duration"]), (40.0, 200.0), "a speed that makes no sense counts as 1: %r" % (odd,))
+
     def test_advert_clears_its_tab(self):
         p = self.presence()
         p.update_from_bridge("t", now_obj())

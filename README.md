@@ -8,7 +8,7 @@ YTM Starcast runs on the computer that plays your music. It has four parts, and 
 |---|---|
 | **YouTube Music remote** | Control YouTube Music in your computer's browser from your phone, a tablet or another computer: search, the queue, play next, mixes, your library and playlists, artist pages, likes and live lyrics. |
 | **Discord status** | Shows the song you're playing in YouTube Music on your Discord profile ("Listening to …"). This used to be the separate YTM Beacon app; it is built in now. See [Discord status](docs/DISCORD.md). |
-| **Refine** | Improvements inside YouTube Music itself: a ✦ button in its top bar with a Material 3 Expressive look, a richer speed menu, live lyrics next to the player and a playlist maker. See [Refine](docs/REFINE.md). |
+| **Refine** | Improvements inside YouTube Music itself: a ✦ button in its top bar with a Material 3 Expressive look and animations, a richer speed menu with a clear slowed sound, word-by-word lyrics in YouTube Music's Lyrics tab (or a window of their own), the computer's sound and a playlist maker. See [Refine](docs/REFINE.md). |
 | **Computer audio** | The computer's volume, output devices and equalizer from your phone. |
 
 Switch parts on or off in **Settings → Parts** in the web app, the Android app and the desktop window. The browser
@@ -183,9 +183,11 @@ your username, and words that keep a song off Discord. See [Discord status](docs
 ## Refine
 
 Refine improves YouTube Music itself: a ✦ button in its top bar switches on a Material 3 Expressive look with colours
-from the album art and a wavy progress bar, a richer speed menu (any speed, pitch, remembered per song or playlist), live
-lyrics next to the player, a random-song button, and a playlist maker that builds on YouTube Music's own radios. Each
-piece has its own switch. See [Refine](docs/REFINE.md).
+from the album art, a wavy progress bar and animations, a richer speed menu (any speed that stays from song to song,
+pitch, a clear slowed sound that keeps the pitch without smearing, a "room" reverb, times that follow the speed), live
+lyrics word by word in YouTube Music's own Lyrics tab or in a window you can move, resize, pin and keep above other
+windows, the computer's volume, output and equalizer, a random-song button, and a playlist maker that builds on YouTube
+Music's own radios. Each piece has its own switch. See [Refine](docs/REFINE.md).
 
 ## Use it on the phone itself
 

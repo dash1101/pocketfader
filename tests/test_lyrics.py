@@ -6,7 +6,7 @@ import base64
 import time
 import zlib
 
-from starcast.lyrics import _KRC_KEY, LyricsService, _norm, _score, parse_krc, parse_lrc
+from starcast.lyrics import _KRC_KEY, LyricsService, _norm, _score, lrc_words, parse_krc, parse_lrc, parse_yrc
 from starcast.romanize import romanize
 
 from .test_server import Base
@@ -45,7 +45,7 @@ class FakeNet:
                 return json.dumps({"result": {"songs": []}})
             return json.dumps({"result": {"songs": [{"id": 7, "name": self.netease["name"],
                                                      "artists": [{"name": "Artist"}], "duration": 200000}]}})
-        if u.path == "/api/song/lyric":
+        if u.path in ("/api/song/lyric", "/api/song/lyric/v1"):
             assert parse_qs(u.query)["id"] == ["7"]
             return json.dumps(self.netease["lyric"])
         return None
@@ -238,3 +238,50 @@ class LyricsAuthTests(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+YRC = ('{"t":0,"c":[{"tx":"作词: "},{"tx":"Someone"}]}\n'
+       "[14100,3570](14100,420,0)White (14520,480,0)shirt(15000,240,0), (15240,480,0)now\n"
+       "[30000,1000](30000,1000,0)Later\n")
+
+
+class MoreWordSourcesTests(unittest.TestCase):
+    def test_parse_yrc_skips_credits_and_marks_gaps(self):
+        lines = parse_yrc(YRC)
+        self.assertEqual(lines[0], {"t": 0.5, "text": ""})                  # the long intro before the singing
+        self.assertEqual(lines[1]["text"], "White shirt, now")
+        self.assertEqual(lines[1]["w"][0], [14.1, 14.52, "White "])
+        self.assertEqual(lines[-1]["t"], 30.0)
+
+    def test_netease_word_by_word_with_its_translation(self):
+        net = FakeNet(netease={"name": "Song", "lyric": {"lrc": {"lyric": "[00:14.10]White shirt, now"}, "yrc": {"lyric": YRC},
+                                                         "tlyric": {"lyric": "[00:14.10]Camisa blanca"}}})
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["source"], "netease")
+        line = next(ln for ln in r["lyrics"]["lines"] if ln["text"])
+        self.assertEqual((len(line["w"]), line["tr"]), (4, "Camisa blanca"))   # the comma is timed on its own
+
+    def test_enhanced_lrc_keeps_its_word_timings(self):
+        text = "[00:01.00] <00:01.00>Hel <00:01.50>lo <00:02.00>you\n[00:04.00]Next"
+        self.assertEqual(lrc_words(text), {1.0: [[1.0, 1.5, "Hel "], [1.5, 2.0, "lo "], [2.0, 4.0, "you"]]})
+        r = LyricsService(fetch=FakeNet(lrclib={"syncedLyrics": text})).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["lyrics"]["lines"][0]["text"], "Hel lo you")
+        self.assertEqual(len(r["lyrics"]["lines"][0]["w"]), 3)
+        self.assertNotIn("w", r["lyrics"]["lines"][1])
+
+    def test_credit_lines_are_not_lyrics(self):
+        net = FakeNet(netease={"name": "Song", "lyric": {"lrc": {"lyric": "[00:00.00]作词 : Someone\n[00:00.50]Composer: X\n[00:01.00]Real line"}}})
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="netease")
+        self.assertEqual([ln["text"] for ln in r["lyrics"]["lines"]], ["Real line"])
+
+    def test_kugou_instrumental_placeholder_is_nothing(self):
+        net = FakeNet(lrclib={"syncedLyrics": "[00:01.00]Hi"}, krc="[1000,2000]<0,500,0>纯音乐，请欣赏\n")
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertFalse(next(s for s in r["sources"] if s["id"] == "kugou")["found"])
+        self.assertEqual(r["source"], "lrclib")
+
+    def test_a_word_source_with_far_fewer_lines_does_not_win(self):
+        many = "\n".join("[00:%02d.00]Line %d" % (i, i) for i in range(1, 21))
+        net = FakeNet(lrclib={"syncedLyrics": many}, krc="[1000,2000]<0,500,0>Line <500,500,0>1\n")
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["source"], "lrclib")

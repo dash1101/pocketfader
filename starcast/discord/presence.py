@@ -61,6 +61,13 @@ def _number(v):
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
 
 
+def _speed(v):
+    """The playback speed a tab reports (1 when it says nothing sensible). Discord's elapsed and total time follow it,
+    so a song slowed to 0.8x shows how long it really takes to listen to."""
+    f = _number(v)
+    return f if 0.25 <= f <= 4 else 1.0
+
+
 class Presence:
     def __init__(self, settings_path, client_id=None, asset_base=None, dial=None, clock=None, dry_run=False,
                  import_beacon_from=None, marker_path=None):
@@ -155,7 +162,8 @@ class Presence:
         for every tab's push, not only the tab the remote follows: choosing between tabs is done here.
 
         now uses the bridge's fields: playing / paused / buffering (bools), title, artist, album, art, videoId,
-        position, duration (seconds) and ad (bool). playing or buffering counts as playing, anything else as
+        position, duration (seconds), speed (the playback rate) and ad (bool). Position and duration are divided by the
+        speed, so the times Discord shows run at the pace the song is really heard. playing or buffering counts as playing, anything else as
         paused. An advert (ad true), or nothing loaded (no title), clears that tab; now=None (a push without a
         "now") changes nothing. ts is the page's sample time in milliseconds (body["ts"]); it is used when it is
         within 5 s of this computer's clock. Returns True when a song was recorded, False when the tab was
@@ -176,7 +184,8 @@ class Presence:
         u = Update(source=source, agent=_text(agent), state=STATE_PLAYING if playing else STATE_PAUSED,
                    title=_text(now.get("title")), artist=artist, album=_text(now.get("album")),
                    artwork=_text(now.get("art")), video_id=_text(now.get("videoId")),
-                   position=_number(now.get("position")), duration=_number(now.get("duration")))
+                   position=_number(now.get("position")) / _speed(now.get("speed")),
+                   duration=_number(now.get("duration")) / _speed(now.get("speed")))
         try:
             u.sanitize()
         except SanitizeError:

@@ -50,9 +50,16 @@ The button reaches YTM Starcast through an open YouTube Music tab, so it can sho
 
 `refine.js` adds a ✦ button to YouTube Music's top bar. From there you can switch each part on or off:
 a Material 3 Expressive look (rounder shapes, colours from the album art, expressive player controls, a wavy progress bar,
-a glow behind the cover), a richer speed menu on the player's own speed button (any speed, pitch on/off, remembered per song
-or playlist; Shift+. and Shift+, from the keyboard), a "play something you might like" button on the home page, live lyrics in the player,
-and a playlist maker. Live lyrics come from YTM Starcast on this computer (route `/ext/lyrics`). Settings stay in this browser.
+a glow behind the cover, animations), a richer speed menu on the player's own speed button (any speed, which stays from
+song to song; pitch on/off; a clear slowed sound; a "room" reverb; a speed remembered per song or playlist; Shift+. and
+Shift+, from the keyboard; the player bar's times follow the speed), a "play something you might like" button on the home
+page, live lyrics in YouTube Music's own Lyrics tab or in a window of their own, the computer's sound (volume, output,
+equalizer), and a playlist maker. Live lyrics come from YTM Starcast on this computer (route `/ext/lyrics`), and so does the
+computer's sound (`/ext/sound`). Settings stay in this browser.
+
+The clear slowed sound runs `stretch.js` (the page loads it as an audio worklet, which is why the extension lists it as a
+web-accessible file for music.youtube.com). The toolbar button takes on Refine's colours, which the extension keeps in its
+own storage (the `storage` permission).
 
 The ✦ menu's **YTM Starcast** section has the same three switches as the toolbar button. Switching Refine off there (or in
 YTM Starcast's Settings → Parts) takes everything Refine added out of the page, the ✦ button included; switch it back on from

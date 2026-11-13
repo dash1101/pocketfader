@@ -39,7 +39,7 @@ The card in the apps has:
 | Private mode | Shows only "Listening to music", without the song. |
 | Show when paused | Keeps the card while the song is paused. |
 | Hide a paused song after | Never, 1, 5 or 15 minutes, or an hour; it comes back when you press play. |
-| Progress bar | Shows how far into the song you are (while it plays). |
+| Progress bar | Shows how far into the song you are (while it plays). At another speed the times follow it: a 3:00 song slowed to 0.8× shows 3:45, the time it really takes to hear. |
 | Play/pause icon | A small play or pause badge on the cover. |
 | Listen button | A **Listen on YouTube Music** button that opens the song (or a search for it). |
 | Album art | The song's cover (otherwise YTM Starcast's logo). |
