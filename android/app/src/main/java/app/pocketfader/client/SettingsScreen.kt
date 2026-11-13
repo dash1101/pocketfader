@@ -74,7 +74,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
     // The settings are split into pages: an overview of categories, and one page per category.
     var page by rememberSaveable { mutableStateOf<String?>(null) }
-    val link = SettingsNav.deepLink
+    val link = SettingsNav.deepLink?.let { if (it == "library") "downloads" else it }    // "library" is part of downloads now
     LaunchedEffect(link) {
         if (link != null) {
             page = link
@@ -326,6 +326,11 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     "nothing has to be running on a computer.",
                 listOf("computer" to "The computer", "phone" to "This phone"), p.playOn,
             ) { v -> Remote.setPlayOn(v, carryOver = false) }
+            Choice(
+                "Download quality",
+                "For songs saved from now on. Best is about 1.2 MB a minute, Standard about 1 MB, Data saver about 0.4 MB.",
+                listOf("best" to "Best", "normal" to "Standard", "saver" to "Data saver"), p.dlQuality,
+            ) { v -> Settings.update { it.copy(dlQuality = v) }; AutoDownload.soon() }
             Info("Saved on this phone", "${saved.size} songs · ${formatBytes(saved.sumOf { it.size })}")
             Text(
                 "Downloads keep the song, its cover and its lyrics, and play with no connection. Download from a song's ⋮ menu, " +
@@ -337,7 +342,8 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 onDismiss = { confirm = false }) { confirm = false; Downloads.deleteAll() }
         }
 
-        if (page == "library") {
+        // the library and what's kept offline are on the downloads page too: one place for music on this phone
+        if (page == "downloads") {
             val lists by Library.playlists.collectAsStateWithLifecycle()
             val liked by Library.liked.collectAsStateWithLifecycle()
             val at by Library.syncedAt.collectAsStateWithLifecycle()
@@ -371,14 +377,24 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Toggle("Liked songs", "Keep the songs you like downloaded, new likes included.", p.autoDlLiked) { v ->
                     Settings.update { it.copy(autoDlLiked = v) }; AutoDownload.soon()
                 }
-                val songsNeed = p.smartDownloads * AutoDownload.ESTIMATE
+                val song = remember(p.dlQuality, saved) { AutoDownload.typicalSong() }
+                val limitBytes = p.autoDlLimitMb * 1_048_576L
+                val songsNeed = p.smartDownloads.coerceAtLeast(0) * song
                 NumberChoice(
                     "Smart downloads",
-                    "Keep up to this many of your most played songs and today's quick picks on the phone, refreshed as your taste " +
-                        "changes (fewer while your listening history is short)." +
-                        if (p.autoDlLimitMb > 0 && songsNeed > p.autoDlLimitMb * 1_048_576L)
-                            " That many need about ${gb(songsNeed)}: only what fits in the space below is kept." else "",
-                    presets = listOf(0 to "Off", 25 to "25", 50 to "50", 100 to "100", 250 to "250", 500 to "500", 1000 to "1000"),
+                    when {
+                        p.smartDownloads < 0 ->
+                            "As many as fit in the space below: your most played songs and quick picks first, then liked songs, " +
+                                "what you play most and your playlists." +
+                                if (p.autoDlLimitMb > 0) " About ${limitBytes / song} songs at this quality." else
+                                    " With no limit, it stops 2 GB short of filling the phone."
+                        else ->
+                            "Keep up to this many of your most played songs and today's quick picks on the phone, refreshed as your " +
+                                "taste changes (fewer while your listening history is short)." +
+                                if (p.autoDlLimitMb > 0 && songsNeed > limitBytes)
+                                    " That many need about ${gb(songsNeed)}: about ${limitBytes / song} fit in the space below." else ""
+                    },
+                    presets = listOf(0 to "Off", 25 to "25", 50 to "50", 100 to "100", 250 to "250", 500 to "500", 1000 to "1000", -1 to "Fill the space"),
                     value = p.smartDownloads, range = 1..1000, unit = "songs", custom = { "$it songs" },
                 ) { v -> Settings.update { it.copy(smartDownloads = v) }; Recommend.refreshIfStale(); AutoDownload.soon() }
                 Info("Playlists kept on this phone", if (keep.isEmpty()) "None. Open a playlist and turn on “Keep on this phone”." else "${keep.size}: " +
@@ -387,6 +403,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 NumberChoice(
                     "Space for automatic downloads",
                     "Songs you download yourself don't count, and are never removed automatically." +
+                        (if (p.autoDlLimitMb > 0) " Room for about ${limitBytes / song} songs at this quality." else "") +
                         if (free >= 0) " ${gb(free)} free on this phone." else "",
                     presets = listOf(1 to "1 GB", 2 to "2 GB", 5 to "5 GB", 10 to "10 GB", 25 to "25 GB", 50 to "50 GB", 100 to "100 GB", 0 to "No limit"),
                     value = if (p.autoDlLimitMb <= 0) 0 else (p.autoDlLimitMb + 1023) / 1024,
@@ -656,14 +673,13 @@ object SettingsNav {
 private val LocalPageTitle = androidx.compose.runtime.compositionLocalOf<String?> { null }
 
 /** Cards that come after a page's first one, and so need a heading of their own. */
-private val SUBHEADS = setOf("Automatic downloads", "Recommendations", "If the app closed by itself")
+private val SUBHEADS = setOf("Your library", "Automatic downloads", "Recommendations", "If the app closed by itself")
 
 private class Cat(val key: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 private val groups = listOf(
     "Listening" to listOf(
-        Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("downloads", "Downloads & playing on this phone", Icons.Filled.DownloadForOffline),
-        Cat("library", "Library & offline", Icons.Filled.LibraryMusic),
+        Cat("sound", "Sound & outputs", Icons.Filled.Tune), Cat("downloads", "Downloads & offline", Icons.Filled.DownloadForOffline),
         Cat("lyrics", "Lyrics", Icons.Filled.MusicNote), Cat("controls", "Controls", Icons.Filled.TouchApp),
     ),
     "Look & feel" to listOf(
@@ -698,9 +714,9 @@ private fun catShown(key: String, s: RemoteState): Boolean = when (key) {
 
 private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, version: String): String = when (key) {
     "sound" -> if (s.volume.available) "${s.volume.percent}%" + (if (s.volume.muted) " (muted)" else "") + s.volume.device.let { if (it.isBlank()) "" else " · $it" } else "No audio output found"
-    "downloads" -> (if (p.playOn == "phone") "Playing on this phone" else "Playing on the computer") + " · " + Downloads.items.value.size + " downloaded"
-    "library" -> Library.syncedAt.value.let { at -> if (at == 0L) "Sync your playlists and likes to this phone" else "Synced " + ago(at) } +
-        (if (p.autoDlLiked || p.smartDownloads > 0 || Library.keepOffline.value.isNotEmpty()) " · automatic downloads on" else "")
+    "downloads" -> (if (p.playOn == "phone") "Playing on this phone" else "Playing on the computer") + " · " + Downloads.items.value.size + " downloaded" +
+        Library.syncedAt.value.let { at -> if (at == 0L) "" else " · library synced " + ago(at) } +
+        (if (p.autoDlLiked || p.smartDownloads != 0 || Library.keepOffline.value.isNotEmpty()) " · automatic downloads on" else "")
     "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
     "controls" -> "Notification " + (if (p.notification) "on" else "off") + (if (s.audioOn) " · volume keys " + (if (p.volumeKeys) "on" else "off") else "")
     "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")

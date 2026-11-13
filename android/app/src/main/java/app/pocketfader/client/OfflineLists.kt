@@ -287,10 +287,10 @@ fun OfflineListView(id: String, onBack: () -> Unit, modifier: Modifier = Modifie
                         Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { playOnPhone(l.songs, 0) }, enabled = l.songs.isNotEmpty()) {
+                        Button(onClick = { playOnPhone(l.songs, 0); AppNav.showPlayer() }, enabled = l.songs.isNotEmpty()) {
                             Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play")
                         }
-                        FilledTonalButton(onClick = { playOnPhone(l.songs, l.songs.indices.random(), shuffle = true) }, enabled = l.songs.isNotEmpty()) {
+                        FilledTonalButton(onClick = { playOnPhone(l.songs, l.songs.indices.random(), shuffle = true); AppNav.showPlayer() }, enabled = l.songs.isNotEmpty()) {
                             Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle")
                         }
                         if (l.own) OutlinedButton(onClick = { dialog = "add" }) { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text(" Add") }

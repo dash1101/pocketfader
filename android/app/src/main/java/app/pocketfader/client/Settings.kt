@@ -25,6 +25,7 @@ class PocketfaderApp : Application() {
         Settings.init(this)
         Downloads.init(this)
         OfflineLists.init(this)
+        PlaylistCache.init(this)
         Library.init(this)
         Recommend.init(this)
         LocalPlayer.init(this)
@@ -53,7 +54,8 @@ data class Prefs(
     // library & offline
     val autoSync: Boolean = true,            // sync playlists and likes from the account whenever the computer's YouTube Music is there
     val autoDlLiked: Boolean = false,        // keep liked songs downloaded
-    val smartDownloads: Int = 0,             // keep this many of your most played / recommended songs downloaded (0 = off)
+    val smartDownloads: Int = 0,             // keep this many of your most played / recommended songs downloaded (0 = off, -1 = as many as fit)
+    val dlQuality: String = "normal",        // best | normal | saver: the audio saved by downloads
     val dlWifiOnly: Boolean = true,          // automatic downloads wait for Wi-Fi
     val autoDlLimitMb: Int = 2048,           // space automatic downloads may use (0 = no limit)
     // display
@@ -145,6 +147,7 @@ object Settings {
             startTab = s("startTab", d.startTab),
             autoSync = b("autoSync", d.autoSync), autoDlLiked = b("autoDlLiked", d.autoDlLiked),
             smartDownloads = i("smartDownloads", d.smartDownloads), dlWifiOnly = b("dlWifiOnly", d.dlWifiOnly),
+            dlQuality = s("dlQuality", d.dlQuality),
             autoDlLimitMb = i("autoDlLimitMb", d.autoDlLimitMb),
         )
     }
@@ -172,7 +175,7 @@ object Settings {
             .putString("pollSpeed", p.pollSpeed).putBoolean("reduceMotion", p.reduceMotion)
             .putString("startTab", p.startTab)
             .putBoolean("autoSync", p.autoSync).putBoolean("autoDlLiked", p.autoDlLiked)
-            .putInt("smartDownloads", p.smartDownloads).putBoolean("dlWifiOnly", p.dlWifiOnly)
+            .putInt("smartDownloads", p.smartDownloads).putBoolean("dlWifiOnly", p.dlWifiOnly).putString("dlQuality", p.dlQuality)
             .putInt("autoDlLimitMb", p.autoDlLimitMb)
             .apply()
     }

@@ -185,13 +185,17 @@ object Streams {
         throw IOException("This device couldn't finish the YouTube lookup", e)
     }
 
-    fun fromPhone(videoId: String): Resolved = safely {
+    /** [quality]: "normal" (AAC, about 128 kbps, plays everywhere: what streaming uses), "best" (the highest bitrate
+     *  there is, usually Opus at about 160 kbps) or "saver" (the lowest, about 50 kbps), for downloads. */
+    fun fromPhone(videoId: String, quality: String = "normal"): Resolved = safely {
         val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
         val streams = info.audioStreams.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
-        // AAC (m4a) plays and saves everywhere; Opus only if there's nothing else
-        val best = streams.filter { it.format == NpFormat.M4A }.maxByOrNull { it.averageBitrate }
-            ?: streams.maxByOrNull { it.averageBitrate }
-            ?: throw IOException("No audio for this song")
+        val best = when (quality) {
+            "best" -> streams.maxByOrNull { it.averageBitrate }
+            "saver" -> streams.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate } ?: streams.firstOrNull()
+            // AAC (m4a) plays and saves everywhere; Opus only if there's nothing else
+            else -> streams.filter { it.format == NpFormat.M4A }.maxByOrNull { it.averageBitrate } ?: streams.maxByOrNull { it.averageBitrate }
+        } ?: throw IOException("No audio for this song")
         val ext = if (best.format == NpFormat.M4A) "m4a" else "webm"
         Resolved(best.content, mime = best.format?.mimeType, ext = ext)
     }

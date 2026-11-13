@@ -31,6 +31,7 @@ data class Download(
     val size: Long,
     val addedAt: Long,
     val auto: Boolean = false,   // saved by an automatic download rule (removed again when no rule wants it)
+    val quality: String = "",    // best | normal | saver ("": saved before there was a choice)
 ) {
     fun toLocal() = LocalItem(videoId, File(file).toURI().toString(), title, artist, art, durationSec)
 }
@@ -77,6 +78,7 @@ object Downloads {
                     Download(
                         o.optString("videoId"), o.optString("title"), o.optString("artist"), o.optDouble("duration", 0.0),
                         f.path, o.str("art"), o.str("lyrics"), f.length(), o.optLong("addedAt"), o.optBoolean("auto"),
+                        o.optString("q"),
                     )
                 )
             }
@@ -89,7 +91,7 @@ object Downloads {
         for (d in _items.value) {
             arr.put(
                 JSONObject().put("videoId", d.videoId).put("title", d.title).put("artist", d.artist).put("duration", d.durationSec)
-                    .put("file", d.file).put("art", d.art ?: JSONObject.NULL).put("lyrics", d.lyrics ?: JSONObject.NULL).put("addedAt", d.addedAt).put("auto", d.auto)
+                    .put("file", d.file).put("art", d.art ?: JSONObject.NULL).put("lyrics", d.lyrics ?: JSONObject.NULL).put("addedAt", d.addedAt).put("auto", d.auto).put("q", d.quality)
             )
         }
         val tmp = File(dir, "downloads.json.tmp")
@@ -149,7 +151,8 @@ object Downloads {
         try {
             // what we know about the song; fill the gaps from YouTube when needed
             val meta = if (item.title.isBlank() || item.artist.isBlank()) runCatching { Streams.details(id) }.getOrNull() ?: item else item
-            val src = try { Streams.fromPhone(id) } catch (e: Exception) { Streams.fromComputer(id) ?: throw e }
+            val quality = Settings.prefs.value.dlQuality
+            val src = try { Streams.fromPhone(id, quality) } catch (e: Exception) { Streams.fromComputer(id) ?: throw e }
             val audio = File(dir, "$id.${src.ext}")
             fetch(src.url, src.headers, audio) { p -> _active.update { it + (id to p) } }
             // the cover, as large as YouTube gives it
@@ -160,7 +163,7 @@ object Downloads {
                 ?: runCatching { Lrclib.lookup(meta.title, meta.artist, meta.durationSec) }.getOrNull()
             val d = Download(
                 id, meta.title, meta.artist, meta.durationSec, audio.path, artFile?.toURI()?.toString(),
-                lyrics?.toString(), audio.length(), System.currentTimeMillis(), auto,
+                lyrics?.toString(), audio.length(), System.currentTimeMillis(), auto, quality,
             )
             _items.update { list -> list.filter { it.videoId != id } + d }
             save()

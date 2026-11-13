@@ -29,6 +29,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+/** Asks the app to show the player (after "Play" on a playlist or album, say). Read by the app's frame. */
+object AppNav {
+    var toPlayer by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    fun showPlayer() { toPlayer++ }
+}
+
 /**
  * The bottom navigation as a floating pill: a rounded capsule above the content in which the current destination is a
  * highlighted capsule that shows its name, and the others are just icons.

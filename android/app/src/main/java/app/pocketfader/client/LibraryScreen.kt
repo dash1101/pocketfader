@@ -260,13 +260,25 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
         else -> Library.playlist(pid)?.tracks
     }
     LaunchedEffect(item) {
+        val key = pid ?: item.browseId ?: ("t:" + item.title)
+        // what is known already shows at once (the list as it was last time, or your synced copy); the current list
+        // follows and takes its place
+        val quick = withContext(Dispatchers.IO) { PlaylistCache.get(key) ?: syncedCopy()?.map { it.toSearchItem() } }
+        if (quick != null) tracks = quick
         try {
-            tracks = withContext(Dispatchers.IO) {
+            val fresh = withContext(Dispatchers.IO) {
                 val copy = syncedCopy()
                 var failure: Exception? = null
-                // the account, through the computer: the playlist as it is now
+                // the account, through the computer: the playlist as it is now. Opened for the first time, its first page
+                // is shown as soon as it's there and the rest follows.
                 val live: List<SearchItem>? = if (Remote.state.value.ytm) {
-                    try { Remote.playlistItems(item, limit = 1000) } catch (e: Exception) { failure = e; null }
+                    try {
+                        if (quick == null) {
+                            val first = Remote.playlistItems(item)
+                            if (first.isNotEmpty()) withContext(Dispatchers.Main) { if (tracks == null) tracks = first }
+                        }
+                        Remote.playlistItems(item, limit = 1000)
+                    } catch (e: Exception) { failure = e; null }
                 } else null
                 when {
                     live != null -> live
@@ -276,9 +288,13 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                     else -> throw failure ?: ApiException(0, "Albums open through YouTube Music on the computer, which isn't connected.")
                 }
             }
+            if (!editing && fresh != tracks) tracks = fresh
+            withContext(Dispatchers.IO) { PlaylistCache.put(key, fresh) }
         } catch (e: Exception) {
-            val copy = syncedCopy()
-            if (copy != null) tracks = copy.map { it.toSearchItem() } else error = e.friendly()
+            if (tracks == null) {
+                val copy = syncedCopy()
+                if (copy != null) tracks = copy.map { it.toSearchItem() } else error = e.friendly()
+            }
         }
     }
     // Only playlists you own return a setVideoId on their tracks, which is what editing needs (and the account must be there).
@@ -375,13 +391,17 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                                     if (here) playOnPhone(songs, 0)
                                     else if (albumId != null) Remote.startPlaylist(albumId, false)
                                     else if (vid != null) Remote.play(vid)
+                                    AppNav.showPlayer()
                                 },
                                 enabled = canPlay,
                             ) {
                                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text("Play", Modifier.padding(start = 6.dp))
                             }
                             FilledTonalButton(
-                                onClick = { if (here) playOnPhone(songs, songs.indices.random(), shuffle = true) else albumId?.let { Remote.startPlaylist(it, true) } },
+                                onClick = {
+                                    if (here) playOnPhone(songs, songs.indices.random(), shuffle = true) else albumId?.let { Remote.startPlaylist(it, true) }
+                                    AppNav.showPlayer()
+                                },
                                 enabled = if (here) songs.isNotEmpty() else albumId != null,
                             ) {
                                 Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text("Shuffle", Modifier.padding(start = 6.dp))

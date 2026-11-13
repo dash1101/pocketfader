@@ -32,7 +32,12 @@ class LocalPlaybackService : MediaSessionService() {
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, LocalPlayer.player(this)).setSessionActivity(open).build()
+        val s = MediaSession.Builder(this, LocalPlayer.player(this)).setSessionActivity(open).build()
+        session = s
+        // The service shows the notification (and the lock screen's player) only for sessions added to it. Media3 adds one
+        // by itself only when a controller connects, and the app starts this service without connecting one: so without
+        // this, music played with no notification at all.
+        addSession(s)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

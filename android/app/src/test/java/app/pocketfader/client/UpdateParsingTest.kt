@@ -123,5 +123,14 @@ class UpdateParsingTest {
         assertEquals(1, odd.size)
         assertEquals(emptyList<LocalItem>(), odd[0].songs)
     }
+
+    @Test
+    fun cachedPlaylistsComeBackTheSame() {
+        val items = listOf(
+            SearchItem("One", "Artist · 3:12", "https://x/1", "aaaaaaaaaaa", null, "song", setVideoId = "S1"),
+            SearchItem("An album", "Artist", null, null, "OLAK5uy_x", "album", browseId = "MPREb_x"),
+        )
+        assertEquals(items, searchItemsFromJson(JSONArray(searchItemsToJson(items).toString())))
+    }
 }
 

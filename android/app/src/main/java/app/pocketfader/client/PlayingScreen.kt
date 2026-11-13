@@ -481,7 +481,9 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ui = rememberLyrics(s.now, active = tab == 1)
-    val comments = rememberComments(s.now?.videoId, active = tab == 2)
+    val comments = rememberComments(s.now?.videoId)
+    // the Comments tab only for songs that have comments to show; leaving it when the next song has none
+    LaunchedEffect(comments.hasComments) { if (!comments.hasComments && tab == 2) tab = 0 }
     val lines = ui.result?.lines.orEmpty()
     val active = rememberActiveLine(lines, ui.result?.synced == true, s.now?.playing == true)
     // list items before the first lyric line: player, tabs, lyrics controls
@@ -498,7 +500,9 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
                     TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
                         Tab(selected = tab == 0, onClick = { tab = 0; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Up next") })
                         Tab(selected = tab == 1, onClick = { tab = 1; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Lyrics") })
-                        Tab(selected = tab == 2, onClick = { tab = 2; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Comments") })
+                        if (comments.hasComments) {
+                            Tab(selected = tab == 2, onClick = { tab = 2; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Comments") })
+                        }
                     }
                 }
             }
@@ -530,9 +534,10 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     }
 }
 
-/** Slim now-playing bar shown over the lists once the full player has scrolled out of view. */
+/** Slim now-playing bar: over the lists once the full player has scrolled out of view, and above the navigation on every
+ *  other page. */
 @Composable
-private fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier = Modifier) {
     val now = s.now ?: return
     val tap = rememberTap()
     val reduce = LocalReduceMotion.current

@@ -118,7 +118,24 @@ class DownloadService : Service() {
 object AutoDownload {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CrashLog.quiet)
     private var job: Job? = null
-    const val ESTIMATE = 4_500_000L              // a typical song, before it's downloaded
+    private const val TYPICAL_SECONDS = 210.0   // a song whose length isn't known
+    private const val RESERVE = 2L * 1_073_741_824L   // "fill the space" with no limit leaves this much of the phone free
+
+    /** Bytes a second of audio takes at a download quality: what this phone's own downloads at that quality turned out to
+     *  be once there are a few, else what YouTube's streams usually are (container included). */
+    fun bytesPerSecond(quality: String = Settings.prefs.value.dlQuality): Double {
+        val seen = Downloads.items.value.filter { it.quality == quality && it.durationSec > 30 && it.size > 0 }
+        if (seen.size >= 5) return seen.sumOf { it.size }.toDouble() / seen.sumOf { it.durationSec }
+        val kbps = when (quality) { "best" -> 160.0; "saver" -> 56.0; else -> 130.0 }
+        return kbps * 1000 / 8 * 1.03
+    }
+
+    /** About how much a song will take, from its length and the download quality. */
+    fun estimate(i: LocalItem, bps: Double = bytesPerSecond()): Long =
+        ((if (i.durationSec > 0) i.durationSec else TYPICAL_SECONDS) * bps).toLong()
+
+    /** About how much a typical song takes at the download quality. */
+    fun typicalSong(): Long = (TYPICAL_SECONDS * bytesPerSecond()).toLong()
 
     /** Run the rules in a few seconds (changes often come in bursts). */
     fun soon() {
@@ -133,7 +150,8 @@ object AutoDownload {
     fun plan(): Pair<Int, Long> {
         val list = wanted().first
         val have = Downloads.items.value.associateBy { it.videoId }
-        return list.size to list.sumOf { have[it.videoId]?.size ?: ESTIMATE }
+        val bps = bytesPerSecond()
+        return list.size to list.sumOf { have[it.videoId]?.size ?: estimate(it, bps) }
     }
 
     /** The songs wanted, in order of priority, cut at the space limit; and whether every rule could be worked out. */
@@ -145,19 +163,34 @@ object AutoDownload {
             val l = if (pid == "LM") Library.liked.value else Library.playlist(pid)?.tracks
             if (l == null) complete = false else l.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } }
         }
-        if (p.smartDownloads > 0) {
-            val s = Recommend.smartPicks(p.smartDownloads)
+        val fill = p.smartDownloads < 0
+        if (p.smartDownloads != 0) {
+            val s = Recommend.smartPicks(if (fill) 2000 else p.smartDownloads)
             if (s == null) complete = false else s.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } }
         }
         if (p.autoDlLiked) Library.liked.value.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } }
-        val limit = if (p.autoDlLimitMb <= 0) Long.MAX_VALUE else p.autoDlLimitMb * 1_048_576L
+        if (fill) {
+            // as many as fit: after the picks, what you like, then what you play most, then your playlists
+            Library.liked.value.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } }
+            Library.history.value.groupBy { it.id }.values.sortedByDescending { it.size }
+                .forEach { plays -> plays.first().let { pl -> out.getOrPut(pl.id) { pl.toLocal() } } }
+            Library.playlists.value.forEach { l -> l.tracks.forEach { i -> i.videoId?.let { out.getOrPut(it) { i } } } }
+        }
         val have = Downloads.items.value.associateBy { it.videoId }
+        val limit = when {
+            p.autoDlLimitMb > 0 -> p.autoDlLimitMb * 1_048_576L
+            // no limit set: fill what the phone has, keeping some of it free (what automatic downloads hold counts as theirs)
+            fill -> (Downloads.freeBytes() + have.values.filter { it.auto }.sumOf { it.size } - RESERVE).coerceAtLeast(0L)
+            else -> Long.MAX_VALUE
+        }
+        val bps = bytesPerSecond()
         var used = 0L
         val kept = ArrayList<LocalItem>()
         for (i in out.values) {
+            if (!isYtId(i.videoId)) continue
             val d = have[i.videoId]
             if (d != null && !d.auto) { kept.add(i); continue }      // yours already: costs the rules nothing
-            val size = d?.size ?: ESTIMATE
+            val size = d?.size ?: estimate(i, bps)
             if (used + size > limit) break
             used += size
             kept.add(i)
@@ -170,7 +203,7 @@ object AutoDownload {
         while (!Library.loaded) delay(500)
         val autos = Downloads.items.value.filter { it.auto }
         val p = Settings.prefs.value
-        val anyRule = p.autoDlLiked || p.smartDownloads > 0 || Library.keepOffline.value.isNotEmpty()
+        val anyRule = p.autoDlLiked || p.smartDownloads != 0 || Library.keepOffline.value.isNotEmpty()
         if (!anyRule && autos.isEmpty()) return
         val (list, complete) = wanted()
         val ids = list.mapNotNull { it.videoId }.toHashSet()

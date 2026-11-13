@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -284,6 +285,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         )
     }
     val wide = LocalConfiguration.current.screenWidthDp >= 840
+    val comments = rememberComments(if (wide) s.now?.videoId else null)     // the tablet layout's Comments tab
     val snackbar = remember { SnackbarHostState() }
     // The YouTube Music remote is switched off on the computer (music playing on this phone doesn't need it).
     val remoteOff = cfg.isSet && prefs.playOn != "phone" && !s.remoteOn
@@ -299,6 +301,17 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     BackHandler(enabled = showSettings) { showSettings = false }
     // leaving for another tab closes an artist / album page that was open on top
     LaunchedEffect(dest) { Detail.close() }
+    // "Play" on a playlist or album (and the like) shows the player
+    var shownPlayerFor by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(AppNav.toPlayer) }
+    LaunchedEffect(AppNav.toPlayer) {
+        if (AppNav.toPlayer != shownPlayerFor) {
+            shownPlayerFor = AppNav.toPlayer
+            showSettings = false
+            Detail.close()
+            dest = Dest.Playing
+            pane = Pane.Queue
+        }
+    }
     LaunchedEffect(Unit) { Remote.messages.collect { snackbar.showSnackbar(it) } }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val updateScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -350,6 +363,25 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
             )
         },
         bottomBar = {
+            // what's playing, on every page but the player itself (on tablets the player is always in view); the pages
+            // make room for it, as for the navigation
+            val showMini = !wide && s.now?.title?.isNotBlank() == true &&
+                (showSettings || Detail.active || dest != Dest.Playing || remoteOff)
+            Column {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showMini,
+                enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(Motion.Medium, easing = Motion.Ease)) +
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.Short)),
+                exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)) +
+                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(Motion.Quick)),
+            ) {
+                MiniControls(
+                    s,
+                    onTap = { showSettings = false; Detail.close(); dest = Dest.Playing },
+                    // with no navigation under it (Settings), it keeps clear of the phone's own bar
+                    modifier = if (showSettings) Modifier.navigationBarsPadding() else Modifier,
+                )
+            }
             if (!wide && !showSettings) {
                 if (prefs.navStyle == "pill") {
                     PillNav(dests.map { it.label }, dests.map { it.icon }, dests.indexOf(dest).coerceAtLeast(0)) { dest = dests[it] }
@@ -364,6 +396,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     }
                 }
             }
+            }   // Column
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { inner ->
@@ -403,14 +436,17 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                         } else {
                             // see-through, as on phones: the cover's glow carries on under the tabs instead of stopping
                             // at a hard edge
-                            TabRow(selectedTabIndex = pane.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-                                Pane.values().forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
+                            // Comments only for songs that have comments to show
+                            val panes = Pane.values().filter { it != Pane.Comments || comments.hasComments }
+                            LaunchedEffect(comments.hasComments) { if (!comments.hasComments && pane == Pane.Comments) pane = Pane.Queue }
+                            TabRow(selectedTabIndex = panes.indexOf(pane).coerceAtLeast(0), containerColor = androidx.compose.ui.graphics.Color.Transparent) {
+                                panes.forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) {
                                 when (pane) {
                                     Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
                                     Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
-                                    Pane.Comments -> CommentsPane(s, Modifier.fillMaxSize())
+                                    Pane.Comments -> CommentsPane(comments, Modifier.fillMaxSize())
                                     Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
                                 }
                             }

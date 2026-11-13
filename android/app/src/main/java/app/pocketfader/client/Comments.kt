@@ -154,6 +154,9 @@ class CommentsUi(val videoId: String?) {
 
     val usable: Boolean get() = isYtId(videoId)
 
+    /** There is something to read: the tab is only shown then. */
+    val hasComments: Boolean get() = loaded && !disabled && items.isNotEmpty()
+
     suspend fun loadFirst() {
         val id = videoId?.takeIf { isYtId(it) } ?: return
         if (loading) return
@@ -218,12 +221,15 @@ class CommentsUi(val videoId: String?) {
     }
 }
 
-/** The comments of [videoId], loaded the first time they are shown ([active]). */
+/** The comments of [videoId]: the first page is looked up a moment after the song starts (whether the tab is open or
+ *  not), so the tab can be left out for songs that have none or have them turned off. */
 @Composable
-fun rememberComments(videoId: String?, active: Boolean): CommentsUi {
+fun rememberComments(videoId: String?): CommentsUi {
     val ui = remember(videoId) { CommentsUi(videoId) }
-    LaunchedEffect(ui, active) {
-        if (active && ui.usable && !ui.loaded && !ui.loading && ui.error == null) ui.loadFirst()
+    LaunchedEffect(ui) {
+        if (!ui.usable) return@LaunchedEffect
+        kotlinx.coroutines.delay(2500)      // not for every song skipped past
+        if (!ui.loaded && !ui.loading && ui.error == null) ui.loadFirst()
     }
     return ui
 }
@@ -375,8 +381,7 @@ private fun CommentRow(c: Comment, ui: CommentsUi, scope: CoroutineScope) {
 
 /** Comments as a screen of their own (the wide layout's right pane). */
 @Composable
-fun CommentsPane(s: RemoteState, modifier: Modifier = Modifier) {
-    val ui = rememberComments(s.now?.videoId, active = true)
+fun CommentsPane(ui: CommentsUi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val state = rememberLazyListState()
     LazyColumn(modifier.fillMaxSize().edgeFade(state), state = state) {

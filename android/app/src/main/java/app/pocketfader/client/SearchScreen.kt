@@ -461,8 +461,8 @@ private fun DeviceTab() {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (saved.isNotEmpty()) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { playOnPhone(savedItems, 0) }) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play") }
-                    FilledTonalButton(onClick = { playOnPhone(savedItems, savedItems.indices.random(), shuffle = true) }) { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle") }
+                    Button(onClick = { playOnPhone(savedItems, 0); AppNav.showPlayer() }) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play") }
+                    FilledTonalButton(onClick = { playOnPhone(savedItems, savedItems.indices.random(), shuffle = true); AppNav.showPlayer() }) { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle") }
                 }
             }
         }

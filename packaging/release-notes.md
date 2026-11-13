@@ -1,31 +1,25 @@
-### What's new in 0.2.1-alpha
+### What's new in 0.2.2-alpha
 
-- New version names: `0.2.1-alpha`, `0.2.2-alpha` and so on, instead of ever more numbers after "alpha".
-- The Android app finds new versions on GitHub itself and downloads them from there (checked against the release's
-  checksums), so updating the app no longer goes through the computer. When GitHub can't be reached from the phone, it
-  still asks the computer.
-- The Android app has a **Comments** tab beside Up next and Lyrics: the comments of the song or video that's playing,
-  with replies.
-- **Offline playlists** on the phone: "Download all" on a playlist or album keeps it together, in its order, and you can
-  make your own from downloaded songs (⋮ → Add to an offline playlist). Every song is still in Downloaded.
-- Automatic downloads can keep up to 1000 songs and use up to 100 GB (or any amount with Custom).
-- Full screen can show the time and the battery in the app's top bar.
-- Songs played on the phone show their covers sharp, in the player, the notification and on the lock screen.
-- Music on the phone pauses when headphones, an AUX cable, or a Bluetooth or USB speaker disconnect (a setting, on by
-  default).
-- The volume sliders follow the phone's volume buttons at once, and glide.
-- On tablets, the cover's glow no longer stops at a hard edge beside the tabs.
-- The browser extension (2.4.0) updates itself: YTM Starcast copies each new version into the extension's folder, and the
-  extension reloads into it (straight away with no YouTube Music tab open, otherwise from **Update now** in its toolbar
-  button). This first time, reload it once by hand on the browser's extensions page.
-- Release notes show only what's new. Earlier versions are in the changelog.
+- The Android app's notification shows the song again when music plays on the phone (with its cover and progress, on
+  the lock screen too): the phone's player never handed its session to the notification.
+- The now-playing card stays at the bottom of every page on phones (the pages make room for it); tap it for the player.
+- Play on a playlist, album, offline playlist or your downloads takes you to the player.
+- Download quality: Best (about 1.2 MB a minute), Standard or Data saver (about 0.4 MB a minute), in Settings → Downloads
+  & offline. Space estimates now go by each song's length and the quality (and by your own downloads, once there are a
+  few), and say how many songs fit.
+- Smart downloads can **Fill the space**: as many songs as fit in the space you set (most played and quick picks first,
+  then liked songs, what you play most and your playlists).
+- Playlists and albums open at once when you've opened them before, and the first page shows while the rest loads.
+- The Comments tab only shows for songs that have comments.
+- A new battery in full screen (on its side, filled to the charge, with a bolt while charging).
+- Settings: Library & offline is part of Downloads & offline now.
 
 ### Updating from 0.2.0-alpha.10 or older
 
 - **Computer:** versions up to 0.2.0-alpha.10 don't recognize the new version names, so update this once by hand:
   `./install.sh` (Linux), `install-exe.ps1` (Windows) or Orbit.
-- **Android app:** once the computer runs 0.2.1-alpha, the app offers this update through the computer one last time
-  (Settings → Updates). From then on it updates from GitHub by itself.
+- **Android app:** once the computer runs 0.2.1-alpha or later, the app offers this update through the computer one last
+  time (Settings → Updates). From then on it updates from GitHub by itself.
 
 [Install and downloads](https://github.com/dash1101/ytm-starcast#readme) ·
 [Changelog](https://github.com/dash1101/ytm-starcast/blob/main/docs/CHANGELOG.md)
