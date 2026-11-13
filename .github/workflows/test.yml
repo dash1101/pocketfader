@@ -2,8 +2,10 @@ name: tests
 on: [push, pull_request]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Python 3.9 (the oldest supported) isn't available on the newest Ubuntu image: it runs on 24.04
+    runs-on: ${{ matrix.python == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.9", "3.11", "3.13"]
     steps:
@@ -20,6 +22,7 @@ jobs:
           python -m zipfile -l dist/*.whl | grep -q starcast/static/index.html
           python -m zipfile -l dist/*.whl | grep -q starcast/discord/presence.py
           python -m zipfile -l dist/*.whl | grep -q starcast/extension/manifest.json
+          python -m zipfile -l dist/*.whl | grep -q starcast/extension/stretch.js
 
   extension:
     runs-on: ubuntu-latest
