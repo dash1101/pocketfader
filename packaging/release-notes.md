@@ -17,6 +17,7 @@ Fixes from checking Refine on YouTube Music itself:
   After updating, reload YTM Starcast once on the browser's extensions page: it gets a fixed ID, and the browser may keep
   a greyed-out older YTM Starcast entry beside it, which you can remove.
 - Lyrics that aren't time-synced show their blank lines as space, not as ♪ ♪ ♪.
+- Word-by-word lyrics from NetEase no longer run some words together ("howto", "I'mgoing").
 - The player bar's times stay an advert's own while one plays.
 - The Pulse and Bars visualizers follow the beat on loud songs too (they used to sit near full).
 - Lyrics, Make a playlist and Refine line up with YouTube Music's own entries in the sidebar.

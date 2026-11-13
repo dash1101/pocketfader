@@ -52,6 +52,26 @@ _STAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 _TAG = re.compile(r"^\[[A-Za-z]+:[^\]]*\]$")
 _WORD = re.compile(r"<\d+:\d+(?:[.:]\d+)?>")
 _HAN = re.compile("[\u3400-\u9fff\uf900-\ufaff]")
+_SPACES = re.compile("[\u00a0\u2000-\u200a\u202f\u205f\u3000]")   # odd spaces some providers use, as plain ones
+
+
+def _respace(words, text):
+    """Word timings whose words lost their spaces ("how" "to" for "how to"): the spaces come back from the line's text,
+    when it has the same letters."""
+    flat = re.sub(r"\s+", "", text)
+    if not words or flat != re.sub(r"\s+", "", "".join(w[2] for w in words)):
+        return words
+    out, i = [], 0
+    for k, (a, b, word) in enumerate(words):
+        core = re.sub(r"\s+", "", word)
+        i = text.find(core[:1], i) if core else i
+        i += len(core) if i >= 0 else 0
+        if i < 0:
+            return words
+        # a space after this word in the line's text (and not at the line's end): the word keeps one
+        spaced = k + 1 < len(words) and i < len(text) and text[i].isspace() and not word.endswith((" ", "\t"))
+        out.append([a, b, word + " " if spaced else word])
+    return out
 
 
 def parse_lrc(text):
@@ -64,7 +84,7 @@ def parse_lrc(text):
         stamps = _STAMP.findall(raw)
         if not stamps:
             continue
-        body = _WORD.sub("", _STAMP.sub("", raw)).strip()
+        body = _SPACES.sub(" ", _WORD.sub("", _STAMP.sub("", raw))).strip()
         for m, s, frac in stamps:
             t = int(m) * 60 + int(s) + (int(frac.ljust(3, "0")[:3]) / 1000.0 if frac else 0.0)
             out.append((t, body))
@@ -246,6 +266,18 @@ def netease(fetch, title, artist, album, duration, **_):
     pick = lambda k: ((lyr.get(k) or {}).get("lyric") or "")  # noqa: E731
     main = pick("lrc")
     words = parse_yrc(pick("yrc"))
+    if words and main:
+        # NetEase's word timings sometimes drop the space between two words; its line lyrics have them
+        plain = parse_lrc(main)
+        for ln in words:
+            if ln.get("w"):
+                near = [txt for t, txt in plain if abs(t - ln["t"]) <= 1.5]
+                for txt in near:
+                    w = _respace(ln["w"], txt)
+                    if w is not ln["w"]:
+                        ln["w"] = w
+                        ln["text"] = "".join(x[2] for x in w).strip()
+                        break
     if words and any(ln["text"] for ln in words):
         return _result("netease", "NetEase", lines=words, translation=pick("tlyric"), roman=pick("romalrc"), match=best_score)
     if not main:
@@ -315,7 +347,7 @@ def parse_yrc(text):
         if not m:
             continue
         start, dur, body = int(m.group(1)), int(m.group(2)), m.group(3)
-        words = [[round(int(a) / 1000.0, 2), round((int(a) + int(d)) / 1000.0, 2), w] for a, d, w in _YRC_WORD.findall(body)]
+        words = [[round(int(a) / 1000.0, 2), round((int(a) + int(d)) / 1000.0, 2), _SPACES.sub(" ", w)] for a, d, w in _YRC_WORD.findall(body)]
         words = [w for w in words if w[2]]
         line = "".join(w[2] for w in words).strip()
         if not line or _CREDIT.match(line):

@@ -6,7 +6,7 @@ import base64
 import time
 import zlib
 
-from starcast.lyrics import _KRC_KEY, LyricsService, _norm, _score, lrc_words, parse_krc, parse_lrc, parse_yrc
+from starcast.lyrics import _KRC_KEY, LyricsService, _norm, _respace, _score, lrc_words, parse_krc, parse_lrc, parse_yrc
 from starcast.romanize import romanize
 
 from .test_server import Base
@@ -356,3 +356,20 @@ class WrongSongTests(unittest.TestCase):
         net = FakeNet(krc="[0,3000]<0,1000,0>Song <1000,1000,0>- <2000,1000,0>Artist\n" + krc(SONG_A))
         r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="kugou")
         self.assertEqual(next(ln["text"] for ln in r["lyrics"]["lines"] if ln["text"]), SONG_A[0])
+
+
+class SpacingTests(unittest.TestCase):
+    def test_lost_spaces_come_back_from_the_line(self):
+        words = [[1, 1.5, "Maybe "], [1.5, 2, "how"], [2, 2.2, "to "], [2.2, 3, "love"], [3, 3.1, ", "], [3.1, 4, "maybe"]]
+        out = _respace(words, "Maybe how to love, maybe")
+        self.assertEqual("".join(w[2] for w in out), "Maybe how to love, maybe")
+        self.assertEqual([w[:2] for w in out], [w[:2] for w in words])
+        self.assertIs(_respace(words, "Something else entirely"), words)   # other letters: left as they are
+
+    def test_netease_words_take_their_spaces_from_its_lines(self):
+        yrc = "[38430,2130](38430,240,0)I'm(38670,300,0)going (38970,180,0)through (39150,1410,0)withdrawals\n"
+        net = FakeNet(netease={"name": "Song", "lyric": {"lrc": {"lyric": "[00:38.075]I'm\u2005going through withdrawals"}, "yrc": {"lyric": yrc}}})
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="netease")
+        line = next(ln for ln in r["lyrics"]["lines"] if ln["text"])
+        self.assertEqual(line["text"], "I'm going through withdrawals")
+        self.assertEqual(line["w"][0][2], "I'm ")
