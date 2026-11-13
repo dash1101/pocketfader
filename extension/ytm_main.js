@@ -520,7 +520,10 @@
     if (!songs.length) return { ok: false, error: "nothing_to_pick" };
     const pick = songs[Math.floor(Math.random() * songs.length)];
     const r = await play(pick.videoId, null);
-    return { ...r, picked: pick.title + (pick.subtitle ? " · " + pick.subtitle : "") };
+    // "Title · Artist", without the counts some shelves add ("• 1.5M plays", "• 30M views")
+    const by = String(pick.subtitle || "").split(/\s*[•·]\s*/).filter((x) => x && !/\d[\d.,]*\s*[KMB]?\s+(plays|views|listeners)\b/i.test(x) &&
+      !/^(song|video|album|single|ep|playlist|artist|episode|podcast)$/i.test(x))[0] || "";
+    return { ...r, picked: pick.title + (by ? " · " + by : "") };
   }
   // "Title - Artist" lines -> the best matching song for each (one search each, kept gentle)
   async function resolveSongs(queries) {
