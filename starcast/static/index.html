@@ -1261,7 +1261,7 @@ function extensionSection() {
     if (!info) { guide.appendChild(Object.assign(el('div', 'd'), { textContent: "This computer's YTM Starcast is too old to help with this. Update it first." })); return; }
     const ol = el('ol', 'extsteps');
     if (info.connected && info.outdated) {
-      const d1 = el('div', 'd'); d1.textContent = 'Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called "Pocketfader") and press its reload button.';
+      const d1 = el('div', 'd'); d1.textContent = 'Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called "Pocketfader") and press its reload button. If a greyed-out YTM Starcast stays beside it afterwards, remove that one.';
       ol.appendChild(step(1, 'Reload the extension', d1));
       ol.appendChild(step(2, 'Refresh the YouTube Music tab', null));
     } else {

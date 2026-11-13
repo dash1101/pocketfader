@@ -93,19 +93,19 @@
   // Requests to the app go through the extension's background script (see background.js: no website permission needed).
   // An older background script, or an extension reloaded under this page, falls back to asking directly, which works
   // where the browser has let YouTube Music reach this computer.
-  let relay = true;
+  let relayOffUntil = 0;   // the relay didn't answer: ask directly for a while, then try it again
   const asResponse = (r) => ({ ok: !!r.ok, status: r.status, json: async () => JSON.parse(r.text), text: async () => r.text });
   async function server(path, init = {}, ms = 10000) {
-    if (relay) {
+    if (Date.now() >= relayOffUntil) {
       let r;
       try {
         r = await chrome.runtime.sendMessage({ starcast: "http", path, method: init.method || "GET", body: init.body, ms });
       } catch (e) {
-        r = null;
+        r = null;   // an older background script, or the extension was reloaded under this page
       }
       if (r && typeof r.status === "number") return asResponse(r);
       if (r && r.error === "offline") throw new TypeError("YTM Starcast isn't answering");
-      relay = false;
+      relayOffUntil = Date.now() + 30000;
     }
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), ms);

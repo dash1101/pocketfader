@@ -113,7 +113,7 @@ fun ExtensionSetup(s: RemoteState) {
     val open: (JSONObject) -> Unit = { body -> scope.launch { Remote.notify(Remote.openOnComputer(body)) } }
     if (i.connected && i.outdated) {
         Step(1, "Reload the extension") {
-            Hint("Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called \"Pocketfader\") and press its reload button.")
+            Hint("Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called \"Pocketfader\") and press its reload button. If a greyed-out YTM Starcast stays beside it afterwards, remove that one.")
             for (b in i.browsers) {
                 OutlinedButton(onClick = { open(JSONObject().put("what", "page").put("browser", b.id)) }, enabled = s.online) {
                     Text("Open in ${b.name}")
