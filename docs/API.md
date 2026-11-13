@@ -6,7 +6,10 @@ extension all use this API.
 **Auth.** If the server runs with a token (`--lan`, `--bind`, `--token`), send
 `Authorization: Bearer <token>` (native clients) or the `pf_token` cookie (set by opening `/?token=…`).
 Without one: `401`. Public: `/api/info`, `/manifest.json`, `/icon.svg`, `/icon-192.png`, `/icon-512.png`. The
-extension's `/ext/*` routes need no token when they come from the computer itself (127.0.0.1, not through a proxy).
+extension's `/ext/*` routes need no token when they come from the computer itself (127.0.0.1, not through a proxy). The
+extension sends them from its background script, so a change (POST) to an `/ext/` route also accepts the extension's own
+origin, `chrome-extension://eohnmkbflbhphedffdfokpdnngcgknai` (its ID is fixed by the `key` in its manifest), and no other
+extension's; every other change still needs YouTube Music's origin, the app's own, or none.
 
 **Origin and Host.** Browsers must send a same-origin `Origin` on POSTs (non-browser clients send none, which is fine);
 the only other origin accepted is `https://music.youtube.com`, for the extension, and it is also the only one that gets

@@ -48,3 +48,25 @@ ext.runtime.onMessage.addListener((msg, sender, reply) => {
     .then(() => reply({ ok: true }), () => reply({ ok: false }));
   return true;
 });
+
+// The extension's requests to YTM Starcast on this computer are made here, not in the YouTube Music page: a website (and
+// the extension's scripts inside it) needs the browser's "apps and services on this device" permission to reach the
+// computer, which people are asked for and may not give; the extension itself has the right through its host permission.
+// Only YTM Starcast's own routes, only to the app on this computer.
+const BASE = "http://127.0.0.1:8777";
+const ROUTE = /^\/(?:ext\/[a-z/]+|api\/info)(?:\?[^#]*)?$/;
+ext.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (!msg || msg.starcast !== "http" || !sender || sender.id !== ext.runtime.id) return;
+  if (typeof msg.path !== "string" || !ROUTE.test(msg.path)) { reply({ error: "bad_path" }); return; }
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), Math.min(Math.max(Number(msg.ms) || 10000, 1000), 60000));
+  const init = { method: msg.method === "POST" ? "POST" : "GET", signal: ctl.signal };
+  if (init.method === "POST") {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = typeof msg.body === "string" ? msg.body : "";
+  }
+  fetch(BASE + msg.path, init)
+    .then(async (r) => reply({ status: r.status, ok: r.ok, text: await r.text() }), () => reply({ error: "offline" }))
+    .finally(() => clearTimeout(timer));
+  return true;
+});

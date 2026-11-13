@@ -401,6 +401,7 @@
   .pf-ln.pf-now { opacity: 1; filter: none; transform: scale(1.035); }
   .pf-ln.pf-plain { cursor: default; opacity: .9; filter: none; font-size: calc(var(--pf-ln, 23px) * .82); }
   .pf-ln.pf-plain:hover { background: none; }
+  .pf-ln.pf-blank { height: .7em; padding: 0; margin: 0; }
   .pf-ln small { display: block; font-size: calc(var(--pf-ln, 23px) * .62); font-weight: 500; color: var(--pf-muted); margin-top: 2px; }
   .pf-lyr-center .pf-ln { text-align: center; transform-origin: center; }
   .pf-lyr-norom .pf-ln small.pf-rom { display: none; }
@@ -531,7 +532,7 @@
   }
   /* in YouTube Music's sidebar, looking like its own entries (full, and narrow with the name under the icon) */
   .pf-guide { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-  .pf-guide-entry { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 24px; width: 100%; height: 48px; padding: 0 16px;
+  .pf-guide-entry { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 20px; width: 100%; height: 48px; padding: 0 16px;
     border-radius: var(--pf-r-full); cursor: pointer; color: var(--ytmusic-text-primary, #fff); font-family: "YouTube Sans", Roboto, sans-serif; font-size: 16px; font-weight: 500;
     transition: background-color .2s, transform .2s var(--pf-spring); }
   .pf-guide-entry:hover { background: rgba(255,255,255,.1); }
@@ -669,10 +670,9 @@
     // Material You page parts: the tabs beside the player as a pill bar (not underlined capitals), the queue's header and
     // its Save button tonal, YouTube Music's switches in the Material 3 shape, quiet scrollbars, pill-shaped sidebar entries.
     material: `
-    ytmusic-player-page tp-yt-paper-tabs { height: auto !important; margin: 10px 10px 6px !important; padding: 4px !important; border-radius: var(--pf-r-full) !important;
-      background: var(--pf-surface2) !important; border: 0 !important; box-shadow: none !important; }
+    ytmusic-player-page tp-yt-paper-tabs { box-sizing: content-box !important; height: 40px !important; margin: 10px 10px 6px !important; padding: 4px !important;
+      border-radius: var(--pf-r-full) !important; background: var(--pf-surface2) !important; border: 0 !important; box-shadow: none !important; }
     ytmusic-player-page tp-yt-paper-tabs #selectionBar { display: none !important; }
-    ytmusic-player-page tp-yt-paper-tabs #tabsContainer, ytmusic-player-page tp-yt-paper-tabs #tabsContent { height: auto !important; }
     ytmusic-player-page tp-yt-paper-tab { height: 40px !important; min-height: 40px; padding: 0 12px !important; margin: 0 1px; border-radius: var(--pf-r-full) !important;
       color: var(--pf-muted) !important; transition: background-color .3s var(--pf-ease), color .3s !important; }
     ytmusic-player-page tp-yt-paper-tab, ytmusic-player-page tp-yt-paper-tab * { text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; font-weight: 500 !important; }
@@ -681,11 +681,13 @@
     ytmusic-player-page tp-yt-paper-tab[aria-selected="true"] *, ytmusic-player-page tp-yt-paper-tab.iron-selected * { font-weight: 600 !important; }
     ytmusic-player-page tp-yt-paper-tab tp-yt-paper-ripple, ytmusic-player-page tp-yt-paper-tab paper-ripple { border-radius: inherit; }
     ytmusic-queue-header-renderer { margin: 4px 10px 8px !important; padding: 12px 12px 12px 16px !important; border-radius: var(--pf-r-lg); background: var(--pf-surface1) !important; }
-    ytmusic-queue-header-renderer button { border-radius: var(--pf-r-full) !important; background: var(--pf-container) !important; color: var(--pf-on-container) !important;
-      border: 0 !important; box-shadow: none !important; transition: border-radius var(--pf-t-medium) var(--pf-ease), filter .2s !important; }
-    ytmusic-queue-header-renderer button:hover { filter: brightness(1.1); }
-    ytmusic-queue-header-renderer button:active { border-radius: var(--pf-r-sm) !important; }
-    ytmusic-queue-header-renderer button * { color: inherit !important; fill: currentColor !important; }
+    ytmusic-queue-header-renderer button, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer .gradient-box,
+    ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer a { border-radius: var(--pf-r-full) !important; background: var(--pf-container) !important;
+      color: var(--pf-on-container) !important; border-color: transparent !important; box-shadow: none !important;
+      transition: border-radius var(--pf-t-medium) var(--pf-ease), filter .2s !important; }
+    ytmusic-queue-header-renderer button:hover, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer:hover .gradient-box { filter: brightness(1.12); }
+    ytmusic-queue-header-renderer button:active, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer:active a { border-radius: var(--pf-r-sm) !important; }
+    ytmusic-queue-header-renderer button *, ytmusic-queue-header-renderer ytmusic-chip-cloud-chip-renderer a * { color: inherit !important; fill: currentColor !important; }
     tp-yt-paper-toggle-button #toggleContainer { width: 52px !important; height: 32px !important; }
     tp-yt-paper-toggle-button #toggleBar { box-sizing: border-box; top: 0 !important; height: 32px !important; border-radius: 16px !important; opacity: 1 !important;
       background: var(--pf-surface2) !important; border: 2px solid var(--pf-outline); transition: background-color .2s, border-color .2s; }
@@ -1197,7 +1199,9 @@
         head.connect(conv); conv.connect(wet); wet.connect(ctx.destination);
         const analyser = ctx.createAnalyser();   // for the cover visualizers: listens only, plays nothing
         analyser.fftSize = 2048;
-        analyser.smoothingTimeConstant = 0.8;
+        analyser.smoothingTimeConstant = 0.72;
+        analyser.minDecibels = -92;   // room above for loud music, so its loudest moments still stand out
+        analyser.maxDecibels = -12;
         head.connect(analyser);
         // a context the system suspends (a device change) is woken again: the music runs through it now
         ctx.onstatechange = () => { if (ctx.state === "suspended") ctx.resume().catch(() => {}); applyPitch(); };
@@ -1249,7 +1253,7 @@
   }
   function syncTimes() {
     const r = getRate();
-    const els = on("speedTimes") && Math.abs(r - 1) > 0.001 ? timeSources() : [];
+    const els = on("speedTimes") && Math.abs(r - 1) > 0.001 && !adShowing() ? timeSources() : [];   // an advert's times stay its own
     for (const el of document.querySelectorAll("[data-pf-time-src]")) {
       if (els.includes(el)) continue;
       el.removeAttribute("data-pf-time-src");
@@ -1956,11 +1960,12 @@
     lyr.est = !!L.synced && !words && lyrOpts.est;
     lyr.body.textContent = "";
     lyr.els = L.lines.map((ln, i) => {
-      const el = h("div", { class: "pf-ln" + (L.synced ? "" : " pf-plain") + (lyr.est ? " pf-est" : "") });
+      const el = h("div", { class: "pf-ln" + (L.synced ? "" : " pf-plain") + (lyr.est ? " pf-est" : "") + (!L.synced && !ln.text ? " pf-blank" : "") });
       let w = Array.isArray(ln.w) && ln.w.length ? ln.w : null;
       if (!w && lyr.est && ln.text && ln.t != null) w = estimateWords(L.lines, i);
       ln._w = w;
-      if (!ln.text) el.append(h("span", { class: "pf-gap", text: "♪ ♪ ♪" }));
+      if (!ln.text && L.synced) el.append(h("span", { class: "pf-gap", text: "♪ ♪ ♪" }));   // the music on its own
+      else if (!ln.text) { /* a blank line between verses: just space */ }
       else if (L.synced && w) for (const [, , word] of w) el.append(h("span", { class: "pf-wd", text: word }));
       else el.append(ln.text);
       el.__spans = el.querySelectorAll(".pf-wd");
@@ -2949,7 +2954,7 @@
   // the album's colours running round its edge), Pulse (the halo breathing with the music) and Bars (the music's
   // frequencies all round the cover). Pulse and Bars listen to the page's sound through the same path as the clear
   // slowed sound (after a press on the page); until then they breathe gently on their own.
-  const viz = { host: null, el: null, arts: [], canvas: null, cx: null, raf: 0, src: "", data: null, level: 0, rect: null, rectAt: 0 };
+  const viz = { host: null, el: null, arts: [], canvas: null, cx: null, raf: 0, src: "", data: null, level: 0, avg: 0, rect: null, rectAt: 0 };
   function setViz(m) {
     vizMode = VIZ_MODES.some((x) => x[0] === m) ? m : "off";
     writeJSON(VIZ_KEY, { mode: vizMode });
@@ -3010,7 +3015,10 @@
       bins = viz.data;
       let bass = 0;
       for (let i = 1; i <= 12; i++) bass += bins[i];
-      level = Math.pow(bass / (12 * 255), 1.6);
+      bass /= 12 * 255;
+      // the beat: how far the bass rises above its own recent average (loud and quiet songs alike move)
+      viz.avg += (bass - viz.avg) * 0.03;
+      level = clamp((bass - viz.avg) * 5 + 0.2, 0, 1);
     } else if (playing) level = 0.3 + 0.12 * Math.sin(t / 650);
     viz.level += (level - viz.level) * (level > viz.level ? 0.45 : 0.12);   // quick to rise, slow to fall
     viz.el.style.setProperty("--pf-level", viz.level.toFixed(3));
@@ -3050,7 +3058,7 @@
       const [px, py, nx, ny] = edgePoint(M, M, r.width, r.height, rad, i / N);
       const k = Math.min(i, N - i) / (N / 2);              // mirrored: low notes at the top, high ones at the bottom
       let v;
-      if (bins) v = bins[Math.min(bins.length - 1, 2 + Math.floor(Math.pow(k, 1.7) * 260))] / 255;
+      if (bins) v = Math.pow(bins[Math.min(bins.length - 1, 2 + Math.floor(Math.pow(k, 1.7) * 260))] / 255, 2.4);
       else v = playing ? 0.12 + 0.08 * Math.sin(t / 380 + i * 0.45) : 0.03;
       const len = 3 + v * (M - 14);
       cx.globalAlpha = 0.3 + 0.7 * v;

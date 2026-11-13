@@ -9,7 +9,10 @@ The part of YTM Starcast that lives in the browser playing YouTube Music. It:
 - adds a **toolbar button** with YTM Starcast's switches.
 
 It works in Chromium-based browsers (Chrome, Brave, Edge…). It talks only to YTM Starcast on this computer at
-`http://127.0.0.1:8777` and opens no network port of its own.
+`http://127.0.0.1:8777` and opens no network port of its own. Those requests are made by the extension's background
+script, so YouTube Music never needs the browser's "access other apps and services on this device" permission. The
+manifest's `key` fixes the extension's ID (`eohnmkbflbhphedffdfokpdnngcgknai`) wherever its folder is; YTM Starcast accepts
+that ID's requests and no other extension's.
 
 ## Load it (one time)
 

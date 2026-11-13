@@ -69,7 +69,7 @@
     if (/^[a-z]{2,12}$/.test(q.source || "")) params.set("source", q.source);
     let data;
     try {
-      const r = await fetch(BASE + "/ext/lyrics?" + params, { method: "GET" });
+      const r = await server("/ext/lyrics?" + params, { method: "GET" }, 25000);
       // an app from before live lyrics answers "not found"
       data = r.status === 404 ? { error: "old_app" } : await r.json();
     } catch (e) {
@@ -90,31 +90,45 @@
     }, 300);
   }
 
+  // Requests to the app go through the extension's background script (see background.js: no website permission needed).
+  // An older background script, or an extension reloaded under this page, falls back to asking directly, which works
+  // where the browser has let YouTube Music reach this computer.
+  let relay = true;
+  const asResponse = (r) => ({ ok: !!r.ok, status: r.status, json: async () => JSON.parse(r.text), text: async () => r.text });
+  async function server(path, init = {}, ms = 10000) {
+    if (relay) {
+      let r;
+      try {
+        r = await chrome.runtime.sendMessage({ starcast: "http", path, method: init.method || "GET", body: init.body, ms });
+      } catch (e) {
+        r = null;
+      }
+      if (r && typeof r.status === "number") return asResponse(r);
+      if (r && r.error === "offline") throw new TypeError("YTM Starcast isn't answering");
+      relay = false;
+    }
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    try {
+      return await fetch(BASE + path, { ...init, headers: init.body ? { "Content-Type": "application/json" } : undefined, signal: ctl.signal });
+    } finally { clearTimeout(t); }
+  }
   function post(path, obj) {
-    return fetch(BASE + path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(obj),
-    }).catch(() => {});
+    return server(path, { method: "POST", body: JSON.stringify(obj) }).catch(() => {});
   }
   // this extension's version, so the app can tell when the browser still runs an older copy (it then asks for a reload)
   let EXT_VERSION = null;
   try { EXT_VERSION = chrome.runtime.getManifest().version; } catch (e) { /* the extension was reloaded under us */ }
   // what plays -> server; its answer carries the switches
   function pushState(obj) {
-    return fetch(BASE + "/ext/state", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(EXT_VERSION ? { ...obj, ext: EXT_VERSION } : obj),
-    }).then((r) => (r.ok ? r.json().then(takeCfg) : null)).catch(() => {});
+    return server("/ext/state", { method: "POST", body: JSON.stringify(EXT_VERSION ? { ...obj, ext: EXT_VERSION } : obj) })
+      .then((r) => (r.ok ? r.json().then(takeCfg) : null)).catch(() => {});
   }
 
   // ------------------------------------------------------------ YTM Starcast's switches (toolbar popup, Refine's panel)
   // A request with a time limit, so a stuck app never leaves the popup or the panel waiting.
-  async function call(path, init, ms = 5000) {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), ms);
-    try { return await fetch(BASE + path, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
+  function call(path, init, ms = 5000) {
+    return server(path, init, ms);
   }
   // What an app from before YTM Starcast's switches calls itself (it has no /ext/status).
   async function appInfo() {
@@ -288,9 +302,10 @@
   // The tab is closing or navigating away: say goodbye, so the app drops it (and its Discord status) at once.
   // A plain-text body keeps this a simple request that needs no preflight; keepalive lets it outlive the page.
   addEventListener("pagehide", () => {
-    try {
-      fetch(BASE + "/ext/bye", { method: "POST", keepalive: true, headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ instance: INST }) }).catch(() => {});
+    const body = JSON.stringify({ instance: INST });
+    try { chrome.runtime.sendMessage({ starcast: "http", path: "/ext/bye", method: "POST", body, ms: 3000 }).catch(() => {}); } catch (e) {}
+    try {   // and directly, where the browser lets YouTube Music reach this computer (the page may be gone before the relay answers)
+      fetch(BASE + "/ext/bye", { method: "POST", keepalive: true, headers: { "Content-Type": "text/plain" }, body }).catch(() => {});
     } catch (e) {}
   });
   // Back from the browser's back/forward cache after that goodbye: the page sends everything again.
@@ -309,7 +324,7 @@
   async function loop() {
     for (;;) {
       try {
-        const r = await fetch(BASE + "/ext/poll?i=" + encodeURIComponent(INST), { method: "GET" });
+        const r = await server("/ext/poll?i=" + encodeURIComponent(INST), { method: "GET" }, 40000);
         const reply = await r.json();
         if (!r.ok) { await sleep(2000); continue; }   // refused or failed: don't ask again straight away
         takeCfg(reply);

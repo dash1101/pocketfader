@@ -38,6 +38,9 @@ EQ_MIN, EQ_MAX = -12.0, 12.0
 EQ_BANDS = ("bass", "mid", "high")
 # The YT Music extension runs in a music.youtube.com page, so its requests carry that Origin.
 CORS_ORIGINS = {"https://music.youtube.com"}
+# YTM Starcast's browser extension, by its fixed ID (the "key" in extension/manifest.json pins it, wherever the folder is):
+# its background script sends the extension's requests, and only it may use the /ext/ routes with an extension's origin.
+EXTENSION_ORIGIN = "chrome-extension://eohnmkbflbhphedffdfokpdnngcgknai"
 PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/api/info"}
 COOKIE = "pf_token"
 APP_NAME = "YTM Starcast"
@@ -514,6 +517,12 @@ class Handler(BaseHTTPRequestHandler):
         if not origin:  # non-browser clients (curl, the native app) send none
             return True
         if origin in CORS_ORIGINS:
+            return True
+        # the browser extension's own background script, which makes the extension's requests (a website needs the
+        # browser's "apps on this device" permission to reach this computer; the extension doesn't): its routes only,
+        # from this computer only. Websites can't send an extension's origin.
+        if origin == EXTENSION_ORIGIN and urlsplit(self.path).path.startswith("/ext/") \
+                and self.client_address[0] in ("127.0.0.1", "::1") and not self._proxied():
             return True
         host = self.headers.get("Host", "")
         return origin in (f"http://{host}", f"https://{host}")

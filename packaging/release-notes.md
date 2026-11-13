@@ -6,6 +6,21 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.6
+
+Fixes from checking Refine on YouTube Music itself:
+- The tabs beside the player (Up next, Lyrics, Comments, Related) disappeared with "Material You page parts" on. They
+  show again, as a pill bar.
+- The Save button above the queue takes the Material You look too.
+- The extension connects without asking: it no longer needs the browser's "access other apps and services on this
+  device" permission for YouTube Music (new Brave and Chrome setups asked for it, and nothing worked until it was given).
+  After updating, reload YTM Starcast once on the browser's extensions page: it gets a fixed ID, and the browser may keep
+  a greyed-out older YTM Starcast entry beside it, which you can remove.
+- Lyrics that aren't time-synced show their blank lines as space, not as ♪ ♪ ♪.
+- The player bar's times stay an advert's own while one plays.
+- The Pulse and Bars visualizers follow the beat on loud songs too (they used to sit near full).
+- Lyrics, Make a playlist and Refine line up with YouTube Music's own entries in the sidebar.
+
 ### What's new in 0.2.0-alpha.5
 
 **A new icon**

@@ -10,7 +10,7 @@ import threading
 from starcast.opener import Opener
 from starcast.audio import AudioFetcher
 from starcast.config import JsonFile
-from starcast.server import App, Handler
+from starcast.server import EXTENSION_ORIGIN, App, Handler
 from starcast.updater import Updater
 
 from .fakes import FakeAudio, FakeEngine, FakeMedia, FakeToggleEQ
@@ -420,3 +420,35 @@ class OpenAndPauseTests(Base):
         code, r, _ = self.req("POST", "/api/media/pause-others", {})
         self.assertEqual((code, r), (200, {"paused": ["Other"], "supported": True}))
         self.assertEqual(self.media.calls, [("pause_others", "", "")])
+
+
+class ExtensionOriginTests(Base):
+    """The extension's background script makes its requests (no website permission needed): its origin is accepted on
+    the extension's routes, from this computer, and nowhere else."""
+
+    def test_extension_origin_on_its_routes(self):
+        h = {"Origin": EXTENSION_ORIGIN}
+        code, r, _ = self.req("POST", "/ext/state", {"now": {"title": "T"}, "queue": []}, headers=h)
+        self.assertEqual(code, 200, r)
+        self.assertEqual(self.req("POST", "/ext/bye", {"instance": "x"}, headers=h)[0], 200)
+
+    def test_not_on_the_apps_routes(self):
+        h = {"Origin": EXTENSION_ORIGIN}
+        self.assertEqual(self.req("POST", "/api/volume", {"percent": 10}, headers=h)[0], 403)
+        self.assertEqual(self.req("POST", "/api/parts", {"refine": False}, headers=h)[0], 403)
+        self.assertEqual(self.audio.state["percent"], 50)
+
+    def test_other_extensions_refused(self):
+        for origin in ("chrome-extension://abcdefghijklmnopabcdefghijklmnop", "moz-extension://1234", EXTENSION_ORIGIN + "x"):
+            self.assertEqual(self.req("POST", "/ext/state", {"now": {"title": "T"}}, headers={"Origin": origin})[0], 403, origin)
+
+    def test_the_id_is_the_manifests(self):
+        # Chrome's ID for an extension with a "key": the first 128 bits of the key's SHA-256, written with the letters a-p
+        import base64, hashlib
+        m = json.loads((Path(__file__).resolve().parent.parent / "extension" / "manifest.json").read_text())
+        digest = hashlib.sha256(base64.b64decode(m["key"])).hexdigest()[:32]
+        self.assertEqual(EXTENSION_ORIGIN, "chrome-extension://" + "".join("abcdefghijklmnop"[int(c, 16)] for c in digest))
+
+    def test_websites_still_refused(self):
+        for origin in ("https://evil.example", "http://chrome-extension.evil.example", "null"):
+            self.assertEqual(self.req("POST", "/ext/state", {"now": {"title": "T"}}, headers={"Origin": origin})[0], 403, origin)
