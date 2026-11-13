@@ -207,6 +207,9 @@ class SecurityTests(Base):
         self.assertEqual(self.req("GET", "/manifest.json")[0], 200)
         s, info, _ = self.req("GET", "/api/info")
         self.assertEqual((s, info["auth"], info["name"]), (200, True, "YTM Starcast"))
+        # the extension this app ships, which the extension compares with its own to update in place
+        manifest = json.loads((Path(__file__).resolve().parent.parent / "extension" / "manifest.json").read_text())
+        self.assertEqual(info["extension"], manifest["version"])
 
     def test_login_page_names_the_app(self):
         s, body, _ = self.req("GET", "/", headers={"Accept": "text/html"})

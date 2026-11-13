@@ -23,9 +23,11 @@ that ID's requests and no other extension's.
 4. Click **Load unpacked** and pick the folder that holds `manifest.json`.
 5. Keep a **`https://music.youtube.com`** tab open (pinned is ideal). The extension starts in that tab.
 
-The extension stays loaded after a browser update or a reboot. **To update it**, replace the folder's files with those of
-the new `ytm-starcast-extension.zip` (or update your copy of the source), click **Reload** on the extension's card, and reload
-the YouTube Music tab.
+The extension stays loaded after a browser update or a reboot. **Updates:** loaded from YTM Starcast's own folder, the
+extension (2.4 and later) updates itself. YTM Starcast copies each new version into that folder, and the extension reloads
+into it: straight away when no YouTube Music tab is open, otherwise from **Update now** in the toolbar button (which shows
+↑), which reloads your YouTube Music tabs too. Loaded from another folder (an unzipped `ytm-starcast-extension.zip`, a copy
+of the source), replace the folder's files, click **Reload** on the extension's card, and reload the YouTube Music tab.
 
 **Coming from Pocketfader or YTM Beacon:** keep only one copy of this extension. If the Pocketfader extension was loaded
 from another folder, remove it. Remove the **YTM Beacon** extension too: YTM Starcast's extension does its job now. (YTM

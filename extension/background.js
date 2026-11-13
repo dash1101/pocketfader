@@ -70,3 +70,97 @@ ext.runtime.onMessage.addListener((msg, sender, reply) => {
     .finally(() => clearTimeout(timer));
   return true;
 });
+
+// ------------------------------------------------------------------ updating in place
+// YTM Starcast copies the new extension into its folder each time it is updated. A browser that loads YTM Starcast from
+// that folder ("Load unpacked") runs the new version once the extension reloads, which happens here: by itself when no
+// YouTube Music tab is open (a reload cuts an open tab's scripts off), or from "Update now" in the toolbar popup, which
+// reloads the YouTube Music tabs as well. One try per version: a browser that loads YTM Starcast from a folder the app
+// doesn't update would otherwise reload again and again.
+const RUNNING = ext.runtime.getManifest().version;
+
+function newer(a, b) {
+  const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
+async function ytmTabIds() {
+  let tabs = [];
+  try { tabs = await ext.tabs.query({ url: YTM + "*" }); } catch (e) {}
+  return (tabs || []).filter((t) => typeof t.url === "string" && t.url.startsWith(YTM)).map((t) => t.id);
+}
+
+/** The version in YTM Starcast's folder when it is newer than this one, else null. */
+async function readyVersion() {
+  try {
+    const r = await fetch(BASE + "/api/info", { cache: "no-store" });
+    const info = await r.json();
+    const v = info && typeof info.extension === "string" ? info.extension : null;
+    return v && /^\d+(\.\d+){0,3}$/.test(v) && newer(v, RUNNING) ? v : null;
+  } catch (e) {
+    return null;            // the app isn't running: nothing to compare with
+  }
+}
+
+function markReady(v) {
+  try {
+    ext.action.setBadgeBackgroundColor({ color: "#8b5cf6" });
+    ext.action.setBadgeText({ text: v ? "↑" : "" });
+    ext.action.setTitle({ title: v ? "YTM Starcast: version " + v + " is ready. Open this to update." : "YTM Starcast" });
+  } catch (e) {}
+}
+
+async function reloadInto(v, tabIds) {
+  try { await ext.storage.local.set({ reloadedFor: v, reloadTabs: tabIds }); } catch (e) {}
+  ext.runtime.reload();
+}
+
+/** -> {ready, tried}: the newer version waiting (or null), and whether reloading for it was tried already. [auto]: reload
+ *  by itself when nothing would be cut off. */
+async function checkUpdate(auto) {
+  const v = await readyVersion();
+  markReady(v);
+  if (!v) return { ready: null, tried: false };
+  let st = {};
+  try { st = await ext.storage.local.get(["reloadedFor"]); } catch (e) {}
+  const tried = st.reloadedFor === v;
+  if (auto && !tried && !(await ytmTabIds()).length) await reloadInto(v, []);
+  return { ready: v, tried };
+}
+
+ext.runtime.onInstalled.addListener(async () => {
+  // just reloaded by "Update now": the YouTube Music tabs it cut off get the new scripts
+  let st = {};
+  try { st = await ext.storage.local.get(["reloadTabs"]); } catch (e) {}
+  const ids = Array.isArray(st.reloadTabs) ? st.reloadTabs : [];
+  if (ids.length) {
+    try { await ext.storage.local.remove("reloadTabs"); } catch (e) {}
+    for (const id of ids) { try { await ext.tabs.reload(id); } catch (e) {} }
+  }
+  checkUpdate(true);
+});
+ext.runtime.onStartup.addListener(() => { checkUpdate(true); });
+try {
+  ext.alarms.create("starcast-update", { periodInMinutes: 30 });
+  ext.alarms.onAlarm.addListener((a) => { if (a.name === "starcast-update") checkUpdate(true); });
+} catch (e) {}
+
+ext.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (!msg || !sender || sender.id !== ext.runtime.id) return;
+  if (msg.starcast === "updateState") {
+    checkUpdate(false).then((r) => reply({ running: RUNNING, ...r }), () => reply({ running: RUNNING, ready: null }));
+    return true;
+  }
+  if (msg.starcast === "updateNow") {
+    readyVersion().then(async (v) => {
+      reply({ ok: !!v });
+      if (v) await reloadInto(v, await ytmTabIds());
+    });
+    return true;
+  }
+});

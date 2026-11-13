@@ -755,8 +755,10 @@ class Handler(BaseHTTPRequestHandler):
             outs = app.audio.outputs()
             return self._json(200, {"outputs": outs, "default": next((o["name"] for o in outs if o["default"]), None)})
         if path == "/api/info":
+            # "extension": the version of the browser extension this app ships (and keeps in its folder): the extension
+            # compares it with its own to update in place
             return self._json(200, {"name": APP_NAME, "version": __version__,
-                                    "api": 1, "auth": bool(app.token)})
+                                    "api": 1, "auth": bool(app.token), "extension": app.extension.expected_version})
         if path == "/api/connect":     # the addresses to open on a phone, with QR codes
             return self._json(200, app.connect(self.server.server_address[1],
                                                qr=(parse_qs(urlsplit(self.path).query).get("qr") or ["1"])[0] != "0"))

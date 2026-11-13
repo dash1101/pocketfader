@@ -206,3 +206,25 @@ dc.addEventListener("toggle", () => {
   }));
 });
 refresh();
+
+// ------------------------------------------------------------------ a newer version in YTM Starcast's folder
+// (the app copies it there when it is updated; the background script reloads into it)
+async function paintUpdate() {
+  let r = null;
+  try { r = await limit(ext.runtime.sendMessage({ starcast: "updateState" }), 8000); } catch (e) {}
+  const v = r && typeof r.ready === "string" ? r.ready.slice(0, 16) : "";
+  $("upd").hidden = !v;
+  if (!v) return;
+  $("updHead").textContent = "Version " + v + " is ready";
+  $("updDetail").textContent = r.tried
+    ? "It didn't take: this browser seems to load YTM Starcast from another folder than the app's. Load it from the " +
+      "app's folder instead (Settings, Browser extension in the app shows it), then updates arrive by themselves."
+    : "Updating restarts YTM Starcast in this browser and reloads your YouTube Music tabs (the song starts again).";
+  $("updAct").textContent = r.tried ? "Try again" : "Update now";
+  $("updAct").disabled = false;
+  $("updAct").onclick = () => {
+    $("updAct").disabled = true;
+    Promise.resolve(ext.runtime.sendMessage({ starcast: "updateNow" })).catch(() => {});
+  };
+}
+paintUpdate();

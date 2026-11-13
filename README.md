@@ -175,8 +175,10 @@ The extension's **toolbar button** shows whether YTM Starcast is running, the sw
 Refine, and a link to open YTM Starcast. It reaches YTM Starcast through an open YouTube Music tab: if it asks you to open YouTube
 Music, reload the tab or allow access to music.youtube.com, do that.
 
-**Updates** replace the folder's files by themselves. The browser picks them up when you click **Reload** on the
-extension's card (Settings → Browser extension says when that's needed), then reload the YouTube Music tab.
+**Updates** arrive by themselves: YTM Starcast copies the new extension into its folder, and the extension (2.4 and
+later) reloads into it. With no YouTube Music tab open it does so straight away; otherwise the toolbar button shows ↑ and
+**Update now** in it reloads the extension and your YouTube Music tabs. This works when the browser loads the extension
+from YTM Starcast's own folder.
 
 The extension only talks to YTM Starcast on the same computer (`127.0.0.1:8777`); it opens no network port of its own. When it
 isn't connected, the apps fall back to simple play/pause/next/seek for whatever media player *is* running. More in the

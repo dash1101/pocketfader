@@ -177,13 +177,6 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    /** Each time the app comes to the front: Android may have refused the notification the last time (the app wasn't
-     *  quite in front yet), and a refused start is never tried again by itself. Starting it again when it runs is free. */
-    override fun onStart() {
-        super.onStart()
-        syncPlayback()
-    }
-
     /** The notification for what the computer plays: on when wanted. On the phone, the phone's own player shows its
      *  notification; the computer's would be a duplicate. */
     private fun syncPlayback() {

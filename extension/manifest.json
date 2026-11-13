@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "YTM Starcast",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "description": "Your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr8iD4lerjl/Q0aYrANus3Hwxuc4ppiBzGZ7Op0otKpQCi/X3Ia6BhZOK3gbqFOIO+oT/ESuklSomYyeUCnFV8UvFYNtzC6nf8ZpkCn29AI6QjHjGKAhlbNor7LGZhNsA9jleF/Pr6NQq1/LeZDLFHR7JCs8QWTPpSL3gazdqndMVdQD99pnabAcVy2VYAdtoJ+cZ5+fJG0fCCsH2uKxhabFWDHJSdkD5Nw/NE3wTtaOqy2izR6ordLdLcdIr0pEWnQ4xrqToyfVTXYqRNMU22St99U7KFLtbhvkbAuphPcZn07FuwfZvRKA98kCygIgzEFhoua1OlZ7Hbi3kUZzp8QIDAQAB",
   "permissions": [
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "http://127.0.0.1:8777/*",
