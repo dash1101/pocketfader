@@ -7,11 +7,22 @@ through a server of ours.
 
 ## Status
 
-The first part is built (extension 2.2, `extension/refine.js`, with `extension/stretch.js` for the clear slowed sound). It
-lives in YouTube Music's own page rather than in a separate panel: a ✦ button in the top bar opens its settings, the speed
-menu opens from the player's own speed button, the live lyrics fill YouTube Music's own Lyrics tab, and the "something you
-might like" button sits beside the home page's first shelf (Listen again), where starting something new is a deliberate
-choice rather than a slip next to the player.
+The first part is built (extension 2.3, `extension/refine.js`, with `extension/stretch.js` for the clear slowed sound). It
+lives in YouTube Music's own page rather than in a separate panel:
+
+- **✦ in the top bar** opens a short menu: tiles for what is switched most (album colours, animations, the wavy bar,
+  Material You page parts, the cover visualizer, clear slowed sound, live lyrics, lyrics that follow you), the lyrics
+  window, the playlist maker and **All settings**.
+- **The Discord button** beside it opens Discord status (on or off, and every option, with a preview of the card); its dot
+  is green while your music shows on Discord.
+- **All settings** is one large dialog with everything together (Look, Playback, Lyrics, Controls, Discord status,
+  Computer sound, YTM Starcast, About), the sections listed down the side.
+- **The sidebar** gets Lyrics, Make a playlist and Refine (All settings) under Home, Explore and Library, in both its full
+  and narrow forms.
+- **YTM Starcast's logo** takes the place of YouTube Music's in the top bar while Refine is on (it still leads Home).
+- The speed menu opens from the player's own speed button, the live lyrics fill YouTube Music's own Lyrics tab, and the
+  "something you might like" button sits beside the home page's first shelf (Listen again), where starting something new
+  is a deliberate choice rather than a slip next to the player.
 
 | Done | Where | Switch |
 |---|---|---|
@@ -20,6 +31,10 @@ choice rather than a slip next to the player.
 | Expressive player controls: bigger play button that morphs circle ↔ rounded square, tinted hover and pressed buttons | style layer | Expressive player controls |
 | Wavy progress bar: drawn over YouTube Music's own (which stays underneath, invisible, so seeking and dragging are unchanged) | canvas | Wavy progress bar |
 | Glow behind the cover | style layer | Glow behind the cover |
+| Material You page parts: the tabs beside the player (Up next, Lyrics, Comments, Related) as a pill bar instead of underlined capitals, the queue's header and its Save button tonal, YouTube Music's switches in the Material 3 shape, quiet scrollbars, pill-shaped sidebar entries | style layer | Material You page parts |
+| Cover visualizer (experimental): Halo (the cover, blurred, slowly turning around it), Orbit (a ring of the album's colours running round its edge), Pulse (the halo breathing with the music), Bars (the music's frequencies all round the cover) | player page | Cover visualizer |
+| YTM Starcast's logo in the top bar | top bar | YTM Starcast logo |
+| Lyrics, Make a playlist and Refine in the sidebar | sidebar | In the sidebar |
 | Animations: a new page's header, shelves and rows rise in one after another; cards, rows, chips and buttons answer a press; menus and dialogs drop in; a new song slides into the player bar and the big cover settles; the player page and the Up next / Lyrics / Related tabs move into place. None of it for anyone whose system asks for less motion | style layer | Animations |
 | Speed menu: 0.25×–3×, presets, pitch on/off, a speed for any song (it stays from song to song and after a reload, even though the player puts its own back whenever a song loads), for this song or for this playlist | YouTube Music's speed button | Richer speed menu, Keep the pitch |
 | Clear slowed sound: a slowed song is played the clear way (pitch lowered, as with a record) and its pitch is put back by a phase vocoder, instead of the browser's own time-stretching, which smears and warbles on music | speed menu | Clear slowed sound |
@@ -27,10 +42,11 @@ choice rather than a slip next to the player.
 | Times that follow the speed: at 0.8×, a 3:00 song shows 3:45 in the player bar (and on Discord, through the app) | player bar | Times follow the speed |
 | Random-song button beside the home page's first shelf | home page | Something-you-might-like button |
 | Playlist maker (item 3 below) | ✦ menu → Make a playlist | — |
-| Live lyrics (item 1 below): word by word, in YouTube Music's own Lyrics tab, or in a window that can be moved, resized, pinned and kept above other windows | Lyrics tab, ✦ menu → Open lyrics in a window | Live lyrics |
+| Live lyrics (item 1 below): word by word, in YouTube Music's own Lyrics tab, or in a window that can be moved, resized, pinned and kept above other windows; they follow you out of the player | Lyrics tab, sidebar, ✦ menu → Lyrics window | Live lyrics, Lyrics follow you, Above other windows when you switch tabs |
 | Speed from the keyboard: Shift+. faster, Shift+, slower | keyboard | Richer speed menu |
-| YTM Starcast's switches: the YouTube Music remote, Discord status and Refine itself, with a line saying what Discord status is doing, and every Discord status option | ✦ menu → YTM Starcast | — |
-| The computer's sound: volume, output, and the built-in equalizer (on/off, presets, bass, mid, treble), as in YTM Starcast's mixer | ✦ menu → Computer sound | Computer audio (in the apps) |
+| YTM Starcast's switches: the YouTube Music remote, Discord status and Refine itself, with a line saying what Discord status is doing | All settings → YTM Starcast | — |
+| Discord status: on or off and every option, with a preview of the card | the Discord button, All settings → Discord status | — |
+| The computer's sound: volume, output, and the built-in equalizer (on/off, presets, bass, mid, treble), as in YTM Starcast's mixer | All settings → Computer sound | Computer audio (in the apps) |
 
 **Refine as a whole has one switch in YTM Starcast**: Settings → Parts in the apps, the extension's toolbar button, or the
 Refine switch in the ✦ menu. Switched off, Refine takes everything it added out of the page, including the ✦ button (a
@@ -58,7 +74,7 @@ YouTube Music has two layouts of the player bar, and Refine supports both. What 
 ## Live lyrics
 
 - **Where:** YouTube Music's own Lyrics tab, next to Up next (Refine switches the tab on when YouTube Music has no lyrics
-  of its own). The window button moves them into a window on the page: drag it by its title, resize it from its corner,
+  of its own), or a window opened from the sidebar, the ✦ menu or the tab itself. The window button moves them into a window on the page: drag it by its title, resize it from its corner,
   pin it (it then stays where it is, can't be moved by accident and comes back after a reload), keep it above other
   windows (the browser's floating window for a page, where the browser has one), or send it back to the tab.
 - **Word by word:** KuGou and NetEase time each word; LRCLIB, NetEase and YouTube Music otherwise give line timings, and
@@ -67,6 +83,12 @@ YouTube Music has two layouts of the player bar, and Refine supports both. What 
 - **Options**, per song: the source (Best picks word by word when there is one; a dot marks the sources that have word
   timings) and the timing (Earlier and Later move the lyrics a quarter of a second). For all songs: text size, alignment,
   and the romanized and translated lines.
+- **They follow you:** leaving the player page while the Lyrics tab shows them brings them along in a window, which goes
+  again when you come back to the Lyrics tab (a window you opened, moved or pinned stays). Switching to another browser
+  tab while they are on screen and music plays can put them in a window above everything else, where the browser offers
+  that ("automatic picture-in-picture"); they come back when you do.
+- **The right song:** the app compares the sources' words (and YouTube Music's own lyrics, when it has them) and keeps
+  another song of the same name from winning; lyrics on screen are only replaced by the same words, better timed.
 - **The clear slowed sound** comes out a little later than the song's clock; the lyrics wait for it.
 
 ## The clear slowed sound

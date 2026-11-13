@@ -38,3 +38,13 @@ ext.commands.onCommand.addListener(async (command) => {
   const s = await ask({ starcast: "discordSet", kind: "visibility", body: { action: showing ? "hide" : "show" } });
   badge(s && s.ok ? (showing ? "off" : "on") : "!");
 });
+
+// A YouTube Music tab asks to be brought to the front (YTM Starcast's "focus" and "settings" commands, from Orbit or the
+// apps): that tab becomes the selected one, and its window comes forward.
+ext.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (!msg || msg.starcast !== "focusTab" || !sender || !sender.tab || sender.id !== ext.runtime.id) return;
+  const tab = sender.tab;
+  Promise.all([ext.tabs.update(tab.id, { active: true }), ext.windows.update(tab.windowId, { focused: true })])
+    .then(() => reply({ ok: true }), () => reply({ ok: false }));
+  return true;
+});

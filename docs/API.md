@@ -45,7 +45,7 @@ status, `capabilities.beacon`, the `pf_token` cookie), so apps already on phones
   "engine": {"connected": false, "level": 0.0, "eq": {}, "routing": {}},
   "capabilities": {"volume": true, "eq": false, "eq_toggle": false, "meter": false, "outputs": true,
                    "engine_actions": [], "engine_label": "", "media": true, "ytm_bridge": false,
-                   "lyrics": true, "beacon": true, "discord": true, "sleep": true, "audio": true},
+                   "lyrics": true, "beacon": true, "discord": true, "sleep": true, "audio": true, "ytm_focus": true},
   "limits": {"eq_min": -12.0, "eq_max": 12.0},
   "sleep": {"remainingSec": 0},
   "parts": {"remote": true, "discord": true, "refine": true, "audio": true}
@@ -69,14 +69,19 @@ every part counts as on. `capabilities.beacon` stays `true` because older apps s
     "lines": [{"t": 12.4, "text": "…", "rom": "…romanized…", "tr": "…translation…",
                "w": [[12.4, 12.9, "word "], [12.9, 13.6, "word"]]}]              // t is null when not synced; w only with word-by-word sources
   },
-  "pending": false                          // true while slower sources are still being asked (ask again in a few seconds)
+  "pending": false,                         // true while slower sources are still being asked (ask again in a few seconds)
+  "agreed": true                            // another source (or YouTube Music's own lyrics) has the same words
 }
 ```
 
 The server asks the sources at the same time (`kugou` and `netease` give word-by-word timing for many songs; LRCLIB's
 "enhanced" lyrics keep theirs too), answers as soon as something time-synced is in, and keeps everything for a few hours,
 so switching `source` is instant. Without `source`, word by word beats line by line beats plain text; a time-synced
-answer with less than half the lines of another one (a wrong song, an "instrumental" placeholder) comes last. Credit
+answer with less than half the lines of another one (a wrong song, an "instrumental" placeholder) comes last, and so do
+lyrics whose words differ from YouTube Music's own lyrics for the song, from two other sources that agree with each
+other, or (when only two sources answer and disagree) from the surer search result. Searches go by title, so this keeps
+another song of the same name from winning just because it has word timings. Each result carries `match` (how sure its
+search was) and runs no later than the song's end. Credit
 lines some sources put before the lyrics ("Composer: …") are left out. It also looks up the current
 track and the next two in the background when the track changes. When the chosen source has no romanization or
 translation, the lines borrow them from another source by timestamp. Only the title, artist, album and length are sent
@@ -116,6 +121,7 @@ YTM Starcast's four parts can each be switched off. The apps hide what belongs t
 | `POST /api/ytm` | `{"type": "transport", "action": "playpause\|next\|prev\|seek", "position"?: s}` | Goes to the extension if connected, else the host media player. `409 {"error": "part_off"}` while the remote is switched off (for every `/api/ytm` command). |
 | `POST /api/ytm` | `{"type": "search"\|"play"\|"queueAdd"\|"home"\|"playlists"\|"startPlaylist"\|"artist"\|"speed"\|"lucky"\|…, …}` | Extension only (`{"error":"extension_offline"}` otherwise). See `extension/ytm_main.js`. `artist` takes `browseId`, `videoId` (the artist of that song) or `name` and returns `{name, subscribers, description, thumb, play, radio, shelves}`; `speed` takes `rate` (0.25–2); `lucky` plays a random pick from your home page; `search` takes `query` and an optional `filter` (`songs`, `videos`, `albums`, `artists` or `playlists`; without it, everything) and returns `{items}`, each with a `kind` (`song`, `artist`, `album`, `playlist`). |
 | `POST /api/ytm` | `{"type": "play", "videoId", "playlistId"?}`, `{"type": "startPlaylist", "playlistId"}` or `{"type": "open"}` **with no YouTube Music tab connected** | The computer opens music.youtube.com in its browser (the song, the playlist or the home page) and replies `{"ok": true, "opened": true}`. Only valid ids are accepted and only music.youtube.com is ever opened. |
+| `POST /api/ytm` | `{"type": "focus"}` or `{"type": "settings"}` | Brings YouTube Music to the front: the extension selects its tab and raises its window (the extension's background script does it), and with `settings` Refine's All settings open in it. Replies `{"ok": true, "refine": <Refine switched on>}`. With no tab connected, the computer opens music.youtube.com instead (`{"ok": true, "opened": true}`). Both work while the YouTube Music remote is switched off (they don't control playback). `capabilities.ytm_focus` is `true` on servers that have them (0.2.0a5). |
 | `POST /api/media` | `{"action": "playpause\|next\|prev"}` or `{"action":"seek","position":s}` | Host media player directly. |
 | `POST /api/media/pause-others` | `{}` | Pauses every other media player that is playing on the computer (not the YouTube Music song playing); replies `{paused: [names], supported}`. The shared preference `pauseOthers` (set through `POST /api/prefs`) makes the computer do this by itself whenever YouTube Music starts playing. |
 | `POST /api/session` | `{"app": "<id>"\|null}` | Pin which player the server controls (`null` = auto). |

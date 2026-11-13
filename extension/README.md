@@ -48,7 +48,8 @@ The button reaches YTM Starcast through an open YouTube Music tab, so it can sho
 
 ## Refine (improvements to YouTube Music itself)
 
-`refine.js` adds a ✦ button to YouTube Music's top bar. From there you can switch each part on or off:
+`refine.js` adds a ✦ button to YouTube Music's top bar (a short menu, with All settings for everything), a Discord status
+button beside it, entries in the sidebar and YTM Starcast's logo. From there you can switch each part on or off:
 a Material 3 Expressive look (rounder shapes, colours from the album art, expressive player controls, a wavy progress bar,
 a glow behind the cover, animations), a richer speed menu on the player's own speed button (any speed, which stays from
 song to song; pitch on/off; a clear slowed sound; a "room" reverb; a speed remembered per song or playlist; Shift+. and

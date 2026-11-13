@@ -285,3 +285,74 @@ class MoreWordSourcesTests(unittest.TestCase):
         net = FakeNet(lrclib={"syncedLyrics": many}, krc="[1000,2000]<0,500,0>Line <500,500,0>1\n")
         r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
         self.assertEqual(r["source"], "lrclib")
+
+
+SONG_A = ["Shine a light on me tonight", "Every river runs to sea", "Hold the line until the morning", "We are golden, we are free"]
+SONG_B = ["Paper planes across the city", "Coffee cold and running late", "Tell me why the rain is pretty", "Nothing ever seems to wait"]
+
+
+def lrc(lines, step=10.0, start=5.0):
+    return "\n".join("[%02d:%05.2f]%s" % (int((start + i * step) // 60), (start + i * step) % 60, t) for i, t in enumerate(lines))
+
+
+def krc(lines, step=10000, start=5000):
+    out = []
+    for i, t in enumerate(lines):
+        words = t.split(" ")
+        out.append("[%d,%d]" % (start + i * step, 4000) + "".join("<%d,400,0>%s " % (k * 400, w) for k, w in enumerate(words)))
+    return "\n".join(out)
+
+
+class WrongSongTests(unittest.TestCase):
+    """Searches go by title: a source can find another song of the same name. Its word timings must not win."""
+
+    def test_another_song_with_word_timings_loses_to_two_that_agree(self):
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A)}, krc=krc(SONG_B),
+                      netease={"name": "Song", "lyric": {"lrc": {"lyric": lrc(SONG_A, start=5.2)}}})
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertIn(r["source"], ("lrclib", "netease"))
+        self.assertTrue(r["agreed"])
+        self.assertEqual(r["lyrics"]["lines"][0]["text"], SONG_A[0])
+
+    def test_youtube_musics_own_lyrics_settle_it(self):
+        ytm = lambda vid: {"text": "\n".join(SONG_A)}
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A)}, krc=krc(SONG_B))
+        r = LyricsService(fetch=net, ytm_lyrics=ytm).lookup("Song", "Artist", "", 200, video_id="dQw4w9WgXcQ")
+        self.assertEqual(r["source"], "lrclib")
+        self.assertTrue(r["agreed"])
+
+    def test_the_right_words_with_timings_still_win(self):
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A)}, krc=krc(SONG_A))
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["source"], "kugou")
+        self.assertTrue(r["agreed"])
+
+    def test_lyrics_that_run_past_the_end_are_another_recording(self):
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A, step=10)}, krc=krc(SONG_A, step=60000))
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 60)
+        self.assertEqual(r["source"], "lrclib")
+
+    def test_nothing_is_lent_from_another_song(self):
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A)},
+                      netease={"name": "Song", "lyric": {"lrc": {"lyric": lrc(SONG_B)}, "tlyric": {"lyric": lrc(["Traducción"] * 4)}}})
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="lrclib")
+        self.assertFalse(any("tr" in ln for ln in r["lyrics"]["lines"]))
+        self.assertFalse(r["agreed"])
+
+    def test_stricter_search_matches(self):
+        self.assertLess(_score("Song", ["Somebody Else"], 200, "Song", "Artist", 200), 0, "another artist")
+        self.assertLess(_score("Song", ["Artist"], 260, "Song", "Artist", 200), 0, "a minute longer: another recording")
+        self.assertLess(_score("Love", ["Artist"], 200, "Love Story Forever", "Artist", 200), 0, "a word of the title")
+        self.assertGreater(_score("Song (Remastered)", ["Artist"], 201, "Song", "Artist", 200), 1)
+
+    def test_two_that_disagree_the_surer_search_wins(self):
+        # LRCLIB found it exactly (title, artist and length); KuGou only by searching: its other song loses
+        net = FakeNet(lrclib={"syncedLyrics": lrc(SONG_A)}, krc=krc(SONG_B))
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200)
+        self.assertEqual(r["source"], "lrclib")
+        self.assertFalse(r["agreed"])
+
+    def test_kugous_title_line_is_not_a_lyric(self):
+        net = FakeNet(krc="[0,3000]<0,1000,0>Song <1000,1000,0>- <2000,1000,0>Artist\n" + krc(SONG_A))
+        r = LyricsService(fetch=net).lookup("Song", "Artist", "", 200, source="kugou")
+        self.assertEqual(next(ln["text"] for ln in r["lyrics"]["lines"] if ln["text"]), SONG_A[0])

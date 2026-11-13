@@ -6,6 +6,29 @@ the computer, one browser extension and one Android app do it all, and every par
 
 This is an early build for testing; expect rough edges.
 
+### What's new in 0.2.0-alpha.5
+
+**A new icon**
+- A star casting its light, with a second star riding the arcs, on midnight blue. On Android it follows the Material You
+  colours of your wallpaper when themed icons are on.
+
+**Refine, spread out**
+- ✦ opens a short menu of tiles for what is switched most, the lyrics window, the playlist maker and **All settings**,
+  which shows everything together in one large dialog.
+- A **Discord** button beside ✦ for Discord status, with a dot that turns green while your music shows on Discord.
+- **Lyrics**, **Make a playlist** and **Refine** in YouTube Music's sidebar, and YTM Starcast's logo in the top bar.
+- **Material You page parts**: the tabs beside the player are a pill bar instead of underlined capitals, the queue's
+  header and Save button are tonal, YouTube Music's switches take the Material 3 shape.
+- **Cover visualizers** (experimental): Halo, Orbit, Pulse and Bars around the big cover.
+
+**Lyrics**
+- They follow you: leaving the player with the Lyrics tab open brings them along in a window, which goes again when you
+  come back. Switching to another tab can keep them above other windows, where the browser offers that.
+- Fixed: lyrics could switch to another song of the same name partway through. Sources now have to agree on the words
+  (YouTube Music's own lyrics settle it when there are some), matches need the right artist and length, and lyrics on
+  screen are only replaced by the same words.
+- A "Title - Artist" line at the start of some lyrics is gone.
+
 ### What's new in 0.2.0-alpha.4
 
 **Live lyrics, word by word, in YouTube Music's Lyrics tab**

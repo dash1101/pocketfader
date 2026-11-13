@@ -380,6 +380,30 @@ class OpenAndPauseTests(Base):
         self.req("POST", "/api/ytm", {"type": "startPlaylist", "playlistId": "PLabc12345"})
         self.assertEqual(self.app.opener.opened, ["https://music.youtube.com/", "https://music.youtube.com/playlist?list=PLabc12345"])
 
+    def test_focus_and_settings_without_a_tab_open_youtube_music(self):
+        for t in ("focus", "settings"):
+            code, r, _ = self.req("POST", "/api/ytm", {"type": t})
+            self.assertEqual((code, r), (200, {"ok": True, "opened": True}), t)
+        self.assertEqual(self.app.opener.opened, ["https://music.youtube.com/"] * 2)
+        self.assertTrue(self.req("GET", "/api/state")[1]["capabilities"]["ytm_focus"])
+        # they only bring YouTube Music up, so they work with the YouTube Music remote switched off too
+        self.req("POST", "/api/parts", {"remote": False})
+        self.assertEqual(self.req("POST", "/api/ytm", {"type": "focus"})[1], {"ok": True, "opened": True})
+        self.assertEqual(self.req("POST", "/api/ytm", {"type": "search", "query": "x"})[0], 409)
+
+    def test_focus_and_settings_go_to_the_tab(self):
+        self.app.bridge.push_state({"now": {"title": "FromYTM"}, "queue": []})
+        for t in ("focus", "settings"):
+            out = {}
+            th = threading.Thread(target=lambda: out.update(r=self.req("POST", "/api/ytm", {"type": t})[1]))
+            th.start()
+            cmd = self.app.bridge.poll(timeout=3)
+            self.assertEqual((cmd or {}).get("type"), t)
+            self.app.bridge.deliver_result(cmd["id"], {"ok": True, "refine": True})
+            th.join(3)
+            self.assertEqual(out["r"], {"ok": True, "refine": True})
+        self.assertEqual(self.app.opener.opened, [])
+
     def test_bad_ids_open_nothing(self):
         for body in ({"type": "play", "videoId": "x; rm -rf /"}, {"type": "play", "videoId": "https://evil.example/"},
                      {"type": "startPlaylist", "playlistId": "../../x"}, {"type": "play", "videoId": 5}):

@@ -15,7 +15,7 @@
  */
 (() => {
   "use strict";
-  const EXT_VERSION = "2.2.0";   // keep in step with manifest.json (tests/test_version.py checks)
+  const EXT_VERSION = "2.3.0";   // keep in step with manifest.json (tests/test_version.py checks)
 
   // One copy of this script answers commands per page. With two copies of the extension loaded (an older Pocketfader one
   // kept beside this one, or this one twice) every command would otherwise run twice: "next" would skip two songs. Older

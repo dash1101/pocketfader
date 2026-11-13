@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTM Starcast",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Your YouTube Music companion: a remote for your phone, your music as your Discord status, and a better YouTube Music.",
   "permissions": [
     "storage"

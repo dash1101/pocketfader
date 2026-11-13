@@ -182,8 +182,9 @@ your username, and words that keep a song off Discord. See [Discord status](docs
 
 ## Refine
 
-Refine improves YouTube Music itself: a ✦ button in its top bar switches on a Material 3 Expressive look with colours
-from the album art, a wavy progress bar and animations, a richer speed menu (any speed that stays from song to song,
+Refine improves YouTube Music itself: a ✦ button in its top bar (with a Discord button beside it, entries in the
+sidebar and an All settings dialog) switches on a Material 3 Expressive look with colours from the album art, a wavy
+progress bar, animations and experimental cover visualizers, a richer speed menu (any speed that stays from song to song,
 pitch, a clear slowed sound that keeps the pitch without smearing, a "room" reverb, times that follow the speed), live
 lyrics word by word in YouTube Music's own Lyrics tab or in a window you can move, resize, pin and keep above other
 windows, the computer's volume, output and equalizer, a random-song button, and a playlist maker that builds on YouTube

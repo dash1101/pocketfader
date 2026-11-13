@@ -128,7 +128,7 @@ def _plain_lines(text):
     return [{"t": None, "text": ln.rstrip()} for ln in (text or "").splitlines()]
 
 
-def _result(source, label, synced_text=None, plain_text=None, translation=None, roman=None, credit=None, lines=None):
+def _result(source, label, synced_text=None, plain_text=None, translation=None, roman=None, credit=None, lines=None, match=1.0):
     lines = list(lines) if lines else []
     if synced_text:
         lines = [{"t": round(t, 2), "text": s} for t, s in parse_lrc(synced_text)]
@@ -150,7 +150,7 @@ def _result(source, label, synced_text=None, plain_text=None, translation=None, 
             if r:
                 ln["rom"] = r
                 ln["_d"] = True      # derived here, so a provider's own romanization may replace it
-    out = {"source": source, "label": label, "synced": synced, "lines": lines}
+    out = {"source": source, "label": label, "synced": synced, "lines": lines, "match": round(match, 2)}   # match: how sure the search was
     if credit:
         out["credit"] = credit
     return out
@@ -164,13 +164,19 @@ def _norm(s):
     return re.sub(r"[\W_]+", " ", s).strip()
 
 
+MATCH = 0.8      # the least a search result must score to be used (an exact title alone is 1.0)
+
+
 def _score(cand_title, cand_artists, cand_dur, title, artist, dur):
+    """How well a provider's search result fits the song: about 1 for the right title, more with the right artist and
+    length. Below 0 when it can't be the song: another title, another artist, or a clearly different length (another
+    recording, such as a live take, a remix or a sped-up edit)."""
     ct, t = _norm(cand_title), _norm(title)
     if not ct or not t:
         return -1.0
     if ct == t:
         score = 1.0
-    elif ct in t or t in ct:
+    elif (ct in t or t in ct) and min(len(ct), len(t)) >= 0.5 * max(len(ct), len(t)):
         score = 0.6
     else:
         return -1.0
@@ -179,10 +185,12 @@ def _score(cand_title, cand_artists, cand_dur, title, artist, dur):
     if a and ca and a & ca:
         score += 0.5
     elif a and ca:
-        score -= 0.2
+        return -1.0
     if dur and cand_dur:
         d = abs(cand_dur - dur)
-        score += 0.4 if d <= 3 else 0.2 if d <= 8 else (-0.5 if d > 20 else 0.0)
+        if d > 15:
+            return -1.0
+        score += 0.4 if d <= 3 else 0.2 if d <= 8 else 0.0
     return score
 
 
@@ -194,9 +202,10 @@ def lrclib(fetch, title, artist, album, duration, **_):
     if duration:
         q["duration"] = int(round(duration))
     rec = _json(fetch("https://lrclib.net/api/get?" + urlencode(q)))
+    match = 2.0
     if not isinstance(rec, dict) or not (rec.get("syncedLyrics") or rec.get("plainLyrics")):
         found = _json(fetch("https://lrclib.net/api/search?" + urlencode({"track_name": title, "artist_name": artist})))
-        best, best_score = None, 0.5
+        best, best_score = None, MATCH - 0.01
         for c in (found if isinstance(found, list) else []):
             if not (c.get("syncedLyrics") or c.get("plainLyrics")):
                 continue
@@ -205,10 +214,10 @@ def lrclib(fetch, title, artist, album, duration, **_):
                 sc += 0.1
             if sc > best_score:
                 best, best_score = c, sc
-        rec = best
+        rec, match = best, best_score
     if not rec:
         return None
-    return _result("lrclib", "LRCLIB", rec.get("syncedLyrics"), rec.get("plainLyrics"))
+    return _result("lrclib", "LRCLIB", rec.get("syncedLyrics"), rec.get("plainLyrics"), match=match)
 
 
 _NE_HEADERS = {"User-Agent": _BROWSER_UA, "Referer": "https://music.163.com/", "Cookie": "appver=2.0.2"}
@@ -218,7 +227,7 @@ def netease(fetch, title, artist, album, duration, **_):
     s = _json(fetch("https://music.163.com/api/search/get?" +
                     urlencode({"s": f"{title} {artist}".strip(), "type": 1, "limit": 8, "offset": 0}), _NE_HEADERS))
     songs = ((s or {}).get("result") or {}).get("songs") or []
-    best, best_score = None, 0.5
+    best, best_score = None, MATCH - 0.01
     for c in songs:
         artists = [a.get("name", "") for a in (c.get("artists") or c.get("ar") or [])]
         dur = (c.get("duration") or c.get("dt") or 0) / 1000.0
@@ -238,12 +247,12 @@ def netease(fetch, title, artist, album, duration, **_):
     main = pick("lrc")
     words = parse_yrc(pick("yrc"))
     if words and any(ln["text"] for ln in words):
-        return _result("netease", "NetEase", lines=words, translation=pick("tlyric"), roman=pick("romalrc"))
+        return _result("netease", "NetEase", lines=words, translation=pick("tlyric"), roman=pick("romalrc"), match=best_score)
     if not main:
         return None
     return _result("netease", "NetEase", synced_text=main if _STAMP.search(main) else None,
                    plain_text=None if _STAMP.search(main) else main,
-                   translation=pick("tlyric"), roman=pick("romalrc"))
+                   translation=pick("tlyric"), roman=pick("romalrc"), match=best_score)
 
 
 def ytm(fetch, title, artist, album, duration, video_id="", ytm_lyrics=None, **_):
@@ -253,7 +262,7 @@ def ytm(fetch, title, artist, album, duration, video_id="", ytm_lyrics=None, **_
     r = ytm_lyrics(video_id)
     if not isinstance(r, dict) or r.get("error"):
         return None
-    return _result("ytm", "YouTube Music", plain_text=r.get("text"), credit=r.get("credit"))
+    return _result("ytm", "YouTube Music", plain_text=r.get("text"), credit=r.get("credit"), match=3.0)   # this very video's own
 
 
 
@@ -316,12 +325,24 @@ def parse_yrc(text):
     return _with_gaps(out)
 
 
+def _drop_title_line(lines, title):
+    """KuGou starts some lyrics with a "Title - Artist" line, timed like a lyric: it isn't one."""
+    t = _norm(title)
+    out = list(lines)
+    while out and (not out[0]["text"] or (" - " in out[0]["text"] and t and t in _norm(out[0]["text"]))):
+        if out[0]["text"]:
+            out.pop(0)
+            break
+        out.pop(0)
+    return out
+
+
 def kugou(fetch, title, artist, album, duration, **_):
     kw = f"{title} {artist}".strip()
     s = _json(fetch("https://mobileservice.kugou.com/api/v3/search/song?" +
                     urlencode({"format": "json", "keyword": kw, "page": 1, "pagesize": 6}), _KG_HEADERS))
     songs = ((s or {}).get("data") or {}).get("info") or []
-    best, best_score = None, 0.5
+    best, best_score = None, MATCH - 0.01
     for c in songs:
         sc = _score(c.get("songname", ""), re.split(r"[、,&/]", c.get("singername", "")), c.get("duration"), title, artist, duration)
         if sc > best_score:
@@ -342,11 +363,11 @@ def kugou(fetch, title, artist, album, duration, **_):
         text = zlib.decompress(bytes(b ^ _KRC_KEY[i % 16] for i, b in enumerate(raw))).decode("utf-8", "replace")
     except (KeyError, ValueError, zlib.error):
         return None
-    lines = parse_krc(text)
+    lines = _drop_title_line(parse_krc(text), title)
     real = [ln for ln in lines if ln["text"]]
     if not real or (len(real) <= 2 and any("纯音乐" in ln["text"] for ln in real)):
         return None
-    return _result("kugou", "KuGou", lines=lines)
+    return _result("kugou", "KuGou", lines=lines, match=best_score)
 
 
 _FUNCS = {"kugou": kugou, "lrclib": lrclib, "netease": netease, "ytm": ytm}
@@ -357,17 +378,76 @@ def _lines(r):
     return sum(1 for ln in r["lines"] if ln["text"].strip())
 
 
-def _best(results):
-    """word-by-word beats line-synced beats plain, in provider order. A time-synced result with less than half the
-    lines of another one (a wrong song, an "instrumental" placeholder) only comes after the others."""
+_TOKEN = re.compile(r"\w+")
+
+
+def _words(r):
+    """The set of words in a result's lyrics (each character for Chinese, Japanese and Korean), to compare sources."""
+    out = set()
+    for ln in r["lines"]:
+        for tok in _TOKEN.findall(unicodedata.normalize("NFKC", ln["text"]).casefold()):
+            if _CJK.search(tok):
+                out.update(ch for ch in tok if _CJK.match(ch))
+            elif len(tok) > 1:
+                out.add(tok)
+    return out
+
+
+_CJK = re.compile("[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+SAME_SONG = 0.4   # words shared (of all the words of both): the same song from two sources is 0.75 or more, two songs 0.25 or less
+
+
+def _similar(a, b):
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
+def _rank(results, duration=0.0):
+    """The results, best first, each with whether another source (or YouTube Music's own lyrics) agrees with its words.
+
+    Word by word beats line by line beats plain text, in provider order, among the results that look right. One looks
+    wrong when its words differ from YouTube Music's own lyrics for this song, when two or more other sources agree with
+    each other but not with it, when it has less than half the lines of another time-synced one, or when it runs past
+    the end of the song. Searches match by title, so a source can find another song (or another recording) of the same
+    name: its word timings must not win over the right lyrics."""
     found = [results[p] for p, _ in PROVIDERS if results.get(p)]
+    if not found:
+        return []
+    words = [_words(r) for r in found]
+    ref = next((i for i, r in enumerate(found) if r["source"] == "ytm"), None)
     most = max((_lines(r) for r in found if r["synced"]), default=0)
-    good = [r for r in found if not (r["synced"] and _lines(r) * 2 < most)]
-    for pred in (lambda r: r["synced"] and any("w" in ln for ln in r["lines"]), lambda r: r["synced"], lambda r: True):
-        for r in good:
-            if pred(r):
-                return r
-    return found[0] if found else None
+    agrees = [[j for j in range(len(found)) if j != i and _similar(words[i], words[j]) >= SAME_SONG] for i in range(len(found))]
+    best_support = max(len(a) for a in agrees)
+
+    best_match = max(r.get("match", 1.0) for r in found)
+
+    def wrong(i):
+        r = found[i]
+        if ref is not None and i != ref and ref not in agrees[i]:
+            return True                                 # YouTube Music's own lyrics are for this very song
+        if best_support >= 1 and not agrees[i] and len(found) >= 3:
+            return True                                 # the others agree among themselves, not with this one
+        if best_support == 0 and len(found) >= 2 and r.get("match", 1.0) < best_match:
+            return True                                 # no two agree: the surest search result goes first
+        if r["synced"] and _lines(r) * 2 < most:
+            return True
+        if duration and r["synced"]:
+            last = max((ln["t"] for ln in r["lines"] if ln.get("t") is not None and ln["text"].strip()), default=0)
+            if last > duration + 4:
+                return True
+        return False
+
+    def tier(r):
+        if r["synced"] and any("w" in ln for ln in r["lines"]):
+            return 0
+        return 1 if r["synced"] else 2
+
+    order = sorted(range(len(found)), key=lambda i: (wrong(i), tier(found[i]), -found[i].get("match", 1.0), i))
+    return [(found[i], bool(agrees[i])) for i in order]
+
+
+def _best(results, duration=0.0):
+    ranked = _rank(results, duration)
+    return ranked[0][0] if ranked else None
 
 
 class _Entry:
@@ -454,10 +534,12 @@ class LyricsService:
                     "synced": bool(results.get(pid) and results[pid]["synced"]),
                     "words": bool(results.get(pid) and any("w" in ln for ln in results[pid]["lines"]))}
                    for pid, label in PROVIDERS]
+        ranked = _rank(results, duration)
         chosen = results.get(source) if source else None
-        chosen = chosen or _best(results)
+        chosen = chosen or (ranked[0][0] if ranked else None)
+        agreed = any(r is chosen and ok for r, ok in ranked)
         return {"found": bool(chosen), "source": chosen["source"] if chosen else None, "sources": sources,
-                "pending": bool(pending), "lyrics": self._finish(chosen, results)}
+                "pending": bool(pending), "agreed": agreed, "lyrics": self._finish(chosen, results)}
 
     @staticmethod
     def _finish(chosen, results):
@@ -467,8 +549,10 @@ class LyricsService:
             return None
         lines = [dict(ln) for ln in chosen["lines"]]
         if chosen["synced"]:
+            mine = _words(chosen)
             for other in results.values():
-                if not other or other is chosen or not other["synced"]:
+                # only from a source with the same words: lines from another song must never be lent
+                if not other or other is chosen or not other["synced"] or _similar(mine, _words(other)) < SAME_SONG:
                     continue
                 pool = [ln for ln in other["lines"] if ln.get("t") is not None]
                 for ln in lines:

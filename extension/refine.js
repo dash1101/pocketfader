@@ -35,8 +35,8 @@
   // ------------------------------------------------------------------ settings
   const PREFS_KEY = "pocketfader.refine.v1";
   const SPEEDS_KEY = "pocketfader.refine.speeds";
-  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, motion: true, speedMenu: true, keepPitch: true,
-    clearSlow: false, speedTimes: true, dice: true, lyrics: true, songMenu: true };
+  const DEFAULTS = { shapes: true, colors: true, controls: true, wavy: true, glow: true, motion: true, material: true, logo: true, sidebar: true,
+    speedMenu: true, keepPitch: true, clearSlow: false, speedTimes: true, dice: true, lyrics: true, lyricsFollow: true, lyricsFloat: true, songMenu: true };
   const readJSON = (k, d) => {
     try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v && typeof v === "object" ? v : d; } catch (e) { return d; }
   };
@@ -66,7 +66,7 @@
       else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? "" : String(v));
     }
-    for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
+    for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));   // lists inside lists too
     return el;
   }
   const SVGNS = "http://www.w3.org/2000/svg";
@@ -77,11 +77,28 @@
     s.setAttribute("height", String(size));
     s.setAttribute("aria-hidden", "true");
     const p = document.createElementNS(SVGNS, "path");
-    p.setAttribute("d", d);
-    p.setAttribute("fill", "currentColor");
+    if (d.startsWith("stroke:")) {   // a line drawing rather than a filled shape
+      p.setAttribute("d", d.slice(7));
+      p.setAttribute("fill", "none");
+      p.setAttribute("stroke", "currentColor");
+      p.setAttribute("stroke-width", "2.2");
+      p.setAttribute("stroke-linecap", "round");
+      p.setAttribute("stroke-linejoin", "round");
+    } else {
+      p.setAttribute("d", d);
+      p.setAttribute("fill", "currentColor");
+    }
     s.append(p);
     return s;
   }
+  // Nova's four-point star, as in YTM Starcast's logo
+  function sparklePath(cx, cy, r) {
+    const P = (x, y) => Math.round(x * 100) / 100 + "," + Math.round(y * 100) / 100;
+    const a = 0.07 * r, b = 0.32 * r, c = 0.29 * r, d = 0.09 * r;
+    return "M" + P(cx, cy - r) + "C" + P(cx + a, cy - b) + " " + P(cx + c, cy - d) + " " + P(cx + r, cy) + "C" + P(cx + c, cy + d) + " " + P(cx + a, cy + b) + " " + P(cx, cy + r) +
+      "C" + P(cx - a, cy + b) + " " + P(cx - c, cy + d) + " " + P(cx - r, cy) + "C" + P(cx - c, cy - d) + " " + P(cx - a, cy - b) + " " + P(cx, cy - r) + "Z";
+  }
+  const LOGO_STAR = sparklePath(176, 336, 118);
   const ICON = {
     sparkle: "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
     dice: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7.5 18c-.83 0-1.5-.67-1.5-1.5S6.67 15 7.5 15s1.5.67 1.5 1.5S8.33 18 7.5 18zm0-9C6.67 9 6 8.33 6 7.5S6.67 6 7.5 6 9 6.67 9 7.5 8.33 9 7.5 9zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm0-9c-.83 0-1.5-.67-1.5-1.5S15.67 6 16.5 6s1.5.67 1.5 1.5S17.33 9 16.5 9z",
@@ -99,6 +116,13 @@
     popIn: "M19 5v14H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2V5zM17.59 3 11 9.59V6H9v7h7v-2h-3.59L19 4.41 17.59 3z",
     pin: "M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z",
     pip: "M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z",
+    discord: "M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .078-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z",
+    palette: "M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z",
+    motion: "stroke:M10 19a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM16.5 6.2a8.5 8.5 0 0 1 0 11.6M20 8.4a8 8 0 0 1 0 7.2",
+    wave: "stroke:M2.5 12c1.6-3.4 3.2-3.4 4.75 0s3.15 3.4 4.75 0 3.2-3.4 4.75 0 3.15 3.4 4.75 0",
+    eq: "M7 18h2V6H7v12zm4 4h2V2h-2v20zm-8-8h2v-4H3v4zm12 4h2V6h-2v12zm4-8v4h2v-4h-2z",
+    viz: "stroke:M7 7h10v10H7zM4 9.5V8M4 16v-2.5M20 9.5V8M20 16v-2.5M9.5 4H8M16 4h-1.5M9.5 20H8M16 20h-1.5",
+    material: "stroke:M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 3.5v17M3.5 12h17",
     volume: "M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z",
     mute: "M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z",
   };
@@ -456,6 +480,103 @@
   ytmusic-menu-popup-renderer:has(.pf-menu-item) { overflow-x: hidden !important; scrollbar-width: thin; scrollbar-color: var(--pf-outline) transparent; }
   .pf-dice button.pf-busy .pf-ico, .pf-bar-btn button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
   @keyframes pf-spin { to { transform: rotate(360deg); } }
+  /* the Discord button beside ✦, with a dot for what Discord status is doing */
+  .pf-dc-nav { position: relative; }
+  .pf-dc-nav .pf-dot { position: absolute; right: 7px; top: 8px; width: 9px; height: 9px; border-radius: 50%; background: transparent;
+    box-shadow: 0 0 0 2px var(--pf-surface, #030303); transition: background-color .3s; }
+  .pf-dc-nav[data-state="on"] .pf-dot { background: #3fb950; }
+  .pf-dc-nav[data-state="idle"] .pf-dot { background: var(--pf-outline); }
+  .pf-dc-nav[data-state="warn"] .pf-dot { background: #d29922; }
+  .pf-nav-btn.pf-float-2 { right: 168px; }
+  /* the quick menu: tiles, two actions, All settings */
+  .pf-head-logo { display: flex; align-items: center; gap: 12px; }
+  .pf-head-logo .pf-logo-tile { flex: none; filter: drop-shadow(0 6px 16px var(--pf-glow)); }
+  .pf-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 12px 4px; }
+  .pf-tile { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 10px 12px; border: 0; border-radius: var(--pf-r-lg); cursor: pointer; text-align: left;
+    background: var(--pf-surface2); color: var(--pf-text); transition: background-color .25s, color .25s, border-radius var(--pf-t-medium) var(--pf-spring), transform .15s; }
+  .pf-tile:hover { background: color-mix(in srgb, var(--pf-surface2) 80%, var(--pf-text)); }
+  .pf-tile:active { transform: scale(.96); border-radius: var(--pf-r-md); }
+  .pf-tile[aria-checked="true"] { background: var(--pf-container); color: var(--pf-on-container); border-radius: var(--pf-r-md); }
+  .pf-tile-ico { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, currentColor 12%, transparent); }
+  .pf-tile[aria-checked="true"] .pf-tile-ico { background: var(--pf-accent); color: var(--pf-on-accent); }
+  .pf-tile-text { min-width: 0; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+  .pf-tile-text small { display: block; font-weight: 500; font-size: 12px; opacity: .75; margin-top: 2px; }
+  .pf-quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px 0; }
+  .pf-quick-actions .pf-btn { height: 44px; padding: 0 12px; font-size: 13.5px; border-radius: var(--pf-r-md); }
+  .pf-sheet-dc { width: 400px; }
+  .pf-dc-badge { flex: none; width: 40px; height: 40px; border-radius: 30%; display: grid; place-items: center; background: #5865F2; color: #fff; }
+  .pf-dc-panel { padding: 0 16px 4px; }
+  /* All settings: one large dialog, the sections down the side */
+  .pf-all { width: min(940px, 96vw); height: min(84vh, 760px); max-height: none; }
+  .pf-all .pf-dlg-head { align-items: center; padding: 20px 20px 12px 24px; }
+  .pf-all .pf-head-logo { flex: 1; }
+  .pf-all-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 210px 1fr; }
+  .pf-all-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 16px 12px; overflow-y: auto; }
+  .pf-all-link { all: unset; box-sizing: border-box; cursor: pointer; padding: 11px 16px; border-radius: var(--pf-r-full); font-size: 14.5px; font-weight: 500;
+    color: var(--pf-muted); transition: background-color .2s, color .2s; }
+  .pf-all-link:hover { background: rgba(255,255,255,.06); color: var(--pf-text); }
+  .pf-all-link[aria-current="true"] { background: var(--pf-container); color: var(--pf-on-container); }
+  .pf-all-link:focus-visible { outline: 2px solid var(--pf-accent); }
+  .pf-all-body { overflow-y: auto; padding: 0 20px 40vh 8px; scrollbar-width: thin; scrollbar-color: var(--pf-outline) transparent; }
+  .pf-all-sec { padding: 8px 0 18px; border-bottom: 1px solid color-mix(in srgb, var(--pf-outline) 45%, transparent); }
+  .pf-all-sec h3 { margin: 10px 16px 6px; font-size: 13px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pf-accent); }
+  .pf-all-sec .pf-dc, .pf-all-sec [data-pf-dc] { padding-left: 16px; padding-right: 16px; }
+  .pf-all-sec .pf-snd { padding: 4px 16px 0; }
+  .pf-btn.pf-inline { margin: 8px 16px 0; }
+  .pf-room { padding: 6px 16px 0; }
+  @media (max-width: 700px) {
+    .pf-all-main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .pf-all-nav { flex-direction: row; overflow-x: auto; padding: 0 12px 8px; }
+    .pf-all-link { white-space: nowrap; }
+  }
+  /* in YouTube Music's sidebar, looking like its own entries (full, and narrow with the name under the icon) */
+  .pf-guide { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+  .pf-guide-entry { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 24px; width: 100%; height: 48px; padding: 0 16px;
+    border-radius: var(--pf-r-full); cursor: pointer; color: var(--ytmusic-text-primary, #fff); font-family: "YouTube Sans", Roboto, sans-serif; font-size: 16px; font-weight: 500;
+    transition: background-color .2s, transform .2s var(--pf-spring); }
+  .pf-guide-entry:hover { background: rgba(255,255,255,.1); }
+  .pf-guide-entry:active { transform: scale(.97); }
+  .pf-guide-entry:focus-visible { outline: 2px solid var(--pf-accent); }
+  .pf-guide-entry:disabled { opacity: .45; cursor: default; }
+  .pf-guide-ico { display: grid; place-items: center; color: var(--pf-accent); }
+  .pf-guide-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pf-guide.pf-guide-mini .pf-guide-entry { flex-direction: column; justify-content: center; gap: 6px; height: 72px; padding: 0 4px; border-radius: var(--pf-r-md); font-size: 10px; }
+  .pf-guide-short { display: none; }
+  .pf-guide.pf-guide-mini .pf-guide-label { display: none; }
+  .pf-guide.pf-guide-mini .pf-guide-short { display: block; max-width: 100%; text-align: center; }
+  /* YTM Starcast's logo in YouTube Music's top bar */
+  [data-pf-logo-box] > :not(.pf-logo) { display: none !important; }
+  ytmusic-logo[data-pf-logo] { width: auto !important; min-width: max-content; }
+  ytmusic-logo[data-pf-logo] a { width: auto !important; }
+  .pf-logo { display: inline-flex; align-items: center; gap: 8px; height: 100%; vertical-align: middle; }
+  .pf-logo .pf-logo-tile { flex: none; filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--pf-glow) 70%, transparent)); transition: transform .4s var(--pf-spring); }
+  .pf-logo:hover .pf-logo-tile { transform: rotate(-8deg) scale(1.06); }
+  .pf-logo-word { font-family: "YouTube Sans", Roboto, sans-serif; font-size: 21px; font-weight: 600; letter-spacing: -.03em; color: var(--ytmusic-text-primary, #fff); }
+  /* cover visualizers (experimental): behind the big cover, inside its frame's own layer */
+  ytmusic-player[data-pf-viz] { isolation: isolate; overflow: visible !important; }
+  .pf-viz { position: absolute; inset: 0; z-index: -1; pointer-events: none; --pf-level: 0; }
+  .pf-viz-art { position: absolute; left: -8%; top: -8%; width: 116%; height: 116%; object-fit: cover; border-radius: 34%;
+    filter: blur(48px) saturate(1.8); opacity: .8; animation: pf-viz-spin 38s linear infinite; will-change: rotate; }
+  .pf-viz-art.pf-b { left: -16%; top: -16%; width: 132%; height: 132%; opacity: .45; filter: blur(66px) saturate(2) brightness(1.1);
+    animation: pf-viz-spin 24s linear infinite reverse, pf-viz-breathe 8s ease-in-out infinite; }
+  .pf-viz[data-mode="pulse"] .pf-viz-art { scale: calc(1 + var(--pf-level) * .24); opacity: calc(.4 + var(--pf-level) * .6); }
+  .pf-viz[data-mode="pulse"] .pf-viz-art.pf-b { animation: pf-viz-spin 24s linear infinite reverse; }
+  .pf-viz[data-mode="bars"] .pf-viz-art { opacity: .32; }
+  @keyframes pf-viz-spin { to { rotate: 360deg; } }
+  @keyframes pf-viz-breathe { 50% { scale: 1.1; } }
+  html:not([data-pf-playing]) .pf-viz * { animation-play-state: paused; }
+  @property --pf-viz-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  .pf-viz-ring { position: absolute; inset: -18px; border-radius: calc(var(--pf-r-xl) + 18px); opacity: .95; filter: blur(20px);
+    background: conic-gradient(from var(--pf-viz-a), transparent 0 8%, var(--pf-accent) 18%, var(--pf-glow) 26%, transparent 38% 58%,
+      var(--pf-on-container) 68%, var(--pf-accent) 76%, transparent 88%);
+    animation: pf-viz-turn 7s linear infinite; }
+  .pf-viz-ring.pf-sharp { inset: -4px; border-radius: calc(var(--pf-r-xl) + 4px); filter: none; padding: 3px; opacity: 1;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+  @keyframes pf-viz-turn { to { --pf-viz-a: 360deg; } }
+  .pf-viz-bars { position: absolute; pointer-events: none; }
+  .pf-viz-pick { display: grid; gap: 10px; padding: 10px 16px; }
+  .pf-viz-pick .pf-chips { gap: 6px; }
+  @media (prefers-reduced-motion: reduce) { .pf-viz * { animation: none !important; } }
   @media (prefers-reduced-motion: reduce) { .pf-ui, .pf-ui *, .pf-nav-btn { transition: none !important; animation: none !important; } }
   `;
   // animation delays, one after another: prefix:nth-child(1..n)
@@ -545,6 +666,42 @@
     glow: `
     ytmusic-player#player, ytmusic-player { box-shadow: 0 30px 110px -16px var(--pf-glow) !important; transition: box-shadow .9s; }
     ytmusic-miniplayer img, ytmusic-player-bar .image { box-shadow: 0 6px 22px -6px var(--pf-glow); }`,
+    // Material You page parts: the tabs beside the player as a pill bar (not underlined capitals), the queue's header and
+    // its Save button tonal, YouTube Music's switches in the Material 3 shape, quiet scrollbars, pill-shaped sidebar entries.
+    material: `
+    ytmusic-player-page tp-yt-paper-tabs { height: auto !important; margin: 10px 10px 6px !important; padding: 4px !important; border-radius: var(--pf-r-full) !important;
+      background: var(--pf-surface2) !important; border: 0 !important; box-shadow: none !important; }
+    ytmusic-player-page tp-yt-paper-tabs #selectionBar { display: none !important; }
+    ytmusic-player-page tp-yt-paper-tabs #tabsContainer, ytmusic-player-page tp-yt-paper-tabs #tabsContent { height: auto !important; }
+    ytmusic-player-page tp-yt-paper-tab { height: 40px !important; min-height: 40px; padding: 0 12px !important; margin: 0 1px; border-radius: var(--pf-r-full) !important;
+      color: var(--pf-muted) !important; transition: background-color .3s var(--pf-ease), color .3s !important; }
+    ytmusic-player-page tp-yt-paper-tab, ytmusic-player-page tp-yt-paper-tab * { text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; font-weight: 500 !important; }
+    ytmusic-player-page tp-yt-paper-tab:hover { background-color: color-mix(in srgb, var(--pf-text) 7%, transparent); color: var(--pf-text) !important; }
+    ytmusic-player-page tp-yt-paper-tab[aria-selected="true"], ytmusic-player-page tp-yt-paper-tab.iron-selected { background-color: var(--pf-container) !important; color: var(--pf-on-container) !important; }
+    ytmusic-player-page tp-yt-paper-tab[aria-selected="true"] *, ytmusic-player-page tp-yt-paper-tab.iron-selected * { font-weight: 600 !important; }
+    ytmusic-player-page tp-yt-paper-tab tp-yt-paper-ripple, ytmusic-player-page tp-yt-paper-tab paper-ripple { border-radius: inherit; }
+    ytmusic-queue-header-renderer { margin: 4px 10px 8px !important; padding: 12px 12px 12px 16px !important; border-radius: var(--pf-r-lg); background: var(--pf-surface1) !important; }
+    ytmusic-queue-header-renderer button { border-radius: var(--pf-r-full) !important; background: var(--pf-container) !important; color: var(--pf-on-container) !important;
+      border: 0 !important; box-shadow: none !important; transition: border-radius var(--pf-t-medium) var(--pf-ease), filter .2s !important; }
+    ytmusic-queue-header-renderer button:hover { filter: brightness(1.1); }
+    ytmusic-queue-header-renderer button:active { border-radius: var(--pf-r-sm) !important; }
+    ytmusic-queue-header-renderer button * { color: inherit !important; fill: currentColor !important; }
+    tp-yt-paper-toggle-button #toggleContainer { width: 52px !important; height: 32px !important; }
+    tp-yt-paper-toggle-button #toggleBar { box-sizing: border-box; top: 0 !important; height: 32px !important; border-radius: 16px !important; opacity: 1 !important;
+      background: var(--pf-surface2) !important; border: 2px solid var(--pf-outline); transition: background-color .2s, border-color .2s; }
+    tp-yt-paper-toggle-button #toggleButton { top: 8px !important; left: 8px !important; width: 16px !important; height: 16px !important; box-shadow: none !important;
+      background: var(--pf-outline) !important; transition: transform var(--pf-t-medium) var(--pf-spring), width var(--pf-t-medium) var(--pf-spring),
+      height var(--pf-t-medium) var(--pf-spring), top var(--pf-t-medium) var(--pf-spring), left var(--pf-t-medium) var(--pf-spring), background-color .2s !important; }
+    tp-yt-paper-toggle-button[checked] #toggleBar { background: var(--pf-accent) !important; border-color: var(--pf-accent); }
+    tp-yt-paper-toggle-button[checked] #toggleButton { transform: translate(20px, 0) !important; top: 4px !important; left: 4px !important; width: 24px !important; height: 24px !important;
+      background: var(--pf-on-accent) !important; }
+    ytmusic-app *::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--pf-text) 22%, transparent) !important; border-radius: 8px !important;
+      border: 3px solid transparent !important; background-clip: content-box !important; }
+    ytmusic-app *::-webkit-scrollbar-track { background: transparent !important; }
+    ytmusic-guide-entry-renderer tp-yt-paper-item { border-radius: var(--pf-r-full) !important; transition: background-color .25s !important; }
+    ytmusic-guide-renderer[is-collapsed] ytmusic-guide-entry-renderer tp-yt-paper-item, #mini-guide ytmusic-guide-entry-renderer tp-yt-paper-item { border-radius: var(--pf-r-md) !important; }
+    ytmusic-guide-entry-renderer[active] tp-yt-paper-item { background-color: var(--pf-container) !important; }
+    ytmusic-guide-entry-renderer[active] tp-yt-paper-item, ytmusic-guide-entry-renderer[active] tp-yt-paper-item * { color: var(--pf-on-container) !important; fill: currentColor; }`,
     // Animations: what arrives moves into place, what is pressed gives a little. Nothing moves for anyone who asked their
     // system for less motion.
     motion: `
@@ -938,7 +1095,12 @@
   const SOUND_KEY = "pocketfader.refine.sound";
   const soundOpts = (() => { const o = readJSON(SOUND_KEY, {}); return { room: clamp(Number(o.room) || 0, 0, 1) }; })();
   const snd = { ctx: null, node: null, ps: null, el: null, kind: "", err: "", dry: null, wet: null, busy: false, lagSec: 0, clear: false };
-  const needSound = () => live() && (soundOpts.room > 0 || (!!prefs.clearSlow && !!prefs.keepPitch && getRate() < 0.99));
+  // the cover visualizer (its own section below); Pulse and Bars listen to the music
+  const VIZ_KEY = "pocketfader.refine.viz";
+  const VIZ_MODES = [["off", "Off"], ["halo", "Halo"], ["orbit", "Orbit"], ["pulse", "Pulse"], ["bars", "Bars"]];
+  let vizMode = (() => { const m = readJSON(VIZ_KEY, {}).mode; return VIZ_MODES.some((x) => x[0] === m) ? m : "halo"; })();
+  const vizHears = () => vizMode === "pulse" || vizMode === "bars";
+  const needSound = () => live() && (soundOpts.room > 0 || vizHears() || (!!prefs.clearSlow && !!prefs.keepPitch && getRate() < 0.99));
   function clearActive() {
     const v = video();
     return !!(snd.node && snd.kind !== "none" && snd.el === v && snd.ctx.state === "running" && live() && prefs.keepPitch && prefs.clearSlow &&
@@ -1033,9 +1195,13 @@
         wet.gain.value = 0;
         head.connect(dry); dry.connect(ctx.destination);
         head.connect(conv); conv.connect(wet); wet.connect(ctx.destination);
+        const analyser = ctx.createAnalyser();   // for the cover visualizers: listens only, plays nothing
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.8;
+        head.connect(analyser);
         // a context the system suspends (a device change) is woken again: the music runs through it now
         ctx.onstatechange = () => { if (ctx.state === "suspended") ctx.resume().catch(() => {}); applyPitch(); };
-        Object.assign(snd, { ctx, node: head, kind, dry, wet });
+        Object.assign(snd, { ctx, node: head, kind, dry, wet, analyser });
       }
       if (snd.el !== v) {
         const src = snd.ctx.createMediaElementSource(v);   // from now on this element's sound runs through here
@@ -1320,7 +1486,8 @@
   const lyr = { key: "", L: null, sources: [], source: "", retry: 0, timer: 0, run: 0, sig: "", lines: [], els: [], idx: -1, synced: false,
     userAt: 0, hasRom: false, hasTr: false, est: false,
     box: null, head: null, sub: null, body: null, opts: null, optBtns: [], srcRow: null, offVal: null, btn: null,
-    where: "", tabHost: null, tabSlot: null, tabNote: null, frame: null, pip: null };
+    where: "", tabHost: null, tabSlot: null, tabNote: null, frame: null, pip: null,
+    auto: false, pipAuto: false, pipFrom: "" };   // auto: the window (or floating window) was opened for you, and goes again by itself
   const lyrOffset = () => Number(lyrSongs.off[lyr.key]) || 0;
   // the song's time the lyrics follow: a touch early (the eye reads ahead), moved by the song's offset, and later by
   // however long the clear slowed sound takes to come out
@@ -1395,7 +1562,7 @@
     if (!lyr.key) return;
     if (id) lyrSongs.src[lyr.key] = id; else delete lyrSongs.src[lyr.key];
     saveSongs();
-    lyr.sig = ""; lyr.retry = 0;
+    lyr.sig = ""; lyr.retry = 0; lyr.force = true;   // picked by hand: shown whatever it says
     renderSources();
     loadLyrics();
   }
@@ -1528,8 +1695,9 @@
   }
 
   // ---- in a window of its own
-  function openLyricsWindow() {
+  function openLyricsWindow(auto) {
     if (lyr.frame || lyr.pip || !on("lyrics")) return;
+    lyr.auto = auto === true;
     const handle = h("div", { class: "pf-resize", "aria-hidden": "true" });
     handle.addEventListener("pointerdown", startResize);
     lyr.frame = h("div", { class: "pf-lyr pf-ui", role: "dialog", "aria-label": "Lyrics" }, handle);
@@ -1544,6 +1712,7 @@
     if (lyr.pip) { const pw = lyr.pip; lyr.pip = null; try { pw.close(); } catch (e) {} }
     const el = lyr.frame;
     lyr.frame = null;
+    lyr.auto = false;
     if (lyr.where === "window" || lyr.where === "pip") lyr.where = "closing";
     lyrWin.open = false; saveWin();
     const done = () => {
@@ -1570,6 +1739,7 @@
     f.classList.toggle("pf-pinned", lyrWin.pinned);
   }
   function setPinned(v) {
+    lyr.auto = false;   // looked after by hand now: it stays
     lyrWin.pinned = !!v;
     saveWin();
     placeWindow();
@@ -1578,6 +1748,7 @@
   }
   function dragWith(e, onMove) {
     e.preventDefault();
+    lyr.auto = false;
     const f = lyr.frame;
     f.classList.add("pf-dragging");
     const move = (ev) => onMove(ev);
@@ -1613,9 +1784,11 @@
     });
   }
   // Above every other window (the browser's floating window for a page, where it has one).
-  async function floatLyrics() {
+  async function floatLyrics(auto) {
     const dpip = window.documentPictureInPicture;
-    if (!dpip || lyr.pip) return;
+    if (!dpip || lyr.pip || !lyr.where || lyr.where === "closing") return;
+    lyr.pipAuto = auto === true;
+    lyr.pipFrom = lyr.where === "window" && !lyr.auto ? "window" : lyr.where === "window" ? "auto-window" : "tab";
     const r = lyr.frame ? lyr.frame.getBoundingClientRect() : { width: lyrWin.w, height: lyrWin.h };
     let pw;
     try { pw = await dpip.requestWindow({ width: Math.round(r.width), height: Math.round(r.height) }); } catch (e) { toast("The browser didn't open a floating window"); return; }
@@ -1633,12 +1806,47 @@
     lyr.frame = null;
     mountLyrics("pip", holder);
     if (from) from.remove();
+    syncLyricsTab();   // the Lyrics tab says where they went
     pw.addEventListener("pagehide", () => {
       if (lyr.pip !== pw) return;
       lyr.pip = null;
-      if (lyr.where === "pip") { unmountLyrics(); openLyricsWindow(); }   // closed by hand: back into the page
+      if (lyr.where !== "pip") return;
+      unmountLyrics();
+      // closed by hand: back into the page as a window; opened by itself: back where they were
+      if (!lyr.pipAuto || lyr.pipFrom === "window") openLyricsWindow();
+      else if (lyr.pipFrom === "auto-window") openLyricsWindow(true);
+      else syncLyricsTab();
+      lyr.pipAuto = false;
     }, { once: true });
   }
+
+  // ---- lyrics that follow you
+  // Leaving the player page while its Lyrics tab shows the lyrics brings them along in a window, which goes again when
+  // you come back to the Lyrics tab (a window opened, moved or pinned by hand stays).
+  function lyricsAway() {
+    if (on("lyrics") && prefs.lyricsFollow && lyr.where === "tab" && !lyr.frame && !lyr.pip && lyr.L) openLyricsWindow(true);
+  }
+  function lyricsBack() {
+    if (lyr.frame && lyr.auto && tabSelected(lyricsTab())) closeLyricsWindow();
+  }
+  // Switching to another tab while the lyrics are on screen and music plays: the browser may put them in a window above
+  // everything else (its "automatic picture-in-picture", where it has one); they come back when you do.
+  let floatSet = null;
+  function lyricsOnScreen() {
+    if (lyr.where === "window") return true;
+    return lyr.where === "tab" && !!pageOpen && !!lyr.body && lyr.body.getClientRects().length > 0;
+  }
+  function syncAutoFloat() {
+    const want = !!window.documentPictureInPicture && on("lyrics") && !!prefs.lyricsFloat && !lyr.pip && lyricsOnScreen() &&
+      document.documentElement.hasAttribute("data-pf-playing");
+    if (want === floatSet) return;
+    floatSet = want;
+    try { navigator.mediaSession.setActionHandler("enterpictureinpicture", want ? () => floatLyrics(true) : null); } catch (e) { /* not in this browser */ }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && lyr.pip && lyr.pipAuto) { try { lyr.pip.close(); } catch (e) {} }   // back in the tab: so are the lyrics
+  });
+
   function copyPalette(root) {
     const src = document.documentElement.style;
     for (const k of Object.keys(colors)) {
@@ -1667,7 +1875,7 @@
     }
     const key = np.videoId;
     if (key !== lyr.key) {
-      lyr.key = key; lyr.retry = 0; lyr.L = null; lyr.sources = []; lyr.source = ""; lyr.sig = "";
+      lyr.key = key; lyr.retry = 0; lyr.L = null; lyr.sources = []; lyr.source = ""; lyr.sig = ""; lyr.agreed = false;
       clearTimeout(lyr.timer);
       updateSub();
       renderSources();
@@ -1696,8 +1904,26 @@
     }
     const sig = [r.source, L.lines.length, words, lyrOpts.est].join("|");
     if (sig === lyr.sig) return;   // the same as on screen: left as it is
+    // Lyrics already on screen are only swapped for the same words (better timed), never for another song's, unless
+    // the app is now sure (two sources, or YouTube Music's own lyrics, agree) where it wasn't before.
+    if (lyr.L && lyr.source && r.source !== lyr.source && !lyr.force && !lyrSongs.src[key] && sameWords(lyr.L, L) < 0.4 && !(r.agreed && !lyr.agreed)) return;
+    lyr.agreed = !!r.agreed;
+    lyr.force = false;
     lyr.sig = sig;
     renderLyrics(L);
+  }
+  // How many of their words two sets of lyrics share (0 to 1): the same song from two sources shares most of them.
+  function sameWords(a, b) {
+    const bag = (L) => {
+      const out = new Set();
+      for (const ln of L.lines || []) for (const w of String(ln.text || "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || []) if (w.length > 1) out.add(w);
+      return out;
+    };
+    const x = bag(a), y = bag(b);
+    if (!x.size || !y.size) return 0;
+    let both = 0;
+    for (const w of x) if (y.has(w)) both++;
+    return both / (x.size + y.size - both);
   }
   // Words timed by estimate, for lyrics timed only line by line: the line's time is shared out by word length.
   function splitWords(text) {
@@ -1887,17 +2113,42 @@
     toastTimer = setTimeout(() => toastEl && toastEl.classList.remove("pf-open"), 3600);
   }
 
-  // ------------------------------------------------------------------ the ✦ menu in the top bar
-  let navBtn = null, sheet = null;
+  // ------------------------------------------------------------------ Refine's buttons in the top bar
+  // ✦ opens a short menu of what is changed most; the Discord button opens Discord status; "All settings" shows
+  // everything together in one large dialog (also from the sidebar).
+  let navBtn = null, dcNavBtn = null, sheet = null, sheetKind = "", sheetFrom = null;
   function syncNav() {
-    if (!partOn || (navBtn && navBtn.isConnected)) return;
+    if (!partOn) return;
     const nav = document.querySelector("ytmusic-nav-bar");
     if (!nav) return;
-    navBtn = h("button", { class: "pf-nav-btn", "aria-label": "YTM Starcast Refine", title: "YTM Starcast Refine", "aria-expanded": "false",
-      onclick: (e) => { e.stopPropagation(); if (sheet) closeSheet(); else openSheet(); } }, icon(ICON.sparkle));
     const right = nav.querySelector("#right-content, .right-content");
-    if (right) right.prepend(navBtn);
-    else { navBtn.classList.add("pf-float"); nav.append(navBtn); }
+    if (!navBtn || !navBtn.isConnected) {
+      navBtn = h("button", { class: "pf-nav-btn", "aria-label": "Refine", title: "Refine", "aria-haspopup": "dialog", "aria-expanded": "false",
+        onclick: (e) => { e.stopPropagation(); toggleSheet("quick", navBtn); } }, icon(ICON.sparkle));
+      if (right) right.prepend(navBtn);
+      else { navBtn.classList.add("pf-float"); nav.append(navBtn); }
+    }
+    if (!dcNavBtn || !dcNavBtn.isConnected) {
+      dcNavBtn = h("button", { class: "pf-nav-btn pf-dc-nav", "aria-label": "Discord status", title: "Discord status", "aria-haspopup": "dialog",
+        "aria-expanded": "false", onclick: (e) => { e.stopPropagation(); toggleSheet("discord", dcNavBtn); } }, icon(ICON.discord), h("i", { class: "pf-dot", "aria-hidden": "true" }));
+      if (navBtn.classList.contains("pf-float")) dcNavBtn.classList.add("pf-float", "pf-float-2");
+      navBtn.before(dcNavBtn);
+    }
+  }
+  // the Discord button's dot: green while your music shows on Discord, grey while it doesn't, amber when something is wrong
+  const DOT = { showing: "on", waiting: "on", idle: "idle", off: "off", snoozed: "off", "paused-hidden": "idle", "paused-timeout": "idle",
+    filtered: "idle", ad: "idle", "discord-down": "warn", "extension-quiet": "idle", "extension-missing": "idle", "beacon-running": "warn" };
+  let dotAt = 0;
+  async function syncDiscordDot(force) {
+    if (!dcNavBtn || !dcNavBtn.isConnected || document.hidden || (!force && Date.now() - dotAt < 20000)) return;
+    dotAt = Date.now();
+    const r = await askStarcast("status");
+    const st = r && r.status;
+    const dc = st && st.discord && typeof st.discord === "object" ? st.discord : null;
+    const state = !st ? "warn" : st.parts && st.parts.discord === false ? "off" : (dc && DOT[dc.headline]) || "idle";
+    dcNavBtn.dataset.state = state;
+    const words = (dc && DISCORD_TEXT[dc.headline]) || (st ? "" : "YTM Starcast isn't answering on this computer.");
+    dcNavBtn.title = "Discord status" + (words ? ": " + words : "");
   }
   function sw(key, label, sub) {
     const input = h("input", { type: "checkbox", role: "switch" });
@@ -1906,6 +2157,16 @@
     return h("label", { class: "pf-row" },
       h("span", { class: "pf-row-text" }, label, sub ? h("small", { text: sub }) : null),
       h("span", { class: "pf-switch" }, input, h("i")));
+  }
+  // A quick-settings tile: tonal while on, with its icon, its name and On or Off.
+  function tile(key, label, ico) {
+    const state = h("small");
+    const b = h("button", { class: "pf-tile", type: "button", role: "switch" }, h("span", { class: "pf-tile-ico" }, icon(ico, 22)),
+      h("span", { class: "pf-tile-text" }, label, state));
+    const paint = () => { b.setAttribute("aria-checked", String(!!prefs[key])); state.textContent = prefs[key] ? "On" : "Off"; };
+    b.addEventListener("click", () => { setPref(key, !prefs[key]); paint(); if (key === "clearSlow" || key === "keepPitch") ensureSound(true); });
+    paint();
+    return b;
   }
   // YTM Starcast's three main switches, kept by the app on this computer. Asked through the extension's own script, like live
   // lyrics: this page can't reach the app itself.
@@ -1933,10 +2194,11 @@
   const PART_ROWS = [
     ["remote", "YouTube Music remote", "Search, your library and this tab's queue from your phone"],
     ["discord", "Discord status", "Show what you play on your Discord profile"],
-    ["refine", "Refine", "Everything in this menu. Once it's off, turn it back on from YTM Starcast's button in the browser toolbar or in the YTM Starcast app"],
+    ["refine", "Refine", "Everything here. Once it's off, turn it back on from YTM Starcast's button in the browser toolbar or in the YTM Starcast app"],
   ];
-  function starcastSection() {
-    const note = h("p", { class: "pf-foot", role: "status", text: "Asking YTM Starcast on this computer…" });
+  // YTM Starcast's switches for the given parts, with a line saying what the app says.
+  function partsBlock(keys) {
+    const note = h("p", { class: "pf-foot", role: "status", text: "Asking YTM Starcast on this computer\u2026" });
     const rows = {};
     // what the app last said (null: not known, or an app from before these switches, which has them all on)
     let parts = null, ok = false, busy = false;
@@ -1950,7 +2212,7 @@
           const v = typeof st.version === "string" ? st.version.slice(0, 24) : "";
           note.textContent = "YTM Starcast" + (v ? " " + v : "") + " is running on this computer.";
           const dc = st.discord && typeof st.discord === "object" ? st.discord : null;
-          rows.discord.small.textContent = (dc && DISCORD_TEXT[dc.headline]) || rows.discord.sub;
+          if (rows.discord) rows.discord.small.textContent = (dc && DISCORD_TEXT[dc.headline]) || rows.discord.sub;
         }
       } else {
         ok = false;
@@ -1976,7 +2238,8 @@
       const r = await askStarcast("status");
       if (mine === gen && !busy) show(r);
     }
-    for (const [key, , sub] of PART_ROWS) {
+    for (const key of keys) {
+      const [, , sub] = PART_ROWS.find((x) => x[0] === key);
       // data-pf-part: the extension's own script switches a part on only after a real press on this switch
       const input = h("input", { type: "checkbox", role: "switch", disabled: true, "data-pf-part": key });
       input.checked = true;
@@ -1988,35 +2251,19 @@
         const r = await askStarcast("parts", { parts: { [key]: input.checked } });
         busy = false;
         show(r);
-        setTimeout(refresh, 900);   // the Discord line catches up a moment later
+        setTimeout(() => { refresh(); syncDiscordDot(true); }, 900);   // the Discord line catches up a moment later
       });
       rows[key] = { input, small, sub };
     }
     refresh();
-    // Every Discord status option (what YTM Beacon had, and a preview of the card), opened from one row
-    const dcBox = h("div", { class: "pf-dc", hidden: "" });
-    const dcBtn = h("button", { class: "pf-row pf-dc-toggle", type: "button", "aria-expanded": "false" },
-      h("span", { class: "pf-row-text" }, "Discord status options", h("small", { text: "What the card shows, hiding it for a while, a preview" })),
-      h("span", { class: "pf-chev", "aria-hidden": "true", text: "\u203a" }));
-    dcBtn.addEventListener("click", () => {
-      const open = dcBox.hidden;
-      dcBox.hidden = !open;
-      dcBtn.setAttribute("aria-expanded", String(open));
-      if (open && !dcBox.firstChild && window.__starcastDiscordPanel) {
-        dcBox.append(window.__starcastDiscordPanel({ ask: (op, extra) => askStarcast(op, extra) }));
-      }
-    });
-    // one flat list: h() flattens its children only one level deep
-    return [h("div", { class: "pf-sec", text: "YTM Starcast" }),
-      ...PART_ROWS.map(([key, label]) => h("label", { class: "pf-row" },
-        h("span", { class: "pf-row-text" }, label, rows[key].small), h("span", { class: "pf-switch" }, rows[key].input, h("i")))),
-      dcBtn, dcBox, note];
+    return { note, rows: keys.map((key) => h("label", { class: "pf-row" },
+      h("span", { class: "pf-row-text" }, PART_ROWS.find((x) => x[0] === key)[1], rows[key].small), h("span", { class: "pf-switch" }, rows[key].input, h("i")))) };
   }
   // The computer's sound: the same volume, output and equalizer as YTM Starcast's mixer, through the app on this
   // computer. The extension's script passes a change on only right after a real press or drag in here.
   const BAND_NAMES = [["bass", "Bass"], ["mid", "Mid"], ["high", "Treble"]];
-  function soundSection() {
-    const box = h("div", { class: "pf-dc pf-snd", hidden: "", "data-pf-snd": "" });
+  function soundSection(open) {
+    const box = h("div", { class: "pf-dc pf-snd", hidden: !open, "data-pf-snd": "" });
     const btn = h("button", { class: "pf-row pf-dc-toggle", type: "button", "aria-expanded": "false" },
       h("span", { class: "pf-row-text" }, "Computer sound", h("small", { text: "Volume, output and equalizer, as in YTM Starcast's mixer" })),
       h("span", { class: "pf-chev", "aria-hidden": "true", text: "›" }));
@@ -2135,69 +2382,244 @@
       show(await askStarcast("sound"));
     }
     btn.addEventListener("click", () => {
-      const open = box.hidden;
-      box.hidden = !open;
-      btn.setAttribute("aria-expanded", String(open));
+      const show = box.hidden;
+      box.hidden = !show;
+      btn.setAttribute("aria-expanded", String(show));
       clearInterval(timer); timer = 0;
-      if (open) { refresh(); timer = setInterval(refresh, 2000); }
+      if (show) { refresh(); timer = setInterval(refresh, 2000); }
     });
+    if (open) { setTimeout(refresh, 0); timer = setInterval(refresh, 2000); return box; }
     return [btn, box];
   }
-  function sheetOutside(e) { if (sheet && !sheet.contains(e.target) && e.target !== navBtn && !navBtn.contains(e.target)) closeSheet(); }
-  function sheetKey(e) {
-    if (e.key !== "Escape") return;
-    closeSheet(); closeSpeed();
-    if (lyr.frame && !lyrWin.pinned && lyr.frame.contains(document.activeElement)) closeLyricsWindow();
+  // ---- the quick menu (✦) and Discord status (the Discord button): small panels under their buttons
+  function quickSheet() {
+    return [
+      h("div", { class: "pf-head pf-head-logo" }, logoTile(36), h("div", {},
+        h("div", { class: "pf-title", text: "Refine" }),
+        h("div", { class: "pf-sub", text: KILL ? "Off for this page (?pf-refine=off). Your choices are kept for next time." : "YTM Starcast's additions to YouTube Music" }))),
+      h("div", { class: "pf-tiles" },
+        tile("colors", "Album colours", ICON.palette), tile("motion", "Animations", ICON.motion),
+        tile("wavy", "Wavy bar", ICON.wave), tile("clearSlow", "Clear slowed sound", ICON.eq),
+        tile("material", "Material You page", ICON.material), vizTile(),
+        tile("lyrics", "Live lyrics", ICON.lyrics), tile("lyricsFollow", "Lyrics follow you", ICON.pip)),
+      h("div", { class: "pf-quick-actions" },
+        h("button", { class: "pf-btn pf-tonal", disabled: !on("lyrics"), onclick: () => { closeSheet(); openLyricsWindow(); } }, icon(ICON.popOut, 18), "Lyrics window"),
+        h("button", { class: "pf-btn pf-tonal", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 18), "Make a playlist")),
+      h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openAll(); } }, icon(ICON.tune, 20), "All settings"),
+    ];
   }
-  function openSheet() {
+  function discordSheet() {
+    const { rows, note } = partsBlock(["discord"]);
+    const panel = window.__starcastDiscordPanel ? window.__starcastDiscordPanel({ ask: (op, extra) => askStarcast(op, extra) })
+      : h("p", { class: "pf-foot", text: "Discord status options need the extension's discord_ui.js." });
+    return [h("div", { class: "pf-head pf-head-logo" }, h("span", { class: "pf-dc-badge" }, icon(ICON.discord, 22)), h("div", {},
+      h("div", { class: "pf-title", text: "Discord status" }), h("div", { class: "pf-sub", text: "Your music on your Discord profile" }))),
+      rows, h("div", { class: "pf-dc-panel" }, panel), note];
+  }
+  function sheetOutside(e) {
+    if (!sheet || sheet.contains(e.target)) return;
+    const path = e.composedPath ? e.composedPath() : [];
+    if (path.includes(sheetFrom)) return;   // the button that opened it toggles it itself
     closeSheet();
-    sheet = h("div", { class: "pf-sheet pf-ui", role: "dialog", "aria-label": "YTM Starcast Refine" },
-      h("div", { class: "pf-head" }, h("div", { class: "pf-title", text: "Refine" }),
-        h("div", { class: "pf-sub", text: KILL ? "Off for this page (?pf-refine=off). Your choices below are kept for next time." : "YTM Starcast's additions to YouTube Music" })),
-      h("div", { class: "pf-sec", text: "Look" }),
-      sw("shapes", "Rounder shapes", "Covers, lists, menus and the search box"),
-      sw("colors", "Colours from the album art", "The page takes on the colour of the cover"),
-      sw("controls", "Expressive player controls", "A bigger play button that changes shape"),
-      sw("wavy", "Wavy progress bar", "Ripples while the song plays, flat when paused"),
-      sw("glow", "Glow behind the cover", null),
-      sw("motion", "Animations", "Pages, menus, covers and buttons move into place"),
-      h("div", { class: "pf-sec", text: "Playback" }),
-      sw("speedMenu", "Richer speed menu", "Opens from the player's own speed button; the speed stays from song to song"),
-      sw("keepPitch", "Keep the pitch at other speeds", null),
-      sw("clearSlow", "Clear slowed sound", "Slowed songs stay smooth and clear instead of smeared"),
-      sw("speedTimes", "Times follow the speed", "At 0.8x a 3:00 song shows 3:45, here and on Discord"),
-      h("div", { class: "pf-sec", text: "Lyrics" }),
-      sw("lyrics", "Live lyrics", "Word by word, from the YTM Starcast app, in YouTube Music's Lyrics tab"),
-      h("button", { class: "pf-btn pf-tonal pf-wide", disabled: !on("lyrics"), onclick: () => { closeSheet(); openLyricsWindow(); } }, icon(ICON.popOut, 20), "Open lyrics in a window"),
-      h("div", { class: "pf-sec", text: "Controls" }),
-      sw("dice", "Something-you-might-like button", "On the home page, next to the first shelf (Listen again)"),
-      sw("songMenu", "In song menus", "\u201cPlaylist from this song\u201d in YouTube Music's own \u22ee menus"),
-      h("button", { class: "pf-btn pf-filled pf-wide", onclick: () => { closeSheet(); openMaker(); } }, icon(ICON.playlistAdd, 20), "Make a playlist…"),
-      starcastSection(),
-      soundSection(),
-      h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
-        "switch off anything that misbehaves. Settings stay in this browser. YTM Starcast extension " + VERSION + "." }));
-    const r = navBtn.getBoundingClientRect();
+  }
+  function toggleSheet(kind, anchor) {
+    if (sheet && sheetKind === kind) { closeSheet(); return; }
+    closeSheet();
+    sheetKind = kind; sheetFrom = anchor;
+    sheet = h("div", { class: "pf-sheet pf-ui" + (kind === "discord" ? " pf-sheet-dc" : ""), role: "dialog", "aria-label": kind === "discord" ? "Discord status" : "Refine" },
+      kind === "discord" ? discordSheet() : quickSheet());
+    const r = anchor.getBoundingClientRect();
     sheet.style.top = r.bottom + 8 + "px";
     sheet.style.right = Math.max(8, innerWidth - r.right - 4) + "px";
     document.body.append(sheet);
-    navBtn.setAttribute("aria-expanded", "true");
+    anchor.setAttribute("aria-expanded", "true");
     requestAnimationFrame(() => sheet && sheet.classList.add("pf-open"));
     setTimeout(() => document.addEventListener("pointerdown", sheetOutside, true), 0);
-    const first = sheet.querySelector("input, button");
+    const first = sheet.querySelector("button, input");
     if (first) first.focus({ preventScroll: true });
+    if (kind === "discord") syncDiscordDot(true);
   }
   function closeSheet() {
     if (!sheet) return;
-    const el = sheet;
-    sheet = null;
-    if (navBtn) navBtn.setAttribute("aria-expanded", "false");
-    if (el.contains(document.activeElement) && navBtn && navBtn.isConnected) navBtn.focus();
+    const el = sheet, from = sheetFrom;
+    sheet = null; sheetKind = ""; sheetFrom = null;
+    if (from) from.setAttribute("aria-expanded", "false");
+    if (el.contains(document.activeElement) && from && from.isConnected) from.focus();
     el.classList.remove("pf-open");
     setTimeout(() => el.remove(), 200);
     document.removeEventListener("pointerdown", sheetOutside, true);
   }
+
+  // ---- All settings: everything together, with the sections listed down the side
+  let allDlg = null;
+  function openAll(section) {
+    closeSheet();
+    if (allDlg) { if (section) jumpTo(section); return; }
+    const sections = [
+      ["look", "Look", [
+        sw("colors", "Colours from the album art", "The page takes on the colour of the cover"),
+        sw("shapes", "Rounder shapes", "Covers, lists, menus and the search box"),
+        sw("material", "Material You page parts", "Pill tabs beside the player, tonal buttons, Material switches and scrollbars"),
+        sw("controls", "Expressive player controls", "A bigger play button that changes shape"),
+        sw("wavy", "Wavy progress bar", "Ripples while the song plays, flat when paused"),
+        sw("glow", "Glow behind the cover", null),
+        sw("motion", "Animations", "Pages, menus, covers and buttons move into place"),
+        vizChooser(),
+        sw("logo", "YTM Starcast logo", "In place of YouTube Music's, to show Refine is on"),
+        sw("sidebar", "In the sidebar", "Lyrics, Make a playlist and these settings, under Home, Explore and Library")]],
+      ["playback", "Playback", [
+        sw("speedMenu", "Richer speed menu", "Opens from the player's own speed button; the speed stays from song to song"),
+        sw("keepPitch", "Keep the pitch at other speeds", null),
+        sw("clearSlow", "Clear slowed sound", "Slowed songs stay smooth and clear instead of smeared"),
+        sw("speedTimes", "Times follow the speed", "At 0.8x a 3:00 song shows 3:45, here and on Discord"),
+        roomControl()]],
+      ["lyrics", "Lyrics", [
+        sw("lyrics", "Live lyrics", "Word by word, from the YTM Starcast app, in YouTube Music's Lyrics tab"),
+        sw("lyricsFollow", "Lyrics follow you", "Leaving the player with the Lyrics tab open brings them along in a window"),
+        sw("lyricsFloat", "Above other windows when you switch tabs", "While lyrics are on screen and music plays (where the browser allows it)"),
+        h("button", { class: "pf-btn pf-tonal pf-inline", disabled: !on("lyrics"), onclick: () => { closeAll(); openLyricsWindow(); } }, icon(ICON.popOut, 18), "Open lyrics in a window")]],
+      ["controls", "Controls", [
+        sw("dice", "Something-you-might-like button", "On the home page, next to the first shelf (Listen again)"),
+        sw("songMenu", "In song menus", "“Playlist from this song” in YouTube Music's own ⋮ menus"),
+        h("button", { class: "pf-btn pf-tonal pf-inline", onclick: () => { closeAll(); openMaker(); } }, icon(ICON.playlistAdd, 18), "Make a playlist")]],
+      ["discord", "Discord status", (() => {
+        const { rows, note } = partsBlock(["discord"]);
+        const panel = window.__starcastDiscordPanel ? window.__starcastDiscordPanel({ ask: (op, extra) => askStarcast(op, extra) }) : null;
+        return [rows, panel, note];
+      })()],
+      ["sound", "Computer sound", soundSection(true)],
+      ["starcast", "YTM Starcast", (() => { const { rows, note } = partsBlock(["remote", "discord", "refine"]); return [rows, note]; })()],
+      ["about", "About", [h("p", { class: "pf-foot", text: "These rely on how YouTube Music's page is built, so a change on its side can break one; " +
+        "switch off anything that misbehaves. Settings stay in this browser. Opening music.youtube.com/?pf-refine=off starts a page without " +
+        "any of it. YTM Starcast extension " + VERSION + "." })]],
+    ];
+    const nav = h("nav", { class: "pf-all-nav", "aria-label": "Sections" });
+    const body = h("div", { class: "pf-all-body" });
+    const navBtns = {};
+    for (const [id, label, kids] of sections) {
+      navBtns[id] = h("button", { class: "pf-all-link", type: "button", text: label, onclick: () => jumpTo(id) });
+      nav.append(navBtns[id]);
+      body.append(h("section", { class: "pf-all-sec", id: "pf-all-" + id, "aria-label": label }, h("h3", { text: label }), kids));
+    }
+    const dlg = h("div", { class: "pf-dialog pf-all", role: "dialog", "aria-modal": "true", "aria-label": "Refine settings" },
+      h("div", { class: "pf-dlg-head" }, h("div", { class: "pf-head pf-head-logo" }, logoTile(40), h("div", {},
+        h("div", { class: "pf-title", text: "Refine settings" }), h("div", { class: "pf-sub", text: "Everything YTM Starcast adds to YouTube Music, in one place" }))),
+        h("button", { class: "pf-btn pf-icon-btn", "aria-label": "Close", onclick: closeAll }, icon(ICON.close))),
+      h("div", { class: "pf-all-main" }, nav, body));
+    allDlg = h("div", { class: "pf-scrim pf-ui" }, dlg);
+    allDlg.addEventListener("pointerdown", (e) => { if (e.target === allDlg) closeAll(); });
+    document.body.append(allDlg);
+    requestAnimationFrame(() => allDlg && allDlg.classList.add("pf-open"));
+    // the section in view is marked in the list
+    const mark = () => {
+      const top = body.getBoundingClientRect().top + 40;
+      let cur = sections[0][0];
+      for (const [id] of sections) { const s = body.querySelector("#pf-all-" + id); if (s && s.getBoundingClientRect().top <= top) cur = id; }
+      for (const [id, b] of Object.entries(navBtns)) b.setAttribute("aria-current", String(id === cur));
+    };
+    body.addEventListener("scroll", mark, { passive: true });
+    mark();
+    allDlg.__jump = (id) => {
+      const s = body.querySelector("#pf-all-" + id);
+      if (s) body.scrollTo({ top: body.scrollTop + s.getBoundingClientRect().top - body.getBoundingClientRect().top - 8, behavior: REDUCED.matches ? "auto" : "smooth" });
+    };
+    if (section) jumpTo(section);
+    (navBtns.look || dlg).focus({ preventScroll: true });
+  }
+  function jumpTo(id) { if (allDlg && allDlg.__jump) allDlg.__jump(id); }
+  function closeAll() {
+    if (!allDlg) return;
+    const el = allDlg;
+    allDlg = null;
+    el.classList.remove("pf-open");
+    setTimeout(() => el.remove(), 250);
+  }
+  // Room (a soft reverb for a "slowed + reverb" sound), as in the speed menu
+  function roomControl() {
+    const room = h("input", { type: "range", min: "0", max: "100", step: "5", class: "pf-range pf-range-sm", "aria-label": "Room" });
+    const val = h("span", { class: "pf-mini-val" });
+    const show = () => { room.value = String(Math.round(soundOpts.room * 100)); room.style.setProperty("--pf-fill", soundOpts.room * 100 + "%"); val.textContent = soundOpts.room ? Math.round(soundOpts.room * 100) + "%" : "Off"; };
+    room.addEventListener("input", () => { soundOpts.room = clamp(Number(room.value) / 100, 0, 1); writeJSON(SOUND_KEY, soundOpts); show(); ensureSound(true); applyRoom(); });
+    show();
+    return h("div", { class: "pf-room" }, h("div", { class: "pf-label pf-label-row" }, h("span", { text: "Room (a slowed + reverb sound)" }), val), room);
+  }
+  function sheetKey(e) {
+    if (e.key !== "Escape") return;
+    if (allDlg) { closeAll(); return; }
+    closeSheet(); closeSpeed();
+    if (lyr.frame && !lyrWin.pinned && lyr.frame.contains(document.activeElement)) closeLyricsWindow();
+  }
   document.addEventListener("keydown", sheetKey, true);
+
+  // ------------------------------------------------------------------ the sidebar and the logo
+  // Lyrics, Make a playlist and All settings join Home, Explore and Library in YouTube Music's sidebar (the full one and
+  // the narrow one), looking like its own entries.
+  const GUIDE = [["Lyrics", "Lyrics", () => ICON.lyrics, () => openLyricsWindow()], ["Make a playlist", "Playlist", () => ICON.playlistAdd, () => openMaker()],
+    ["Refine", "Refine", () => ICON.sparkle, () => openAll()]];
+  function syncGuide() {
+    const lists = [];
+    if (on("sidebar")) {
+      for (const guide of document.querySelectorAll("ytmusic-guide-renderer")) {
+        const first = guide.querySelector("ytmusic-guide-entry-renderer");
+        if (first && first.parentElement && !lists.includes(first.parentElement)) lists.push(first.parentElement);
+      }
+    }
+    for (const g of document.querySelectorAll(".pf-guide")) if (!lists.includes(g.parentElement)) g.remove();
+    for (const list of lists) {
+      let g = list.querySelector(":scope > .pf-guide");
+      if (!g) {
+        g = h("div", { class: "pf-guide pf-ui", role: "group", "aria-label": "YTM Starcast" }, GUIDE.map(([label, short, ico, go]) =>
+          h("button", { class: "pf-guide-entry", type: "button", title: label, "aria-label": label, disabled: label === "Lyrics" && !on("lyrics"),
+            onclick: (e) => { e.stopPropagation(); go(); } }, h("span", { class: "pf-guide-ico" }, icon(ico(), 24)),
+            h("span", { class: "pf-guide-label", text: label }), h("span", { class: "pf-guide-short", text: short }))));
+        list.append(g);
+      }
+      const w = list.getBoundingClientRect().width;
+      if (w) g.classList.toggle("pf-guide-mini", w < 140);
+      const lyricsEntry = g.firstChild;
+      if (lyricsEntry) lyricsEntry.disabled = !on("lyrics");
+    }
+  }
+  // YTM Starcast's logo in place of YouTube Music's, while Refine is on (the link to Home stays).
+  function logoTile(size) {
+    const s = document.createElementNS(SVGNS, "svg");
+    s.setAttribute("viewBox", "0 0 512 512");
+    s.setAttribute("width", String(size));
+    s.setAttribute("height", String(size));
+    s.setAttribute("aria-hidden", "true");
+    s.setAttribute("class", "pf-logo-tile");
+    const P = (d, attrs) => { const p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", d); for (const [k, v] of Object.entries(attrs)) p.setAttribute(k, v); s.append(p); };
+    const defs = document.createElementNS(SVGNS, "defs"), g = document.createElementNS(SVGNS, "linearGradient");
+    for (const [k, v] of Object.entries({ id: "pf-logo-bg", x1: "0", y1: "0", x2: "0.35", y2: "1" })) g.setAttribute(k, v);
+    for (const [o, c] of [["0", "#2A3A9A"], [".55", "#111A52"], ["1", "#070B2A"]]) {
+      const st = document.createElementNS(SVGNS, "stop"); st.setAttribute("offset", o); st.setAttribute("stop-color", c); g.append(st);
+    }
+    defs.append(g); s.append(defs);
+    const r = document.createElementNS(SVGNS, "rect");
+    for (const [k, v] of Object.entries({ x: 16, y: 16, width: 480, height: 480, rx: 112, fill: "url(#pf-logo-bg)" })) r.setAttribute(k, v);
+    s.append(r);
+    for (const [rad, w, o] of [[132, 38, 1], [200, 36, 0.7]]) {
+      P(`M176,${336 - rad} A${rad},${rad} 0 0 1 ${176 + rad},336`, { fill: "none", stroke: "#8CC8FF", "stroke-width": w, "stroke-linecap": "round", opacity: o });
+    }
+    P(LOGO_STAR, { fill: "#F2F6FF" });
+    return s;
+  }
+  function syncLogo() {
+    const want = on("logo");
+    for (const lg of document.querySelectorAll("ytmusic-logo")) {
+      const box = lg.querySelector("a") || lg;
+      const mine = box.querySelector(":scope > .pf-logo");
+      if (want && !mine) {
+        box.append(h("span", { class: "pf-logo pf-ui", title: "YouTube Music, with YTM Starcast" }, logoTile(30), h("span", { class: "pf-logo-word", text: "Starcast" })));
+        box.setAttribute("data-pf-logo-box", "");
+        lg.setAttribute("data-pf-logo", "");
+      } else if (!want && mine) {
+        mine.remove();
+        box.removeAttribute("data-pf-logo-box");
+        lg.removeAttribute("data-pf-logo");
+      }
+    }
+  }
 
   // ------------------------------------------------------------------ playlist maker
   const cleanTitle = (t) => String(t || "").toLowerCase()
@@ -2522,6 +2944,146 @@
     }, true);
   }
 
+  // ------------------------------------------------------------------ cover visualizers (experimental)
+  // Behind the big cover in the player page: Halo (the cover itself, blurred, slowly turning around it), Orbit (a ring of
+  // the album's colours running round its edge), Pulse (the halo breathing with the music) and Bars (the music's
+  // frequencies all round the cover). Pulse and Bars listen to the page's sound through the same path as the clear
+  // slowed sound (after a press on the page); until then they breathe gently on their own.
+  const viz = { host: null, el: null, arts: [], canvas: null, cx: null, raf: 0, src: "", data: null, level: 0, rect: null, rectAt: 0 };
+  function setViz(m) {
+    vizMode = VIZ_MODES.some((x) => x[0] === m) ? m : "off";
+    writeJSON(VIZ_KEY, { mode: vizMode });
+    if (vizHears()) ensureSound(true);
+    syncViz();
+  }
+  // the cover at its largest
+  function bigArt() {
+    try {
+      const md = navigator.mediaSession && navigator.mediaSession.metadata;
+      const list = md && md.artwork ? [...md.artwork] : [];
+      list.sort((a, b) => (parseInt(b.sizes, 10) || 0) - (parseInt(a.sizes, 10) || 0));
+      if (list[0] && list[0].src) return list[0].src;
+    } catch (e) {}
+    const vid = API.curVideo();
+    return vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : "";
+  }
+  function vizHost() {
+    if (!pageOpen) return null;
+    const p = document.querySelector("ytmusic-player-page ytmusic-player");
+    return p && p.getClientRects().length ? p : null;
+  }
+  function removeViz() {
+    cancelAnimationFrame(viz.raf);
+    if (viz.el) viz.el.remove();
+    if (viz.host) viz.host.removeAttribute("data-pf-viz");
+    Object.assign(viz, { raf: 0, host: null, el: null, arts: [], canvas: null, cx: null, rect: null });
+  }
+  function syncViz() {
+    const host = live() && vizMode !== "off" ? vizHost() : null;
+    if (!host) { if (viz.el || viz.host) removeViz(); return; }
+    if (!(viz.el && viz.host === host && viz.el.isConnected && viz.el.dataset.mode === vizMode)) {
+      removeViz();
+      viz.host = host;
+      const art = (cls) => h("img", { class: "pf-viz-art" + (cls ? " " + cls : ""), alt: "", referrerpolicy: "no-referrer", decoding: "async" });
+      const kids = [];
+      if (vizMode !== "orbit") { viz.arts = vizMode === "bars" ? [art()] : [art(), art("pf-b")]; kids.push(...viz.arts); }
+      if (vizMode === "orbit") kids.push(h("div", { class: "pf-viz-ring" }), h("div", { class: "pf-viz-ring pf-sharp" }));
+      if (vizMode === "bars") { viz.canvas = h("canvas", { class: "pf-viz-bars" }); viz.cx = viz.canvas.getContext("2d"); kids.push(viz.canvas); }
+      viz.el = h("div", { class: "pf-viz pf-ui", "data-mode": vizMode, "aria-hidden": "true" }, kids);
+      host.prepend(viz.el);
+      host.setAttribute("data-pf-viz", "");
+      viz.src = "";
+    }
+    const src = bigArt();
+    if (src && src !== viz.src) { viz.src = src; for (const im of viz.arts) im.src = src; }
+    if (vizHears() && !viz.raf) viz.raf = requestAnimationFrame(vizFrame);
+  }
+  function vizFrame(t) {
+    viz.raf = 0;
+    if (!viz.el || !viz.el.isConnected || document.hidden) return;
+    const an = snd.analyser && snd.el === video() ? snd.analyser : null;
+    const playing = document.documentElement.hasAttribute("data-pf-playing");
+    let level = 0, bins = null;
+    if (an && playing) {
+      if (!viz.data || viz.data.length !== an.frequencyBinCount) viz.data = new Uint8Array(an.frequencyBinCount);
+      an.getByteFrequencyData(viz.data);
+      bins = viz.data;
+      let bass = 0;
+      for (let i = 1; i <= 12; i++) bass += bins[i];
+      level = Math.pow(bass / (12 * 255), 1.6);
+    } else if (playing) level = 0.3 + 0.12 * Math.sin(t / 650);
+    viz.level += (level - viz.level) * (level > viz.level ? 0.45 : 0.12);   // quick to rise, slow to fall
+    viz.el.style.setProperty("--pf-level", viz.level.toFixed(3));
+    if (vizMode === "bars") drawBars(bins, playing, t);
+    if (playing || viz.level > 0.01) viz.raf = requestAnimationFrame(vizFrame);   // paused: it settles, then rests
+  }
+  // a point on the cover's rounded edge, s from 0 to 1 clockwise from the top left, and the way out from it
+  function edgePoint(x, y, w, hh, rad, s) {
+    const straight = [w - 2 * rad, hh - 2 * rad, w - 2 * rad, hh - 2 * rad], arc = (Math.PI / 2) * rad;
+    const total = straight.reduce((a, b) => a + b, 0) + 4 * arc;
+    let d = s * total;
+    const corners = [[x + w - rad, y + rad, -Math.PI / 2], [x + w - rad, y + hh - rad, 0], [x + rad, y + hh - rad, Math.PI / 2], [x + rad, y + rad, Math.PI]];
+    const starts = [[x + rad, y, 1, 0, 0, -1], [x + w, y + rad, 0, 1, 1, 0], [x + w - rad, y + hh, -1, 0, 0, 1], [x, y + hh - rad, 0, -1, -1, 0]];
+    for (let k = 0; k < 4; k++) {
+      const [sx, sy, dx, dy, nx, ny] = starts[k];
+      if (d <= straight[k]) return [sx + dx * d, sy + dy * d, nx, ny];
+      d -= straight[k];
+      if (d <= arc) { const [cx, cy, a0] = corners[k], a = a0 + d / rad; return [cx + rad * Math.cos(a), cy + rad * Math.sin(a), Math.cos(a), Math.sin(a)]; }
+      d -= arc;
+    }
+    return [x + rad, y, 0, -1];
+  }
+  function drawBars(bins, playing, t) {
+    const c = viz.canvas, cx = viz.cx, now = performance.now();
+    if (!viz.rect || now - viz.rectAt > 500) { viz.rect = viz.host.getBoundingClientRect(); viz.rectAt = now; }
+    const r = viz.rect, M = 72, dpr = devicePixelRatio || 1, W = Math.round(r.width + 2 * M), H = Math.round(r.height + 2 * M);
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) {
+      c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+      c.style.cssText = `left:${-M}px;top:${-M}px;width:${W}px;height:${H}px`;
+    }
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, W, H);
+    const N = 112, rad = Math.min(36, r.width / 4);
+    cx.lineCap = "round";
+    cx.lineWidth = 4;
+    for (let i = 0; i < N; i++) {
+      const [px, py, nx, ny] = edgePoint(M, M, r.width, r.height, rad, i / N);
+      const k = Math.min(i, N - i) / (N / 2);              // mirrored: low notes at the top, high ones at the bottom
+      let v;
+      if (bins) v = bins[Math.min(bins.length - 1, 2 + Math.floor(Math.pow(k, 1.7) * 260))] / 255;
+      else v = playing ? 0.12 + 0.08 * Math.sin(t / 380 + i * 0.45) : 0.03;
+      const len = 3 + v * (M - 14);
+      cx.globalAlpha = 0.3 + 0.7 * v;
+      cx.strokeStyle = colors.accent;
+      cx.beginPath();
+      cx.moveTo(px + nx * 8, py + ny * 8);
+      cx.lineTo(px + nx * (8 + len), py + ny * (8 + len));
+      cx.stroke();
+    }
+    cx.globalAlpha = 1;
+  }
+  // the quick menu's tile: one press for the next one
+  function vizTile() {
+    const state = h("small");
+    const b = h("button", { class: "pf-tile", type: "button", title: "Cover visualizer (experimental): press for the next one" },
+      h("span", { class: "pf-tile-ico" }, icon(ICON.viz, 22)), h("span", { class: "pf-tile-text" }, "Visualizer", state));
+    const paint = () => { b.setAttribute("aria-checked", String(vizMode !== "off")); b.setAttribute("aria-label", "Cover visualizer: " + vizMode); state.textContent = VIZ_MODES.find((x) => x[0] === vizMode)[1]; };
+    b.addEventListener("click", () => {
+      const i = VIZ_MODES.findIndex((x) => x[0] === vizMode);
+      setViz(VIZ_MODES[(i + 1) % VIZ_MODES.length][0]);
+      paint();
+    });
+    paint();
+    return b;
+  }
+  function vizChooser() {
+    const chips = VIZ_MODES.map(([m, label]) => h("button", { class: "pf-chip", text: label, "aria-pressed": String(vizMode === m),
+      onclick: () => { setViz(m); for (const c of chips) c.setAttribute("aria-pressed", String(c.textContent === label)); } }));
+    return h("div", { class: "pf-viz-pick" }, h("div", { class: "pf-row-text" }, "Cover visualizer (experimental)",
+      h("small", { text: "Around the big cover in the player page. Pulse and Bars follow the music once a press on the page lets it be heard here" })),
+      h("div", { class: "pf-chips" }, chips));
+  }
+
   // ------------------------------------------------------------------ animations
   // The "motion" layer's CSS does the moving; these marks on the page say when: a new page (or a new set of
   // results) has arrived, a new song started, the player page opened, a tab in it changed.
@@ -2570,11 +3132,20 @@
     const vid = API.curVideo();
     if (vid && vid !== animVid) { const first = !animVid; animVid = vid; if (!first) pulse("pf-song", 1000); }
   }
-  let pageOpen = null;
+  let pageOpen = null, pageObs = null, pageObsOn = null;
   function watchPlayerPage() {
     const open = !!document.querySelector("ytmusic-player-bar[player-page-open], ytmusic-app-layout[player-page-open]");
-    if (pageOpen !== null && open !== pageOpen && open) pulse("pf-page", 1100);
+    if (pageOpen !== null && open !== pageOpen) {
+      if (open) { pulse("pf-page", 1100); setTimeout(lyricsBack, 60); } else lyricsAway();
+    }
     pageOpen = open;
+    const el = document.querySelector("ytmusic-app-layout") || document.querySelector("ytmusic-player-bar");
+    if (el && el !== pageObsOn) {
+      if (pageObs) pageObs.disconnect();
+      pageObsOn = el;
+      pageObs = new MutationObserver(watchPlayerPage);
+      pageObs.observe(el, { attributes: true, attributeFilter: ["player-page-open"] });
+    }
   }
 
   // ------------------------------------------------------------------ putting it together
@@ -2587,6 +3158,9 @@
     syncLyrics();
     syncSpeedButton();
     syncTimes();
+    syncGuide();
+    syncLogo();
+    syncViz();
     applyRoom();
     applyPitch();
   }
@@ -2598,12 +3172,16 @@
   // YTM Starcast's "Refine" switch went off: everything Refine added leaves the page at once (open menus and dialogs too),
   // and a speed Refine remembered for this song steps back. Speeds set by hand stay.
   function takeDown() {
-    closeSheet(); closeSpeed(); closeLyricsWindow(); closeMaker();
+    closeSheet(); closeAll(); closeSpeed(); closeLyricsWindow(); closeMaker();
     applyAll();                                   // styles, the wave, the player buttons and the pitch (all follow on())
     for (const el of document.querySelectorAll(".pf-ui, .pf-menu-item, .pf-time")) el.remove();   // closing ones too: no styles are left for them
     for (const el of document.querySelectorAll("[data-pf-lyrics], [data-pf-time-src]")) { el.removeAttribute("data-pf-lyrics"); el.removeAttribute("data-pf-time-src"); }
     if (lyr.where) unmountLyrics();
     if (navBtn) { navBtn.remove(); navBtn = null; }
+    if (dcNavBtn) { dcNavBtn.remove(); dcNavBtn = null; }
+    removeViz();
+    for (const el of document.querySelectorAll("[data-pf-logo], [data-pf-logo-box]")) { el.removeAttribute("data-pf-logo"); el.removeAttribute("data-pf-logo-box"); }
+    if (floatSet) { floatSet = null; try { navigator.mediaSession.setActionHandler("enterpictureinpicture", null); } catch (e) {} }
     document.documentElement.removeAttribute("data-pf-playing");
     const st = document.documentElement.style;
     for (const k of Object.keys(colors)) st.removeProperty("--pf-" + k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
@@ -2627,6 +3205,7 @@
     const d = ev.source === window && ev.data;
     if (!d || typeof d !== "object") return;
     if (d.__vmr === "cfg" && d.cfg && typeof d.cfg === "object") setPart(d.cfg.refine !== false);
+    else if (d.__vmr === "refine-open" && d.what === "settings" && live()) openAll();   // asked for from YTM Starcast (Orbit's card)
     else if (d.__vmr === "starcast-result" && scWaiting.has(d.id)) { scWaiting.get(d.id)(d.data && typeof d.data === "object" ? d.data : {}); scWaiting.delete(d.id); }
   });
   let lastVid = null, tick = 0;
@@ -2645,7 +3224,9 @@
         } else if (tick % 4 === 0) updateColors(false); // the cover can arrive a moment after the song
         syncLyrics();
         watchPlayerPage();
-        if (tick % 3 === 0) { syncNav(); syncDice(); syncSpeedButton(); syncWave(); syncTimes(); enforceRate(); }
+        syncAutoFloat();
+        syncViz();
+        if (tick % 3 === 0) { syncNav(); syncDice(); syncSpeedButton(); syncWave(); syncTimes(); enforceRate(); syncGuide(); syncLogo(); syncDiscordDot(); }
         kickWave();
       }
     } catch (e) {}
@@ -2662,13 +3243,19 @@
         pinned: lyrWin.pinned, source: lyr.source, words: lyr.lines.some((ln) => ln.w && ln.w.length), estimated: lyr.est },
       speed: { rate: getRate(), base: baseRate, times: (timeEls || []).map((el) => el.tagName.toLowerCase() + "." + String(el.className).split(" ")[0]) },
       sound: { kind: snd.kind, state: snd.ctx ? snd.ctx.state : "none", err: snd.err, clear: clearActive(), room: soundOpts.room },
+      discordButton: !!(dcNavBtn && dcNavBtn.isConnected), logo: document.querySelectorAll("ytmusic-logo[data-pf-logo]").length,
+      sidebar: [...document.querySelectorAll(".pf-guide")].map((g) => (g.classList.contains("pf-guide-mini") ? "mini" : "full") + ":" + (g.parentElement ? g.parentElement.tagName.toLowerCase() + (g.parentElement.id ? "#" + g.parentElement.id : "") : "")),
+      tabs: [...document.querySelectorAll("ytmusic-player-page tp-yt-paper-tab")].map((t) => (t.textContent || "").trim().slice(0, 20)),
+      autoFloat: !!floatSet, follow: { auto: lyr.auto, pipAuto: lyr.pipAuto },
+      viz: { mode: vizMode, shown: !!(viz.el && viz.el.isConnected), hears: !!(snd.analyser && snd.el === video()) },
       sliders: [...overlays.keys()].map((el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "")),
       color: lastColor ? { h: Math.round(lastColor.h), vivid: Math.round(lastColor.s * 100) / 100 } : null, colorNote,
       speedRules: { songs: Object.keys(speeds.s).length, playlists: Object.keys(speeds.p).length },
     }),
   }) });
   if (window.__pfTest) window.__pfRefineTest = { dominant, palette, rank, spread, pickSeeds, songKey, cleanTitle, artistKey, findSliders, scaleTimes, estimateWords,
-    splitWords, lyricsTab, syncLyricsTab, openLyricsWindow, closeLyricsWindow, renderLyrics, lyr, lyrWin, lyrSongs, report: () => window[Symbol.for("pocketfader.refine")].report() };
+    splitWords, lyricsTab, syncLyricsTab, openLyricsWindow, closeLyricsWindow, renderLyrics, lyr, lyrWin, lyrSongs, openAll, closeAll, toggleSheet,
+    syncGuide, syncLogo, watchPlayerPage, setViz, edgePoint, vizFrame, report: () => window[Symbol.for("pocketfader.refine")].report() };
 
   if (partOn) restorePalette();
   applyAll();

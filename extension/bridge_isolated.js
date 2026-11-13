@@ -296,6 +296,15 @@
   // Back from the browser's back/forward cache after that goodbye: the page sends everything again.
   addEventListener("pageshow", (ev) => { if (ev.persisted) window.postMessage({ __vmr: "resend" }, "*"); });
 
+  // "focus": this YouTube Music tab comes to the front (the extension's background script does that); "settings": and
+  // Refine's All settings open in it.
+  async function bringForward(command) {
+    let ok = false;
+    try { const r = await chrome.runtime.sendMessage({ starcast: "focusTab" }); ok = !!(r && r.ok); } catch (e) {}
+    if (command.type === "settings") window.postMessage({ __vmr: "refine-open", what: "settings" }, "*");
+    post("/ext/result", { id: command.id, data: { ok, refine: !cfg || cfg.refine !== false } });
+  }
+
   // server -> main world (long-poll loop, self-healing)
   async function loop() {
     for (;;) {
@@ -308,7 +317,8 @@
         if (reply && reply.resend === true) window.postMessage({ __vmr: "resend" }, "*");
         if (reply && reply.id) {
           const { cfg: _cfg, resend: _resend, ...command } = reply;
-          window.postMessage({ __vmr: "starcast-cmd", command }, "*");
+          if (command.type === "focus" || command.type === "settings") bringForward(command);
+          else window.postMessage({ __vmr: "starcast-cmd", command }, "*");
         }
       } catch (e) {
         // server not up yet / restarting — back off and retry

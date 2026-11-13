@@ -38,7 +38,7 @@ EQ_MIN, EQ_MAX = -12.0, 12.0
 EQ_BANDS = ("bass", "mid", "high")
 # The YT Music extension runs in a music.youtube.com page, so its requests carry that Origin.
 CORS_ORIGINS = {"https://music.youtube.com"}
-PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png", "/api/info"}
+PUBLIC_PATHS = {"/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png", "/api/info"}
 COOKIE = "pf_token"
 APP_NAME = "YTM Starcast"
 
@@ -130,6 +130,7 @@ class App:
             "ytm_bridge": self.bridge.connected,
             "lyrics": True,
             "beacon": True,      # older apps show the Discord page only when this is set
+            "ytm_focus": True,   # POST /api/ytm {"type": "focus"} and {"type": "settings"}
             "discord": True,
             "sleep": True,
             "audio": self.fetcher.available,
@@ -408,7 +409,7 @@ class App:
                 url = music_url(body["videoId"], body.get("playlistId") if valid_id(body.get("playlistId")) else None)
             elif t == "startPlaylist" and valid_id(body.get("playlistId")):
                 url = music_url(playlist_id=body["playlistId"])
-            elif t == "open":
+            elif t in ("open", "focus", "settings"):   # bring YouTube Music up: with no tab, a new one
                 url = music_url()
             else:
                 url = None
@@ -754,7 +755,8 @@ class Handler(BaseHTTPRequestHandler):
         # e.g. {"type":"play","videoId":".."}, {"type":"search","query":".."},
         # {"type":"transport","action":"next"}; see docs/API.md.
         if path == "/api/ytm":
-            if not app.parts()["remote"]:   # the YouTube Music remote is switched off: nothing reaches the tab
+            # the YouTube Music remote is switched off: nothing reaches the tab, except bringing it to the front
+            if not app.parts()["remote"] and body.get("type") not in ("focus", "settings"):
                 return self._json(409, {"error": "part_off"})
             if not isinstance(body.get("type"), str):
                 return self._json(400, {"error": "type must be a string"})
