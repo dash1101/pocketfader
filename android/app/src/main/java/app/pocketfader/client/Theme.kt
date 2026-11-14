@@ -6,6 +6,9 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -14,13 +17,17 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val Violet = Color(0xFF6B3FD6)
 
@@ -44,6 +51,8 @@ object Motion {
     const val Medium = 300   // something moving or opening
     const val Long = 450     // a whole screen or the cover
     val Ease: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    /** Material's "emphasized decelerate": things arriving glide in fast and settle gently (Refine's rows use it). */
+    val Emphasized: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 }
 
 private val AppShapes = Shapes(extraSmall = PfShape.Md, small = PfShape.Xs, medium = PfShape.Md, large = PfShape.Lg, extraLarge = PfShape.Xl)
@@ -80,11 +89,36 @@ private val Light = lightColorScheme(
 val LocalReduceMotion = compositionLocalOf { false }
 
 /**
- * Colours follow the settings: system / light / dark / true black (the black theme leaves OLED pixels
- * switched off), with Material You colours on Android 12+ when enabled.
+ * The colours of the cover that plays, as the whole app's theme (Album colours): the hue glides to the new cover's
+ * the short way round the colour wheel, and is remembered for the next start.
  */
 @Composable
-fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
+private fun albumScheme(art: ArtInfo, mode: AlbumMode, calm: Boolean): ColorScheme {
+    val ctx = LocalContext.current
+    val start = remember { AlbumMemory.load(ctx) }
+    val target = art.hue ?: start
+    LaunchedEffect(art.hue) { art.hue?.let { AlbumMemory.save(ctx, it) } }
+    val hue = remember { Animatable(start.hue) }
+    val vivid = remember { Animatable(start.vivid) }
+    LaunchedEffect(target) {
+        val spec = tween<Float>(if (calm) 0 else 600, easing = Motion.Ease)
+        launch { vivid.animateTo(target.vivid, spec) }
+        hue.animateTo(hueStep(hue.value, target.hue), spec)
+        hue.snapTo(((hue.value % 360f) + 360f) % 360f)
+    }
+    // whole degrees and steps of 0.02: the colours are worked out again only when they would really look different
+    val h = hue.value.roundToInt()
+    val v = (vivid.value * 50f).roundToInt()
+    return remember(h, v, mode) { albumTones(h.toFloat(), v / 50f, mode).toScheme(mode == AlbumMode.Light) }
+}
+
+/**
+ * Colours follow the settings: system / light / dark / true black (the black theme leaves OLED pixels switched off).
+ * With Album colours on (the default) they come from the cover that plays, as Refine does in YouTube Music; otherwise
+ * Material You colours on Android 12+ when enabled. A chosen accent colour wins over both.
+ */
+@Composable
+fun PocketfaderTheme(prefs: Prefs, art: ArtInfo = ArtInfo(), content: @Composable () -> Unit) {
     val systemDark = isSystemInDarkTheme()
     val dark = when (prefs.theme) {
         "dark", "black" -> true
@@ -92,13 +126,16 @@ fun PocketfaderTheme(prefs: Prefs, content: @Composable () -> Unit) {
         else -> systemDark
     }
     val ctx = LocalContext.current
+    val album = prefs.albumColors && prefs.accent == 0
+    val albumMode = when { !dark -> AlbumMode.Light; prefs.theme == "black" -> AlbumMode.Black; else -> AlbumMode.Dark }
     var scheme = when {
+        album -> albumScheme(art, albumMode, prefs.reduceMotion)
         prefs.dynamicColor && prefs.accent == 0 && Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         dark -> Dark
         else -> Light
     }
-    if (prefs.theme == "black") {
+    if (prefs.theme == "black" && !album) {
         scheme = scheme.copy(
             background = Color.Black, surface = Color.Black,
             surfaceContainer = Color(0xFF0B0B0D), surfaceContainerHigh = Color(0xFF141417),

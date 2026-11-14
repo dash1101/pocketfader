@@ -92,9 +92,13 @@ class MainActivity : ComponentActivity() {
             val playing = s.now?.playing == true
             LaunchedEffect(prefs.keepAwake, prefs.dimAfterMin, prefs.immersive, playing) { applyWindow(prefs, playing) }
             LaunchedEffect(prefs.notification, cfg.isSet, prefs.playOn) { syncPlayback() }
-            PocketfaderTheme(prefs) {
-                PixelShift(prefs.pixelShift, prefs.pixelShiftMin, prefs.pixelShiftDp) {
-                    App(cfg = cfg, s = s, prefs = prefs, onSave = { c -> applyConfig(c) }, onForget = { applyConfig(ServerConfig()) })
+            // the cover is read once here: its colour is the whole app's theme (Album colours) and the player's light
+            val art by rememberArt(s.now?.art)
+            PocketfaderTheme(prefs, art) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalArtInfo provides art) {
+                    PixelShift(prefs.pixelShift, prefs.pixelShiftMin, prefs.pixelShiftDp) {
+                        App(cfg = cfg, s = s, prefs = prefs, onSave = { c -> applyConfig(c) }, onForget = { applyConfig(ServerConfig()) })
+                    }
                 }
             }
         }
@@ -324,7 +328,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         if (e != null && s.online) snackbar.showSnackbar(e)
     }
 
-    val art by rememberArt(s.now?.art)
+    val art = LocalArtInfo.current
     val tint = art.tint
     val showArt = !showSettings && (wide || dest == Dest.Playing)
     val wash = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")

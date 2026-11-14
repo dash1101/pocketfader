@@ -29,9 +29,15 @@ import kotlinx.coroutines.withContext
 /** Highlight colour taken from the cover (only when the setting asks for it); null means use the theme accent. */
 val LocalAccent = compositionLocalOf<Color?> { null }
 
-/** The cover's main colour and a small (64 px), already blurred copy of the picture, used for the ambient glow around it. */
+/**
+ * The cover's main colour, a small (64 px), already blurred copy of the picture (for the ambient glow around it), and
+ * its hue as Refine reads it (for Album colours; null for a grey cover or before it has loaded).
+ */
 @Immutable
-data class ArtInfo(val tint: Color? = null, val thumb: ImageBitmap? = null)
+data class ArtInfo(val tint: Color? = null, val thumb: ImageBitmap? = null, val hue: AlbumHue? = null, val url: String? = null)
+
+/** The current cover's [ArtInfo], read once for the whole app (the theme's Album colours and the player's light). */
+val LocalArtInfo = compositionLocalOf { ArtInfo() }
 
 /** The tiny copy of the current cover (null until it's loaded). */
 val LocalArtThumb = compositionLocalOf<ImageBitmap?> { null }
@@ -52,7 +58,14 @@ fun rememberArt(url: String?): State<ArtInfo> {
             val tint = (p.vibrantSwatch ?: p.mutedSwatch ?: p.dominantSwatch)?.rgb?.let { Color(it) }
             // scaled up smoothly later, this little picture becomes a soft blur of the cover's own edges
             val thumb = try { softCopy(bmp).asImageBitmap() } catch (e: Exception) { null }
-            ArtInfo(tint, thumb)
+            // a 32 px copy is plenty to find the cover's colour (as Refine does in YouTube Music)
+            val hue = try {
+                val small = Bitmap.createScaledBitmap(bmp, 32, 32, true)
+                val px = IntArray(32 * 32)
+                small.getPixels(px, 0, 32, 0, 0, 32, 32)
+                dominantHue(px) ?: AlbumHue(DefaultAlbumHue.hue, 0f)
+            } catch (e: Exception) { null }
+            ArtInfo(tint, thumb, hue, url)
         }
     }
     return art

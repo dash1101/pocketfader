@@ -46,7 +46,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -179,7 +184,7 @@ private fun glowMask(reach: Float, corners: FloatArray, cut: Boolean): ImageBitm
 @Composable
 fun AmbientGlow(
     thumb: ImageBitmap, level: String, shape: String, coverDp: Float, scale: Float, pulse: State<Float>,
-    modifier: Modifier = Modifier, fade: () -> Float = { 1f },
+    modifier: Modifier = Modifier, fade: () -> Float = { 1f }, turn: (() -> Float)? = null,
 ) {
     val (reach, strength, sat) = ambientSpec(level) ?: return
     val filter = remember(sat) { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(sat) }) }
@@ -195,10 +200,22 @@ fun AmbientGlow(
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             .drawBehind {
-                drawImage(
-                    thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                    colorFilter = filter, filterQuality = FilterQuality.High,
-                )
+                val deg = turn?.invoke() ?: 0f
+                if (turn == null) {
+                    drawImage(
+                        thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                        colorFilter = filter, filterQuality = FilterQuality.High,
+                    )
+                } else {
+                    // Halo: the blurred cover turns slowly; drawn a little larger so its corners never show inside the light
+                    val pivot = center
+                    withTransform({ this.rotate(deg, pivot); this.scale(1.42f, 1.42f, pivot) }) {
+                        drawImage(
+                            thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                            colorFilter = filter, filterQuality = FilterQuality.High,
+                        )
+                    }
+                }
                 // keep only what the mask lets through: everything under the cover, less and less further out
                 drawImage(
                     mask, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
@@ -206,6 +223,46 @@ fun AmbientGlow(
                 )
             },
     )
+}
+
+/** A turning angle in degrees (one turn every [periodMs]) while [on]; null when still, which draws things unturned. */
+@Composable
+fun rememberTurn(on: Boolean, periodMs: Int): State<Float>? {
+    if (!on) return null
+    val t = rememberInfiniteTransition(label = "turn")
+    return t.animateFloat(0f, 360f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = "turn")
+}
+
+/**
+ * Orbit (one of Refine's cover visualizers): a ring of the album's colours running round the cover's own outline, with a
+ * soft light outside it. The light is a few wider, fainter strokes rather than a blur, so it works on every Android
+ * version and costs a handful of draw calls a frame.
+ */
+@Composable
+fun OrbitRing(shape: String, tint: Color, turn: State<Float>?, modifier: Modifier = Modifier, fade: () -> Float = { 1f }) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = scheme.primary
+    val light = scheme.onPrimaryContainer
+    val outlineShape = remember(shape) { coverShape(shape) }
+    Canvas(modifier) {
+        val deg = turn?.value ?: 0f
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val clear = android.graphics.Color.TRANSPARENT
+        val colors = intArrayOf(clear, clear, accent.toArgb(), tint.toArgb(), clear, clear, light.toArgb(), accent.toArgb(), clear, clear)
+        val stops = floatArrayOf(0f, 0.08f, 0.18f, 0.26f, 0.38f, 0.58f, 0.68f, 0.76f, 0.88f, 1f)
+        val brush = object : ShaderBrush() {
+            override fun createShader(size: Size): Shader = android.graphics.SweepGradient(cx, cy, colors, stops).apply {
+                setLocalMatrix(android.graphics.Matrix().apply { setRotate(deg, cx, cy) })
+            }
+        }
+        val outline = outlineShape.createOutline(size, layoutDirection, this)
+        val a = fade()
+        // the light first (wide and faint), then the ring itself
+        for ((w, k) in listOf(30.dp.toPx() to 0.08f, 20.dp.toPx() to 0.16f, 12.dp.toPx() to 0.32f, 6.dp.toPx() to 0.9f)) {
+            drawOutline(outline, brush, alpha = (k * a).coerceIn(0f, 1f), style = Stroke(width = w))
+        }
+    }
 }
 
 /** A slow breathing value (about 0.85 to 1) while [on], 1 otherwise. */

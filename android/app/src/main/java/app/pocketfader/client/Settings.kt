@@ -41,6 +41,7 @@ data class Prefs(
     val theme: String = "system",            // system | light | dark | black
     val dynamicColor: Boolean = true,        // Material You colours on Android 12+
     val accent: Int = 0,                     // chosen accent colour (ARGB); 0 = automatic
+    val albumColors: Boolean = true,         // the whole app in the colours of the cover that plays (as Refine in YouTube Music)
     val coverWash: Boolean = true,           // tint the background with the cover's colour
     val coverHighlight: Boolean = false,     // lyric highlight takes the cover's colour instead of the accent
     val queueArt: Boolean = true,            // little cover pictures in the queue (off helps very old tablets)
@@ -48,6 +49,7 @@ data class Prefs(
     val standalone: Boolean = false,         // used without a computer (set up from the first screen)
     val navStyle: String = "bar",            // bar | pill: how the bottom navigation looks
     val coverGlow: String = "strong",        // off | soft | strong | extreme: halo around the cover
+    val coverViz: String = "glow",           // glow | halo | orbit: how the light around the cover moves (Refine's visualizers)
     val glowUi: Boolean = false,             // glow around text, icons and buttons
     val wavyBar: Boolean = true,             // the seek bar ripples while music plays
     val coverShape: String = "rounded",      // rounded | soft | circle | cut
@@ -75,6 +77,8 @@ data class Prefs(
     val haptics: Boolean = true,
     val keepPlayingClosed: Boolean = false,  // music on this device carries on after the app is swiped away
     val pauseOnUnplug: Boolean = true,       // music on this device pauses when headphones / a speaker disconnect
+    val phoneSpeed: Int = 100,               // music on this phone: speed in percent (25 to 300)
+    val keepPitch: Boolean = true,           // a changed speed keeps the pitch; off: slower is lower, as on a record
     // Discord
     val discordFromPhone: Boolean = true,    // music playing on this phone shows as the Discord status, through the computer
     // lyrics
@@ -129,7 +133,8 @@ object Settings {
         fun i(k: String, v: Int) = sp.getInt(k, v)
         return Prefs(
             theme = s("theme", d.theme), dynamicColor = b("dynamicColor", d.dynamicColor),
-            accent = i("accent", d.accent), coverWash = b("coverWash", d.coverWash),
+            accent = i("accent", d.accent), coverWash = b("coverWash", d.coverWash), albumColors = b("albumColors", d.albumColors),
+            coverViz = s("coverViz", d.coverViz), phoneSpeed = i("phoneSpeed", d.phoneSpeed).coerceIn(25, 300), keepPitch = b("keepPitch", d.keepPitch),
             coverHighlight = b("coverHighlight", d.coverHighlight), navStyle = s("navStyle", d.navStyle), queueArt = b("queueArt", d.queueArt),
             playOn = s("playOn", d.playOn), standalone = b("standalone", d.standalone),
             coverGlow = s("coverGlow", d.coverGlow), glowUi = b("glowUi", d.glowUi), wavyBar = b("wavyBar", d.wavyBar),
@@ -159,7 +164,8 @@ object Settings {
     private fun write(p: Prefs) {
         sp.edit()
             .putString("theme", p.theme).putBoolean("dynamicColor", p.dynamicColor)
-            .putInt("accent", p.accent).putBoolean("coverWash", p.coverWash)
+            .putInt("accent", p.accent).putBoolean("coverWash", p.coverWash).putBoolean("albumColors", p.albumColors)
+            .putString("coverViz", p.coverViz).putInt("phoneSpeed", p.phoneSpeed).putBoolean("keepPitch", p.keepPitch)
             .putBoolean("coverHighlight", p.coverHighlight).putString("navStyle", p.navStyle).putBoolean("queueArt", p.queueArt)
             .putString("playOn", p.playOn).putBoolean("standalone", p.standalone)
             .putString("coverGlow", p.coverGlow).putBoolean("glowUi", p.glowUi).putBoolean("wavyBar", p.wavyBar)
