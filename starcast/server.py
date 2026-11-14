@@ -154,7 +154,8 @@ class App:
         if callable(getattr(self.beacon, "start", None)):
             self.beacon.start()         # Discord status (it waits while the old YTM Beacon app still runs)
         # refresh the extension's folder after an update, so the browser gets the new version on its next reload
-        threading.Thread(target=self.extension.refresh_copy, name="extension-copy", daemon=True).start()
+        self._copying = threading.Thread(target=self.extension.refresh_copy, name="extension-copy", daemon=True)
+        self._copying.start()
 
     def stop(self):
         self._stop_watch.set()
@@ -165,6 +166,10 @@ class App:
                 pass
         for b in (self.audio, self.engine):
             b.stop()
+        # let a copy of the extension that is under way finish, rather than leave half a folder behind
+        copying = getattr(self, "_copying", None)
+        if copying is not None:
+            copying.join(timeout=10)
 
     # ---- the addresses a phone can open (GET /api/connect) ----
     TS_NAME_TTL = 60                    # seconds a looked-up Tailscale name is kept (each look-up runs a program)
