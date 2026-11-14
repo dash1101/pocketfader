@@ -26,7 +26,8 @@ import kotlin.math.ln
  * suggest. A song several of your seeds lead to ranks higher, so do songs by artists you listen to; songs you just heard
  * or keep skipping drop down. Autoplay on the phone uses the same radios, filtered the same way.
  *
- * Nothing leaves the phone except the radio and search requests to YouTube, the same ones playing a song already makes.
+ * The listening history itself is kept only on the phone, but the songs picked from it as seeds are sent to YouTube Music
+ * to ask for their radios (similar music).
  */
 object Recommend {
     private lateinit var cacheFile: File

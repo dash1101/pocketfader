@@ -28,6 +28,8 @@ from .beacon import BadRequest, BeaconError, DiscordStatus
 from .bridge import Bridge
 from .browser_ext import BrowserExtension
 from .discord import agent_from_user_agent
+from .discord.presence import PHONE_DEVICE
+from .discord.tracker import is_phone, truncate
 from .lyrics import LyricsService
 from .proc import no_window
 from . import qr
@@ -61,6 +63,11 @@ APP_NAME = "YTM Starcast"
 PARTS = ("remote", "discord", "refine", "audio")
 EXT_PARTS = ("remote", "discord", "refine")       # what the browser extension is told about and may change
 
+# POST /api/phone/playing: the Android app playing music on the phone itself reports its song, so the Discord app on this
+# computer can show it. The phone names itself with an id of its own (PHONE_DEVICE), and sends its song again this often
+# (seconds) while it plays or is paused; Discord status drops a phone not heard from for 90 seconds.
+PHONE_EVERY = 30
+
 
 def validate_parts(body, allowed=PARTS):
     """{"remote": false, ...} -> the same dict, or ValueError. Any subset of the allowed switches, booleans only."""
@@ -74,6 +81,35 @@ def validate_parts(body, allowed=PARTS):
         if not isinstance(v, bool):
             raise ValueError(f"{k} must be true or false")
     return dict(body)
+
+
+def validate_phone_report(body):
+    """POST /api/phone/playing's body -> (device, now, ts), or ValueError. now must be there: a dict with a title, or
+    None (the music stopped); ts (when the phone read the position, in milliseconds) is None unless it is a number."""
+    device = body.get("device")
+    if not isinstance(device, str) or not PHONE_DEVICE.fullmatch(device):
+        raise ValueError("device must be the phone's id: 6 to 32 letters, digits, - or _")
+    if "now" not in body:
+        raise ValueError("now is required: the song, or null when the music stops")
+    now = body["now"]
+    if now is not None:
+        if not isinstance(now, dict):
+            raise ValueError("now must be an object, or null when the music stops")
+        title = now.get("title")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("now.title is required")
+        if "playing" in now and not isinstance(now["playing"], bool):
+            raise ValueError("now.playing must be true or false")
+    ts = body.get("ts")
+    if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+        ts = None
+    return device, now, ts
+
+
+def _phone_name(instance):
+    """Whether a tab id the extension sent is a phone's name ("phone:..."), read the way Discord status reads it. Those
+    names belong to POST /api/phone/playing: /ext/state and /ext/bye refuse them, so a tab can't stand in for a phone."""
+    return isinstance(instance, str) and is_phone(truncate(instance, 64))
 
 
 class App:
@@ -206,6 +242,7 @@ class App:
             "beacon": True,      # older apps show the Discord page only when this is set
             "ytm_focus": True,   # POST /api/ytm {"type": "focus"} and {"type": "settings"}
             "discord": True,
+            "phone_discord": True,   # POST /api/phone/playing: music playing on the phone itself can be shown on Discord
             "sleep": True,
             "audio": self.fetcher.available,
         }
@@ -329,6 +366,11 @@ class App:
     #   touch(instance)      every GET /ext/poll: the tab is still open. A paused tab pushes nothing, and a song not
     #                        heard of for 90 seconds would otherwise be dropped from Discord.
     #   bye(instance)        POST /ext/bye: that tab is closing or navigating away; drop its card at once.
+    #   feed_phone(device, now, ts=)  POST /api/phone/playing: a phone that plays music itself reports its song (now
+    #                        uses the extension's fields), or None when its music stopped. Phones are sources of their
+    #                        own ("phone:<device>"), never counted as the extension.
+    #   phone_bye(device)    that phone's song goes at once.
+    #   phone_showing(device)  (shown, why): whether that phone's song is the one on Discord, and what keeps it off.
     #   enabled              bool, read on every extension reply (kept in memory): parts()["discord"].
     #   set_enabled(on)      POST /api/parts or /ext/parts {"discord": ...}: the same switch, saved by the engine.
     # A failing engine must never break the extension's reports, so every call is fenced.
@@ -352,6 +394,22 @@ class App:
                 self.presence.bye(instance)
             except Exception:
                 pass
+
+    def presence_phone(self, device, now, ts=None):
+        """A phone's report (already validated): records its song, or with now None clears it. Returns (shown, why)
+        for the phone's reply: whether its song is the one on Discord, and what keeps it off ("" when nothing does,
+        or when another song was chosen instead)."""
+        if not self.presence:
+            return False, ""
+        try:
+            if now is None:
+                self.presence.phone_bye(device)
+                return False, ""
+            self.presence.feed_phone(device, dict(now), ts=ts)
+            shown, why = self.presence.phone_showing(device)
+            return bool(shown), str(why or "")
+        except Exception:
+            return False, ""
 
     def ytm_state(self):
         """YT Music extension state when it's connected; otherwise whatever the host's
@@ -410,8 +468,10 @@ class App:
         return int(left) + 1 if dur and left > 0 else None
 
     def save_diag(self, diag):
-        """The extension's one-off description of how the YouTube Music page is built (element names, never your data),
-        kept next to the config so a missing control can be diagnosed. Overwritten at each page load."""
+        """The extension's one-off description of how the YouTube Music page is built, kept next to the config on this
+        computer (an owner-only file) so a missing control can be diagnosed. Overwritten at each page load. Mostly
+        element names and labels, but it also holds the page's address (which names the song or playlist open) and
+        the title of the song playing."""
         try:
             f = config_dir() / "ytm-layout.json"
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -789,6 +849,8 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- extension -> server ----
         if path == "/ext/state":
+            if _phone_name(body.get("instance")):
+                return self._json(400, {"error": "instance must be the tab's id"})
             diag = body.pop("diag", None)
             if isinstance(diag, dict):
                 app.save_diag(diag)
@@ -805,12 +867,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         if path == "/ext/bye":   # the tab is closing or navigating away (sent on pagehide)
             inst = body.get("instance")
-            if not isinstance(inst, str) or not inst:
+            if not isinstance(inst, str) or not inst or _phone_name(inst):
                 return self._json(400, {"error": "instance must be the tab's id"})
             inst = inst[:64]
             app.bridge.bye(inst)
             app.presence_bye(inst)
             return self._json(200, {"ok": True})
+
+        # ---- a phone playing music itself -> Discord status (the Discord app on this computer shows it) ----
+        if path == "/api/phone/playing":
+            try:
+                device, now, ts = validate_phone_report(body)
+            except ValueError as e:
+                return self._json(400, {"error": str(e)})
+            if not app.parts()["discord"]:
+                # Discord status is switched off: nothing about the song is kept (whatever was, goes)
+                app.presence_phone(device, None)
+                return self._json(200, {"ok": True, "shown": False, "why": "off", "every": PHONE_EVERY})
+            shown, why = app.presence_phone(device, now, ts)
+            return self._json(200, {"ok": True, "shown": shown, "why": why, "every": PHONE_EVERY})
+
         if path == "/api/extension/open":
             # The setup guide's buttons: open the extension's folder, or a browser's extensions page, on the computer.
             # Only those two things, each from a fixed list; nothing from the request is passed to a command.

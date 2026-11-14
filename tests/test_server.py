@@ -14,7 +14,7 @@ from starcast.server import EXTENSION_ORIGIN, App, Handler
 from starcast.updater import Updater
 
 from .fakes import FakeAudio, FakeEngine, FakeMedia, FakeToggleEQ
-from .test_beacon import BeaconGuard, make_discord
+from .test_beacon import BeaconGuard, bind_away_from_beacon, make_discord
 from .test_discord_fakes import DialGuard
 from starcast.backends.base import NullEngine
 import tempfile
@@ -53,7 +53,9 @@ class Base(unittest.TestCase):
                        beacon=make_discord(Path(self.tmp.name) / "ytm-starcast", dry_run=True),
                        opener=Opener(dry_run=True), updater=Updater(cache=Path(self.tmp.name) / "updates"),
                        audio_fetcher=AudioFetcher(folder=Path(self.tmp.name) / 'audio', ytdlp=''))
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        # (the guard refuses YTM Beacon's ports, and the system may hand one out: this server must not get one)
+        self.httpd = bind_away_from_beacon(lambda: ThreadingHTTPServer(("127.0.0.1", 0), Handler),
+                                           lambda h: h.server_address[1], lambda h: h.server_close())
         self.httpd.app = self.app
         threading.Thread(target=lambda: self.httpd.serve_forever(poll_interval=0.02), daemon=True).start()
         self.port = self.httpd.server_address[1]
@@ -87,6 +89,7 @@ class ApiTests(Base):
         self.assertFalse(st["capabilities"]["eq"])
         self.assertFalse(st["capabilities"]["meter"])
         self.assertEqual(st["capabilities"]["engine_actions"], [])
+        self.assertIs(st["capabilities"]["phone_discord"], True)     # POST /api/phone/playing
 
     def test_volume_validation_and_effect(self):
         self.assertEqual(self.req("POST", "/api/volume", {"percent": 30})[0], 200)

@@ -2,6 +2,7 @@
 import logging
 import os
 import platform
+import re
 import sys
 import threading
 import time
@@ -12,7 +13,8 @@ from . import settings as st
 from .build import DEFAULT_ASSETS, AssetURLs
 from .engine import MIN_BACKOFF, Engine
 from .settings import DEFAULT_CLIENT_ID, SettingsError
-from .tracker import STATE_PAUSED, STATE_PLAYING, TEST_SOURCE, SanitizeError, Tracker, Update, quiet_after, truncate
+from .tracker import (PHONE_PREFIX, STATE_PAUSED, STATE_PLAYING, TEST_SOURCE, SanitizeError, Tracker, Update, is_phone,
+                      quiet_after, truncate)
 
 log = logging.getLogger("starcast.discord")
 
@@ -22,6 +24,8 @@ MARKER_NAME = "discord-extension-seen"
 LEGACY_SOURCE = "extension"        # the tab of an old extension that does not name itself
 SAMPLE_SKEW = 5.0                  # trust the page's own sample time when it is this close to ours
 DRY_RUN_MESSAGE = "Dry-run mode: Discord is not contacted."
+PHONE_AGENT = "Android"
+PHONE_DEVICE = re.compile(r"[A-Za-z0-9_-]{6,32}")    # the id a phone gives itself (POST /api/phone/playing)
 
 
 def go_os(system=None):
@@ -66,6 +70,27 @@ def _speed(v):
     so a song slowed to 0.8x shows how long it really takes to listen to."""
     f = _number(v)
     return f if 0.25 <= f <= 4 else 1.0
+
+
+def song_update(source, agent, now):
+    """One report's now object (the extension's fields, which the phone uses too) -> an Update, not yet sanitized.
+    playing or buffering counts as playing, anything else as paused; a trailing " - Topic" (YouTube's automatic
+    artist channels) is taken off the artist; position and duration are divided by the speed, so the times
+    Discord shows run at the pace the song is really heard."""
+    playing = now.get("playing") is True or now.get("buffering") is True
+    artist = _text(now.get("artist"))
+    if artist.endswith(" - Topic"):
+        artist = artist[:-len(" - Topic")]
+    speed = _speed(now.get("speed"))
+    return Update(source=source, agent=_text(agent), state=STATE_PLAYING if playing else STATE_PAUSED,
+                  title=_text(now.get("title")), artist=artist, album=_text(now.get("album")),
+                  artwork=_text(now.get("art")), video_id=_text(now.get("videoId")),
+                  position=_number(now.get("position")) / speed, duration=_number(now.get("duration")) / speed)
+
+
+def phone_source(device):
+    """The tracker's source for a phone, or "" when device is not a valid phone id."""
+    return PHONE_PREFIX + device if isinstance(device, str) and PHONE_DEVICE.fullmatch(device) else ""
 
 
 class Presence:
@@ -156,47 +181,43 @@ class Presence:
         t = self._thread
         return t is not None and t.is_alive()
 
+    def _sample_time(self, ts):
+        """A report's own sample time (milliseconds) as clock seconds, when it is within SAMPLE_SKEW of this
+        computer's clock; else None (the report's arrival counts as when it was measured)."""
+        if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+            t = ts / 1000.0
+            if abs(t - self.clock()) <= SAMPLE_SKEW:
+                return t
+        return None
+
     # ---- what the browser reports ----
     def update_from_bridge(self, instance, now, agent=None, ts=None):
         """Feeds one report from the extension bridge (POST /ext/state: body["instance"], body["now"]). Call it
         for every tab's push, not only the tab the remote follows: choosing between tabs is done here.
 
         now uses the bridge's fields: playing / paused / buffering (bools), title, artist, album, art, videoId,
-        position, duration (seconds), speed (the playback rate) and ad (bool). Position and duration are divided by the
-        speed, so the times Discord shows run at the pace the song is really heard. playing or buffering counts as playing, anything else as
-        paused. An advert (ad true), or nothing loaded (no title), clears that tab; now=None (a push without a
+        position, duration (seconds), speed (the playback rate) and ad (bool); see song_update() for how they are
+        read. An advert (ad true), or nothing loaded (no title), clears that tab; now=None (a push without a
         "now") changes nothing. ts is the page's sample time in milliseconds (body["ts"]); it is used when it is
         within 5 s of this computer's clock. Returns True when a song was recorded, False when the tab was
-        cleared or the report ignored."""
+        cleared or the report ignored. Instances named "test" or "phone:..." are refused: those names belong to
+        the self-test and to phones, which a browser tab must not be able to replace or clear."""
         source = instance if isinstance(instance, str) and st.trim(instance) else LEGACY_SOURCE
         source = truncate(source, 64)
-        if source == TEST_SOURCE:
-            return False                                # reserved for the self-test
+        if source == TEST_SOURCE or is_phone(source):
+            return False                                # reserved for the self-test and for phones
         if now is None:
             return False                                # this push says nothing about the song
         if not isinstance(now, dict) or now.get("ad") is True:
             self.clear(source)
             return False
-        playing = now.get("playing") is True or now.get("buffering") is True
-        artist = _text(now.get("artist"))
-        if artist.endswith(" - Topic"):
-            artist = artist[:-len(" - Topic")]
-        u = Update(source=source, agent=_text(agent), state=STATE_PLAYING if playing else STATE_PAUSED,
-                   title=_text(now.get("title")), artist=artist, album=_text(now.get("album")),
-                   artwork=_text(now.get("art")), video_id=_text(now.get("videoId")),
-                   position=_number(now.get("position")) / _speed(now.get("speed")),
-                   duration=_number(now.get("duration")) / _speed(now.get("speed")))
+        u = song_update(source, agent, now)
         try:
             u.sanitize()
         except SanitizeError:
             self.clear(source)                          # nothing loaded
             return False
-        received_at = None
-        if isinstance(ts, (int, float)) and not isinstance(ts, bool):
-            t = ts / 1000.0
-            if abs(t - self.clock()) <= SAMPLE_SKEW:
-                received_at = t
-        if self.tracker.put(u, received_at=received_at):
+        if self.tracker.put(u, received_at=self._sample_time(ts)):
             log.info("browser extension connected (browser=%s)", u.agent)   # no song details
             self._mark_connected()
         self.engine.wake()
@@ -209,17 +230,68 @@ class Presence:
     def touch(self, instance):
         """The tab is still there and nothing changed (call it on every /ext/poll): the extension counts as seen,
         and the tab's song is kept from expiring. Paused tabs push no state, so without this a paused song would
-        vanish after 90 seconds. Returns True when the tab has a song."""
+        vanish after 90 seconds. Returns True when the tab has a song. (A "phone:..." name is refused.)"""
         source = instance if isinstance(instance, str) and st.trim(instance) else LEGACY_SOURCE
-        return self.tracker.touch(truncate(source, 64))
+        source = truncate(source, 64)
+        if is_phone(source):
+            return False
+        return self.tracker.touch(source)
 
     def clear(self, source):
-        """Forgets one tab (the tab closed: POST /ext/bye). The card is cleared if it was the one shown."""
+        """Forgets one tab (the tab closed: POST /ext/bye). The card is cleared if it was the one shown.
+        (A "phone:..." name is refused: a phone says goodbye itself, through phone_bye().)"""
         s = source if isinstance(source, str) and st.trim(source) else LEGACY_SOURCE
-        self.tracker.clear(truncate(s, 64))
+        s = truncate(s, 64)
+        if is_phone(s):
+            return
+        self.tracker.clear(s)
         self.engine.wake()
 
     bye = clear
+
+    # ---- what a phone reports (the Android app playing music itself: POST /api/phone/playing) ----
+    def update_from_phone(self, device, now, ts=None):
+        """Feeds one report from a phone that plays music itself, so the Discord app on this computer can show it.
+        device is the phone's own id (6 to 32 letters, digits, "-" or "_"); now has the extension's fields (playing,
+        title, artist, album, art, videoId, position, duration, speed; see song_update()), or is None when the music
+        stopped, which clears this phone's song at once. ts is when the phone read the position (milliseconds),
+        used when within 5 s of this computer's clock. The phone sends its song again every 30 s while it plays or
+        is paused, and a phone not heard from for 90 s is dropped, like a browser tab.
+
+        A phone is never counted as the browser extension. Returns True when a song was recorded; False when the
+        song was cleared (now None, or no title) or the report was ignored (a device id that is not valid)."""
+        source = phone_source(device)
+        if not source:
+            return False
+        if not isinstance(now, dict):
+            self.phone_bye(device)
+            return False
+        u = song_update(source, PHONE_AGENT, now)
+        try:
+            u.sanitize()
+        except SanitizeError:
+            self.phone_bye(device)                      # nothing loaded
+            return False
+        if self.tracker.put(u, received_at=self._sample_time(ts)):
+            log.info("a phone reported its music")      # no song details, no device id
+        self.engine.wake()
+        return True
+
+    def phone_bye(self, device):
+        """Forgets one phone's song (its music stopped). The card is cleared if it was the one shown."""
+        source = phone_source(device)
+        if source:
+            self.tracker.clear(source)
+            self.engine.wake()
+
+    def phone_showing(self, device):
+        """(shown, why) for one phone: shown is True when its song is the one Discord is given (the one chosen, and
+        nothing keeps it off); why is what keeps it off (the engine's hidden reasons: "off", "snoozed", "paused",
+        "paused-timeout", "filtered"), or "" when it is shown or another song was chosen instead."""
+        source = phone_source(device)
+        if not source:
+            return False, ""
+        return self.engine.showing(source)
 
     def _mark_connected(self):
         self._ever = True
@@ -266,6 +338,7 @@ class Presence:
         snap = self.engine.snapshot()
         now = self.clock()
         last = self.tracker.last_extension_seen()
+        phone = self.tracker.last_phone_seen()
         return {
             "app": "ytm-starcast",
             "version": __version__,
@@ -294,6 +367,8 @@ class Presence:
             "extensionBuild": "",
             "extensionDirs": {},
             "dryRun": self.dry_run,
+            # a phone that plays music itself (POST /api/phone/playing): when one last reported, or None
+            "phone": {"lastSeenAgoSec": int(now - phone)} if phone is not None else None,
         }
 
     def preview(self):

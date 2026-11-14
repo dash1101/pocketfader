@@ -286,10 +286,17 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
                 Text(text, style = MaterialTheme.typography.bodyMedium)
                 st.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 st.song?.let {
-                    Text(
-                        "${if (it.playing) "▶" else "⏸"}  ${it.title}${if (it.artist.isNotBlank()) " · ${it.artist}" else ""}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "${if (it.playing) "▶" else "⏸"}  ${it.title}${if (it.artist.isNotBlank()) " · ${it.artist}" else ""}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        )
+                        // a song from a phone: this one when it plays the same song now, else another phone on the same computer
+                        if (it.from == "phone") Text(
+                            if (Remote.local && Remote.state.value.now?.title == it.title) "from this phone" else "from a phone",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 MoveOver(st, online)

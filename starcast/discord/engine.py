@@ -11,7 +11,7 @@ import time
 from . import ipc
 from .build import (DEFAULT_ASSETS, HIDDEN_OFF, HIDDEN_SNOOZED, activity_key, build_activity, hidden_reason)
 from .settings import DEFAULT_CLIENT_ID, effective_client_id
-from .tracker import STATE_PLAYING, TEST_SOURCE, Update
+from .tracker import STATE_PLAYING, TEST_SOURCE, Update, is_phone
 
 log = logging.getLogger("starcast.discord")
 
@@ -38,6 +38,13 @@ def round_half_away(x):
 
 def _status(state, user="", endpoint="", last_error=""):
     return {"state": state, "user": user, "endpoint": endpoint, "lastError": last_error}
+
+
+def source_kind(source):
+    """Where a song comes from, for the apps: "phone", "test" (the self-test) or "browser"."""
+    if is_phone(source):
+        return "phone"
+    return "test" if source == TEST_SOURCE else "browser"
 
 
 class Engine:
@@ -119,7 +126,8 @@ class Engine:
         return {k: v for k, v in st.items() if k == "state" or v}
 
     def snapshot(self):
-        """{discord, presenceActive, nowPlaying, hidden, snoozeSec} for the status page."""
+        """{discord, presenceActive, nowPlaying, hidden, snoozeSec} for the status page. nowPlaying["from"] says
+        where the song comes from (source_kind())."""
         now = self.now()
         with self._lock:
             active = self._active
@@ -129,9 +137,19 @@ class Engine:
         if sel is not None:
             out["nowPlaying"] = {"title": sel.title, "artist": sel.artist, "album": sel.album, "artwork": sel.artwork,
                                  "videoId": sel.video_id, "state": sel.state, "position": sel.position,
-                                 "duration": sel.duration}
+                                 "duration": sel.duration, "from": source_kind(sel.source)}
             out["hidden"] = self.hidden_for(self.store.get(), sel, now)
         return out
+
+    def showing(self, source):
+        """(shown, why) for one source: shown is True when its song is the one chosen and nothing keeps it off
+        Discord; why is the reason it is kept off ("" when it is shown, or when another source's song is chosen)."""
+        now = self.now()
+        sel = self.tracker.select()
+        if sel is None or sel.source != source:
+            return False, ""
+        why = self.hidden_for(self.store.get(), sel, now)
+        return why == "", why
 
     def preview(self):
         """The activity Discord would show right now (None = nothing), whatever the connection does."""

@@ -1,7 +1,8 @@
 """Discord status for the apps (GET /api/beacon, POST /api/beacon/...), and moving over from the old YTM Beacon app.
 
 Discord status shows the song playing in YouTube Music as your Discord "Listening to" card. It is built in: the
-engine is starcast.discord.Presence, fed by the browser extension's bridge. This module is what the apps talk to. It
+engine is starcast.discord.Presence, fed by the browser extension's bridge, and by the Android app when it plays music on
+the phone itself (POST /api/phone/playing). This module is what the apps talk to. It
 checks every request, answers in the same shape as when Discord status was the separate YTM Beacon app (so apps
 already on phones keep working), and keeps the engine away from Discord while that old app still runs on this
 computer: two programs showing a status for the same Discord application would fight over the card.
@@ -28,6 +29,7 @@ from pathlib import Path
 
 from .discord import Presence, SettingsError, beacon_config_path
 from .discord import settings as discord_store
+from .discord.tracker import is_phone
 from .proc import no_window
 
 log = logging.getLogger("starcast.discord")
@@ -48,6 +50,7 @@ WATCH_EVERY = 10.0          # how often to look for the old app (it may be start
 GONE_WAIT = 5.0             # after its uninstall, how long to wait for its ports to close
 UNINSTALL_TIMEOUT = 60.0
 AD_TTL = 90.0               # an advert report this old no longer counts (a tab that vanished without a goodbye)
+NOW_FROM = ("phone", "browser", "test")     # where the song shown comes from (nowPlaying["from"])
 
 # The old installer card, kept so apps from before the merge never offer to install or start anything.
 INSTALL_INFO = {"installed": True, "canInstall": False, "canStart": False, "latest": None, "updateAvailable": False,
@@ -154,12 +157,20 @@ def headline(s, version_is_ok=True):
     if (s.get("discord") or {}).get("state") != "connected":
         return "discord-down"
     ext = s.get("extension") or {}
+    quiet = ext.get("quietAfterSec") or 90
+    np = s.get("nowPlaying")
+    # A song from a phone that plays music itself needs no browser extension, and nor does a phone that has just
+    # stopped: neither is a reason to say the extension is missing or quiet.
+    phone_seen = (s.get("phone") or {}).get("lastSeenAgoSec")
+    by_phone = (isinstance(np, dict) and np.get("from") == "phone") or (
+        isinstance(phone_seen, (int, float)) and phone_seen <= quiet)
     seen = ext.get("lastSeenAgoSec")
-    if seen is None:
-        return "extension-quiet" if ext.get("everConnected") else "extension-missing"
-    if seen > (ext.get("quietAfterSec") or 90):
-        return "extension-quiet"
-    if not s.get("nowPlaying"):
+    if not by_phone:
+        if seen is None:
+            return "extension-quiet" if ext.get("everConnected") else "extension-missing"
+        if seen > quiet:
+            return "extension-quiet"
+    if not np:
         return "idle"
     hidden = s.get("hidden")
     if hidden == "filtered":
@@ -230,6 +241,8 @@ def normalize(s, now=None):
             "album": str(np.get("album") or ""), "artwork": str(np.get("artwork") or ""),
             "state": "paused" if np.get("state") == "paused" else "playing",
             "positionSec": _num(np.get("position")), "durationSec": _num(np.get("duration")),
+            # where it comes from: a browser tab, a phone that plays music itself, or the self-test
+            "from": np.get("from") if np.get("from") in NOW_FROM else "browser",
         }
     return out
 
@@ -414,7 +427,8 @@ def _scrub(text, home=None):
 
 class DiscordStatus:
     """Everything the server needs for Discord status: the engine (starcast.discord.Presence), the old app, and the
-    shapes the apps expect. It is also the server's presence hook (feed, touch, bye, enabled, set_enabled)."""
+    shapes the apps expect. It is also the server's presence hook (feed, touch, bye, feed_phone, phone_bye,
+    phone_showing, enabled, set_enabled)."""
 
     def __init__(self, presence, beacon_app=None, dry_run=False, beacon_config=None, watch_every=WATCH_EVERY,
                  gone_wait=GONE_WAIT, clock=None):
@@ -555,6 +569,8 @@ class DiscordStatus:
 
     # ---- what the extension reports (the server's presence hook) ----
     def feed(self, instance, now, agent=None, ts=None):
+        if is_phone(instance):
+            return False                # a phone's name: never a browser tab's (the engine refuses it too)
         if isinstance(now, dict):
             key = instance if isinstance(instance, str) and instance else ""
             with self._ads_lock:
@@ -571,6 +587,21 @@ class DiscordStatus:
         with self._ads_lock:
             self._ads.pop(instance if isinstance(instance, str) and instance else "", None)
         return self.presence.bye(instance)
+
+    # ---- what a phone reports (POST /api/phone/playing): its song, or None when its music stopped ----
+    def feed_phone(self, device, now, ts=None):
+        """Records (or with now None, clears) one phone's song. Phones report no adverts, so none are tracked."""
+        return self.presence.update_from_phone(device, now, ts=ts)
+
+    def phone_bye(self, device):
+        return self.presence.phone_bye(device)
+
+    def phone_showing(self, device):
+        """(shown, why) for that phone's song: see Presence.phone_showing(). While the old YTM Beacon app runs it
+        shows the status, so nothing of the phone's reaches Discord."""
+        if self.app_info()["running"]:
+            return False, ""
+        return self.presence.phone_showing(device)
 
     def ad_playing(self):
         now = self._clock()

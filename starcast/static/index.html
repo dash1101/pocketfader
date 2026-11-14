@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0c">
+<!-- covers and icons load from Google and GitHub: they are not told the address this page was opened at -->
+<meta name="referrer" content="no-referrer">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="manifest" href="/manifest.json">
@@ -413,6 +415,8 @@
             padding:14px 16px; background:var(--card); border-radius:var(--r-sm); margin-bottom:10px; }
   .setrow .k { font-weight:600; } .setrow .d { font-size:12.5px; color:var(--dim); margin-top:2px; }
   .setrow .val { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums; }
+  .setrow .srctag { flex:none; font-size:11.5px; font-weight:620; color:var(--dim); background:var(--card2);
+                    border-radius:var(--r-full); padding:3px 10px; white-space:nowrap; }
   .conncard { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; padding:16px; background:var(--card);
               border-radius:var(--r-sm); margin-bottom:10px; }
   .connqr { width:168px; flex:none; }
@@ -3505,7 +3509,11 @@ function beaconSection() {
       if (moveMsg) r.appendChild(Object.assign(el('div', 'note'), { textContent:moveMsg }));
       box.appendChild(r);
     } else if (moveMsg) box.appendChild(row(moveMsg, ''));
-    if (st.nowPlaying) box.appendChild(row((st.nowPlaying.state === 'playing' ? '▶ ' : '⏸ ') + st.nowPlaying.title, st.nowPlaying.artist));
+    if (st.nowPlaying) {
+      // a song the phone plays itself (the Android app reports it) says so
+      const from = st.nowPlaying.from === 'phone' ? Object.assign(el('span', 'srctag'), { textContent:'from your phone' }) : null;
+      box.appendChild(row((st.nowPlaying.state === 'playing' ? '▶ ' : '⏸ ') + st.nowPlaying.title, st.nowPlaying.artist, from));
+    }
     if ('preview' in st) box.appendChild(discordCard(st.preview));
     // while the old YTM Beacon app still runs, Discord is its job: the switches would change nothing, so they wait
     const usable = st.reachable && st.headline !== 'unsupported' && !A.running;

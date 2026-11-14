@@ -76,7 +76,7 @@ class BridgeTests(Base):
         self.assertEqual(s["nowPlaying"], {"title": "Song", "artist": "Artist", "album": "Album",
                                            "artwork": "https://lh3.googleusercontent.com/x=w544-h544",
                                            "videoId": "dQw4w9WgXcQ", "state": "playing", "position": 12.5,
-                                           "duration": 200.0})
+                                           "duration": 200.0, "from": "browser"})
         self.assertEqual(s["extension"]["lastSeenAgoSec"], 0)
         self.assertEqual(s["extension"]["sources"], [{"id": "tab1", "agent": "Brave", "state": "playing", "ageSec": 0}])
         self.assertEqual(s["discord"], {"state": "connecting"})      # the engine is not running here
@@ -198,6 +198,161 @@ class BridgeTests(Base):
         self.assertEqual(agent_from_user_agent(chrome + " Edg/130.0"), "Edge")
         self.assertEqual(agent_from_user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Firefox/132.0"), "Firefox")
         self.assertEqual(agent_from_user_agent(""), "")
+
+
+def phone_now(title="Phone song", playing=True, **kw):
+    """What the Android app sends as "now" while it plays music on the phone itself."""
+    n = {"playing": playing, "title": title, "artist": "Artist", "album": "Album",
+         "art": "https://lh3.googleusercontent.com/p=w544-h544", "videoId": "dQw4w9WgXcQ",
+         "position": 30, "duration": 200, "speed": 1.0}
+    n.update(kw)
+    return n
+
+
+PHONE_ID = "pixel-7a"
+
+
+class PhoneTests(Base):
+    """A phone that plays music itself reports its song (POST /api/phone/playing -> Presence.update_from_phone)."""
+
+    def test_update_from_phone(self):
+        p = self.presence()
+        self.assertTrue(p.update_from_phone(PHONE_ID, phone_now()))
+        s = p.status()
+        self.assertEqual(s["nowPlaying"], {"title": "Phone song", "artist": "Artist", "album": "Album",
+                                           "artwork": "https://lh3.googleusercontent.com/p=w544-h544",
+                                           "videoId": "dQw4w9WgXcQ", "state": "playing", "position": 30.0,
+                                           "duration": 200.0, "from": "phone"})
+        self.assertEqual(s["phone"], {"lastSeenAgoSec": 0})
+        self.assertIsNone(s["extension"]["lastSeenAgoSec"], "a phone is not the browser extension")
+        self.assertEqual(s["extension"]["sources"], [])
+        self.assertFalse(s["extension"]["everConnected"])
+        self.assertFalse(os.path.exists(self.path(MARKER_NAME)), "the extension's marker is not written for a phone")
+        self.clock.advance(12)
+        self.assertEqual(p.status()["phone"], {"lastSeenAgoSec": 12})
+        self.assertIsNone(self.presence(settings_path=self.path("other.json")).status()["phone"])
+
+    def test_field_mapping(self):
+        p = self.presence()
+        p.update_from_phone(PHONE_ID, phone_now(art="http://insecure/x.jpg", videoId="not-an-id", artist="Band - Topic",
+                                                album=None, position=40, duration=200, speed=0.8))
+        np = p.status()["nowPlaying"]
+        self.assertEqual((np["artwork"], np["videoId"], np["album"]), ("", "", ""), "https-only art, real video ids")
+        self.assertEqual(np["artist"], "Band")
+        self.assertEqual((np["position"], np["duration"]), (50.0, 250.0), "times follow the speed")
+        self.assertEqual(p.preview()["buttons"][0]["url"], "https://music.youtube.com/search?q=Band+Phone+song",
+                         "no video id: the button searches for the song")
+        p.update_from_phone(PHONE_ID, phone_now(art="https://example.com/a.jpg", videoId="abcdefghijk"))
+        np = p.status()["nowPlaying"]
+        self.assertEqual((np["artwork"], np["videoId"]), ("https://example.com/a.jpg", "abcdefghijk"))
+        p.update_from_phone(PHONE_ID, phone_now(playing=False))
+        self.assertEqual(p.status()["nowPlaying"]["state"], "paused")
+        p.update_from_phone(PHONE_ID, {"title": "No playing field"})
+        self.assertEqual(p.status()["nowPlaying"]["state"], "paused", "only playing: true counts as playing")
+
+    def test_none_and_bye_clear(self):
+        p = self.presence()
+        p.update_from_phone(PHONE_ID, phone_now())
+        self.assertFalse(p.update_from_phone(PHONE_ID, None))
+        self.assertIsNone(p.status()["nowPlaying"], "now None: the music stopped")
+        p.update_from_phone(PHONE_ID, phone_now())
+        self.assertFalse(p.update_from_phone(PHONE_ID, phone_now(title="  ")))
+        self.assertIsNone(p.status()["nowPlaying"], "no title: nothing loaded")
+        p.update_from_phone(PHONE_ID, phone_now())
+        p.update_from_phone("other-phone", phone_now(title="Other"))
+        p.phone_bye("other-phone")
+        self.assertEqual(p.status()["nowPlaying"]["title"], "Phone song", "only that phone's song goes")
+        p.phone_bye(PHONE_ID)
+        self.assertIsNone(p.status()["nowPlaying"])
+
+    def test_bad_device_ids_are_ignored(self):
+        p = self.presence()
+        for bad in ("short", "x" * 33, "has space", "phone:abc123", "../../etc", "", None, 123456):
+            self.assertFalse(p.update_from_phone(bad, phone_now()), repr(bad))
+            p.phone_bye(bad)
+            self.assertEqual(p.phone_showing(bad), (False, ""))
+        self.assertIsNone(p.status()["nowPlaying"])
+        self.assertIsNone(p.status()["phone"])
+
+    def test_the_extension_cannot_use_phone_names(self):
+        p = self.presence()
+        self.assertFalse(p.update_from_bridge("phone:" + PHONE_ID, now_obj(title="Fake")))
+        self.assertIsNone(p.status()["nowPlaying"])
+        self.assertIsNone(p.status()["extension"]["lastSeenAgoSec"])
+        p.update_from_phone(PHONE_ID, phone_now())
+        self.assertFalse(p.update_from_bridge("phone:" + PHONE_ID, now_obj(title="Fake")))
+        p.clear("phone:" + PHONE_ID)
+        p.bye("phone:" + PHONE_ID)
+        self.assertFalse(p.touch("phone:" + PHONE_ID))
+        self.assertEqual(p.status()["nowPlaying"]["title"], "Phone song", "a tab can't replace or clear a phone's song")
+        self.assertIsNone(p.status()["extension"]["lastSeenAgoSec"], "nor count as the extension with a phone's name")
+
+    def test_sample_time(self):
+        p = self.presence()
+        p.update_from_phone(PHONE_ID, phone_now(position=30), ts=(T0 - 2) * 1000)
+        self.assertEqual(p.preview()["timestamps"]["start"], T0_MS - 2000 - 30000)
+        p.update_from_phone(PHONE_ID, phone_now(position=30), ts=(T0 + 60) * 1000)     # its clock is far off
+        self.assertEqual(p.preview()["timestamps"]["start"], T0_MS - 30000)
+
+    def test_phone_showing(self):
+        p = self.presence()
+        self.assertEqual(p.phone_showing(PHONE_ID), (False, ""), "nothing reported")
+        p.update_from_phone(PHONE_ID, phone_now())
+        self.assertEqual(p.phone_showing(PHONE_ID), (True, ""))
+        self.clock.advance(5)
+        p.update_from_bridge("tab", now_obj())               # play pressed in a browser tab later
+        self.assertEqual(p.phone_showing(PHONE_ID), (False, ""), "another song is shown")
+        p.update_from_bridge("tab", now_obj(playing=False, paused=True))
+        self.assertEqual(p.phone_showing(PHONE_ID), (True, ""))
+        p.set_config({"hideMatching": ["phone song"]})
+        self.assertEqual(p.phone_showing(PHONE_ID), (False, "filtered"))
+        p.set_config({"hideMatching": []})
+        p.visibility("hide", 30)
+        self.assertEqual(p.phone_showing(PHONE_ID), (False, "snoozed"))
+        p.visibility("hide")
+        self.assertEqual(p.phone_showing(PHONE_ID), (False, "off"))
+
+    def test_headline_with_the_phone_only(self):
+        from starcast import beacon
+        self.dial_err = None
+        p = self.presence()
+        p.engine.step()
+        self.assertEqual(beacon.headline(p.status()), "extension-missing")
+        p.update_from_phone(PHONE_ID, phone_now())
+        self.assertEqual(beacon.headline(p.status()), "waiting")
+        p.engine.step()
+        self.assertEqual(self.conns[-1].last()["details"], "Phone song")
+        out = beacon.normalize(p.status())
+        self.assertEqual(out["headline"], "showing", "a phone's song needs no browser extension")
+        self.assertEqual(out["nowPlaying"]["from"], "phone")
+        self.assertEqual(out["extension"]["lastSeenAgoSec"], None)
+        self.assertNotIn("phone", out, "the apps get the same shape as before, plus nowPlaying.from")
+        sent = self.conns[-1].count()
+        for i in range(5):                  # heartbeats every 30 s keep it on, and change nothing on Discord
+            self.clock.advance(30)
+            p.update_from_phone(PHONE_ID, phone_now(position=30 + 30 * (i + 1)))
+            p.engine.step()
+        self.assertEqual(beacon.headline(p.status()), "showing")
+        self.assertEqual(self.conns[-1].count(), sent, "heartbeats must not cause updates")
+        p.update_from_phone(PHONE_ID, None)
+        p.engine.step()
+        self.assertIsNone(self.conns[-1].last(), "the music stopped: the card is cleared at once")
+        self.assertEqual(beacon.headline(p.status()), "idle", "the phone has just stopped: nothing is playing")
+        self.clock.advance(120)
+        self.assertEqual(beacon.headline(p.status()), "extension-missing")
+
+    def test_now_playing_from(self):
+        from starcast import beacon
+        p = self.presence()
+        p.update_from_bridge("tab", now_obj())
+        self.assertEqual(beacon.normalize(p.status())["nowPlaying"]["from"], "browser")
+        p.clear("tab")
+        p.test()
+        self.assertEqual(beacon.normalize(p.status())["nowPlaying"]["from"], "test")
+        self.assertEqual(beacon.normalize({"version": "dev", "nowPlaying": {"title": "Old"}})["nowPlaying"]["from"],
+                         "browser", "a status without it: a browser tab")
+        self.assertEqual(beacon.normalize({"version": "dev", "nowPlaying": {"title": "X", "from": "<b>"}})
+                         ["nowPlaying"]["from"], "browser")
 
 
 class ConfigTests(Base):

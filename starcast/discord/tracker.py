@@ -4,6 +4,9 @@ A tab ("source") reports the song it plays. The tracker keeps the latest report 
 the one to show: a playing tab beats a paused one; between two playing tabs the one where play was pressed
 last wins, between two paused ones the one paused last. Those moments only change when someone presses
 something, so two tabs reporting in turn never make Discord flip between them.
+
+A phone playing music itself (the Android app) is a source too, named "phone:" + its device id. It takes part in
+the same choice, but it is not the browser extension: it never counts as the extension being seen.
 """
 import math
 import re
@@ -18,16 +21,28 @@ STATE_PAUSED = "paused"
 # The fake source of the "send a test song" button.
 TEST_SOURCE = "test"
 
+# Sources named like this are phones (POST /api/phone/playing), never browser tabs.
+PHONE_PREFIX = "phone:"
+
 # A source that stops reporting is forgotten after this long (browser closed, tab crashed...). Browsers slow a
 # background tab that isn't playing sound down to about one report a minute, so this is well over 60 seconds.
 SOURCE_TTL = 90.0
 TEST_TTL = 30.0
+
+# At most this many phones are kept at once (the one heard from longest ago goes first), so a stream of made-up
+# phone ids can't make the list grow; a real household has a few phones at most.
+MAX_PHONES = 8
 
 _VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 
 
 class SanitizeError(ValueError):
     pass
+
+
+def is_phone(source):
+    """Whether a source is a phone rather than a browser tab."""
+    return isinstance(source, str) and source.startswith(PHONE_PREFIX)
 
 
 def quiet_after():
@@ -133,20 +148,31 @@ class Tracker:
         self._lock = threading.Lock()
         self._m = {}
         self._last_ext = None
+        self._last_phone = None
 
     def put(self, u, received_at=None):
         """Records an update that has already been sanitized. received_at (clock seconds) is when the position
         was measured, if not now. Returns True the first time this source is heard from."""
         with self._lock:
             now = self._now()
+            # forget what expired here too, not only when a song is chosen: nothing may choose for a while (Discord
+            # closed, the old YTM Beacon app running) while reports keep coming
+            self._prune(now)
             if u.source == TEST_SOURCE:
                 ttl = TEST_TTL
+            elif is_phone(u.source):
+                ttl = SOURCE_TTL        # a phone reports every 30 s while it plays or is paused
+                self._last_phone = now
             else:
                 ttl = SOURCE_TTL
                 self._last_ext = now
             e = self._m.get(u.source)
             is_new = e is None
             if is_new:
+                if is_phone(u.source):
+                    phones = [k for k in self._m if is_phone(k)]
+                    if len(phones) >= MAX_PHONES:
+                        del self._m[min(phones, key=lambda k: self._m[k].expires)]
                 e = self._m[u.source] = _Entry()
             if u.state == STATE_PAUSED:
                 # keep the original pause time across repeated "still paused" reports
@@ -165,12 +191,15 @@ class Tracker:
     def touch(self, source):
         """A tab checked in without anything new to report (it is still there, nothing changed). The extension
         counts as seen, and the tab's song is kept from expiring. Returns False when the source has no song
-        (unknown or already expired)."""
+        (unknown or already expired). A phone is kept the same way, but never counts as the extension."""
         with self._lock:
             now = self._now()
             if source == TEST_SOURCE:
                 return False
-            self._last_ext = now
+            if is_phone(source):
+                self._last_phone = now
+            else:
+                self._last_ext = now
             e = self._m.get(source)
             if e is None or now > e.expires:
                 return False
@@ -198,16 +227,25 @@ class Tracker:
             return Selected(best.u, received_at=best.at, paused_since=best.paused_since)
 
     def last_extension_seen(self):
-        """When any browser tab (not the self-test) last reported, or None. Survives expiry."""
+        """When any browser tab (not the self-test, not a phone) last reported, or None. Survives expiry."""
         with self._lock:
             return self._last_ext
 
+    def last_phone_seen(self):
+        """When any phone last reported, or None. Survives expiry."""
+        with self._lock:
+            return self._last_phone
+
     def sources(self):
+        """The browser tabs (and the self-test) with a song: short ids only. Phones are left out (they are not
+        the extension)."""
         with self._lock:
             now = self._now()
             self._prune(now)
             out = []
             for k, e in self._m.items():
+                if is_phone(k):
+                    continue
                 sid = k.encode("utf-8")[:8].decode("utf-8", "ignore")
                 out.append({"id": sid, "agent": e.u.agent, "state": e.u.state, "ageSec": max(0, int(now - e.at))})
             out.sort(key=lambda s: s["id"])

@@ -212,9 +212,10 @@ from your YouTube Music account, so they need the computer with the extension. M
 
 ## Updates
 
-YTM Starcast looks for new releases on GitHub. The **computer** does the asking, so a phone never needs a GitHub login:
+YTM Starcast looks for new releases on GitHub. The releases are public, so nothing needs a GitHub login:
 
-- the Android app shows a banner (and Settings → Updates) when a newer version exists and installs it through the computer;
+- the Android app asks GitHub itself when it opens (or the computer, when GitHub can't be reached from the phone), shows a
+  banner (and Settings → Updates) when a newer version exists, and installs it;
 - the desktop window has an **Updates** row with **Update now**; or run `ytm-starcast --check-update` and `ytm-starcast --update`
   (pip and `install.sh` installs; the ready-made programs link you to the download page).
 
@@ -271,6 +272,9 @@ status settings in memory only: handy for trying things safely. Settings and the
 ## More
 
 [Discord status](docs/DISCORD.md) · [Refine: a better YouTube Music](docs/REFINE.md) · [Browser extension](extension/README.md) · [Android app](android/README.md) · [Cloudflare guide](docs/CLOUDFLARE.md) · [Architecture](docs/ARCHITECTURE.md) · [Design language](docs/DESIGN.md) · [HTTP API](docs/API.md) · [Releasing](docs/RELEASING.md) · [Roadmap](docs/ROADMAP.md) · [Android plan](docs/ANDROID_PLAN.md) · [Voicemeeter](docs/VOICEMEETER.md)
+
+**Privacy and terms**: no accounts, analytics or ads, and nothing is sent to the developers. [Privacy](PRIVACY.md) lists
+what YTM Starcast keeps and what it sends where; [Terms of use](TERMS.md) covers the rest.
 
 MIT licensed, except the Android app (`android/`), which is **GPL-3.0-or-later** because it includes
 [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) to play YouTube Music on the phone itself.

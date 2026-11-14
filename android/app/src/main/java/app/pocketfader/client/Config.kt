@@ -67,4 +67,12 @@ class ConfigStore(context: Context) {
             .putString("cf_secret", c.cfClientSecret)
             .apply()
     }
+
+    /** A random name for this phone, made once and kept: the computer tells phones apart by it. Nothing personal is in it. */
+    fun deviceId(): String {
+        prefs.getString("device_id", null)?.takeIf(::isDeviceId)?.let { return it }
+        val id = newDeviceId()
+        prefs.edit().putString("device_id", id).apply()
+        return id
+    }
 }

@@ -29,6 +29,7 @@ class PocketfaderApp : Application() {
         Library.init(this)
         Recommend.init(this)
         LocalPlayer.init(this)
+        PhonePresence.init(this)
         Widgets.start(this)
         AutoDownload.soon()
     }
@@ -74,6 +75,8 @@ data class Prefs(
     val haptics: Boolean = true,
     val keepPlayingClosed: Boolean = false,  // music on this device carries on after the app is swiped away
     val pauseOnUnplug: Boolean = true,       // music on this device pauses when headphones / a speaker disconnect
+    // Discord
+    val discordFromPhone: Boolean = true,    // music playing on this phone shows as the Discord status, through the computer
     // lyrics
     val lyricsRoman: Boolean = false,
     val lyricsTranslation: Boolean = false,
@@ -149,6 +152,7 @@ object Settings {
             smartDownloads = i("smartDownloads", d.smartDownloads), dlWifiOnly = b("dlWifiOnly", d.dlWifiOnly),
             dlQuality = s("dlQuality", d.dlQuality),
             autoDlLimitMb = i("autoDlLimitMb", d.autoDlLimitMb),
+            discordFromPhone = b("discordFromPhone", d.discordFromPhone),
         )
     }
 
@@ -177,6 +181,7 @@ object Settings {
             .putBoolean("autoSync", p.autoSync).putBoolean("autoDlLiked", p.autoDlLiked)
             .putInt("smartDownloads", p.smartDownloads).putBoolean("dlWifiOnly", p.dlWifiOnly).putString("dlQuality", p.dlQuality)
             .putInt("autoDlLimitMb", p.autoDlLimitMb)
+            .putBoolean("discordFromPhone", p.discordFromPhone)
             .apply()
     }
 }

@@ -319,6 +319,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     "working, turn it on or off, hide it for a while and change what it shows. Discord has to be open on the computer.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // only the song playing goes to the computer this app is connected to; with no computer there is nothing to show it
+            if (cfg.isSet) Section("Music on this phone") {
+                Toggle(
+                    "Show what this phone plays",
+                    "When music plays on this phone, your computer shows it as your Discord status. Needs YTM Starcast and the " +
+                        "Discord app running on your computer." +
+                        if (s.online && !s.canPhoneDiscord) " This computer's YTM Starcast can't do this yet: update YTM Starcast on the computer." else "",
+                    p.discordFromPhone,
+                ) { v -> Settings.update { it.copy(discordFromPhone = v) }; PhonePresence.refresh() }
+            }
         }
 
         if (page == "downloads") Section("Downloads") {
@@ -443,7 +453,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Text(
                     "When YouTube Music on the computer isn't connected, “For you”, autoplay and “I'm feeling lucky” are worked out on " +
                         "this phone from what you play (here and on the computer), skip and like, using YouTube Music's own song radios. " +
-                        "The history never leaves the phone.",
+                        "Your listening history is kept only on this phone. Songs from it are used to ask YouTube for similar music.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedButton(onClick = { confirmHistory = true }, enabled = history.isNotEmpty()) { Text("Clear listening history") }
@@ -551,6 +561,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             onDismiss = { confirmReset = false }) {
             confirmReset = false
             Settings.reset()
+            PhonePresence.refresh()      // "Show what this phone plays" may have been switched back on
         }
     }
 }
@@ -700,7 +711,7 @@ object SettingsNav {
 private val LocalPageTitle = androidx.compose.runtime.compositionLocalOf<String?> { null }
 
 /** Cards that come after a page's first one, and so need a heading of their own. */
-private val SUBHEADS = setOf("Your library", "Automatic downloads", "Recommendations", "If the app closed by itself")
+private val SUBHEADS = setOf("Your library", "Automatic downloads", "Recommendations", "If the app closed by itself", "Music on this phone")
 
 private class Cat(val key: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 

@@ -57,6 +57,23 @@ The card in the apps has:
   is readable only by you). It holds the same settings as YTM Beacon's `config.json`.
 - `ytm-starcast --dry-run` never contacts Discord, and settings you change are kept in memory only (the status still shows).
 
+## Music playing on the phone
+
+When the Android app plays music on the phone itself (**play on this phone**), it tells the computer what plays, and the
+computer shows it on Discord the same way: through the Discord desktop app on the computer, with the same settings. The
+phone never talks to Discord, so the Discord app has to be open on the computer, and the phone has to reach the computer
+(as it does for the remote).
+
+- It is on unless you switch it off in the Android app: Settings → Discord status → **Show what this phone plays**. It
+  covers everything the app plays on the phone, music files already on the phone included.
+- Songs from the phone don't need the browser extension. In the web app, Settings → Discord status says **from your
+  phone** next to the song when it comes from the phone.
+- When YouTube Music plays on the computer and on the phone at the same time, a playing song wins over a paused one,
+  and between two playing songs the one where play was pressed last wins.
+- The phone sends its song again every 30 seconds while it plays or is paused. When its music stops, the card is
+  cleared at once; a phone that stops reporting (out of reach, switched off) is dropped after about 90 seconds.
+- With Discord status switched off, the computer keeps nothing of what the phone sends.
+
 ## Moving over from YTM Beacon
 
 **Only move over in a Chromium-based browser on Linux or Windows.** YTM Beacon in Firefox or on macOS has no replacement
@@ -114,7 +131,7 @@ card to your friends.
 | The status line says | Do this |
 |---|---|
 | Can't reach Discord | Open the Discord desktop app on the computer. YTM Starcast reconnects by itself. |
-| The browser extension hasn't reported yet | Add YTM Starcast's extension to the browser on the computer, then open YouTube Music there. |
+| The browser extension hasn't reported yet | Add YTM Starcast's extension to the browser on the computer, then open YouTube Music there. (Songs played on the phone itself don't need it.) |
 | The browser extension went quiet | Check that YouTube Music is still open in the browser; reload the tab if it is. |
 | The YTM Beacon app is still running | Use **Move over** (see above). |
 | An advert is playing / hidden while an advert plays | Nothing to do: the card comes back with the music. |

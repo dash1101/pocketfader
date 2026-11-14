@@ -33,6 +33,7 @@ data class RemoteState(
     val canOutputs: Boolean = false,
     val canLyrics: Boolean = false,
     val canBeacon: Boolean = false,
+    val canPhoneDiscord: Boolean = false, // the computer can show what this phone plays as the Discord status
     val ytm: Boolean = false,             // the computer's YouTube Music extension is connected (account: library, likes, artists)
     val canAudio: Boolean = false,        // the computer can fetch songs for the phone (yt-dlp)
     val canSleep: Boolean = false,
@@ -156,6 +157,7 @@ object Remote {
             val at = LocalPlayer.position()
             LocalPlayer.pause()
             Settings.update { it.copy(playOn = "computer") }
+            PhonePresence.refresh()          // the phone's song comes off the Discord status: the computer's own shows instead
             _state.update { it.copy(now = null, queue = emptyList(), source = null, bridge = false) }
             boost()
             val vid = cur?.videoId
@@ -175,7 +177,13 @@ object Remote {
     /** Whether the last poll saw the computer's YouTube Music (so its arrival can be told from its staying). */
     @Volatile private var hadBridge = false
 
+    /** The computer set up last (the activity sets the same one up again each time it opens). */
+    @Volatile private var server = ServerConfig()
+
     fun configure(cfg: ServerConfig) {
+        // a song this phone shows on the Discord status comes off the computer it was shown on before another one takes over
+        PhonePresence.serverChanging(api, sameServer = cfg == server)
+        server = cfg
         api = if (cfg.isSet) PfApi(cfg) else null
         hadBridge = false
         _state.value = RemoteState(configured = cfg.isSet)
@@ -301,6 +309,7 @@ object Remote {
                 canOutputs = st?.optJSONObject("capabilities")?.optBoolean("outputs", false) ?: cur.canOutputs,
                 canLyrics = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("lyrics", false) ?: cur.canLyrics,
                 canBeacon = st?.optJSONObject("capabilities")?.let { it.optBoolean("beacon", false) || it.optBoolean("discord", false) } ?: cur.canBeacon,
+                canPhoneDiscord = st?.optJSONObject("capabilities")?.optBoolean("phone_discord", false) ?: cur.canPhoneDiscord,
                 canSleep = if (loc) true else st?.optJSONObject("capabilities")?.optBoolean("sleep", false) ?: cur.canSleep,
                 sleepLeft = if (loc) cur.sleepLeft else sleepFrom(st, cur).first,
                 sleepAt = if (loc) cur.sleepAt else sleepFrom(st, cur).second,

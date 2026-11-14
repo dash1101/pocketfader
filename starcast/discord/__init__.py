@@ -1,8 +1,8 @@
 """Discord status: shows the song playing in YouTube Music as your Discord "Listening to" card.
 
 A standard-library port of YTM Beacon's presence engine and Discord IPC client, fed by the browser extension's
-existing bridge. Nothing here opens a network port; it only talks to the Discord desktop app on this computer
-through Discord's local IPC socket (a named pipe on Windows).
+existing bridge, and by the Android app when it plays music on the phone itself. Nothing here opens a network port;
+it only talks to the Discord desktop app on this computer through Discord's local IPC socket (a named pipe on Windows).
 
 The server's API is one object:
 
@@ -28,10 +28,20 @@ The server's API is one object:
     p.touch(instance)                       # every GET /ext/poll (?i=): the tab is alive. Needed: a paused tab
                                             #   pushes nothing, and a song not heard of for 90 s is dropped
     p.clear(instance)                       # POST /ext/bye (alias: p.bye)
+                                            # (instances "test" and "phone:..." are refused by all three)
+
+    # fed by a phone playing music itself (POST /api/phone/playing): a source "phone:<device>", never counted as
+    # the extension; the same choice between sources (playing beats paused, the last play pressed wins)
+    p.update_from_phone(device, now, ts=None)   # device: 6-32 of A-Z a-z 0-9 _ -; now: the extension's fields (agent
+                                            #   "Android"), or None = its music stopped (cleared at once). Sent again
+                                            #   every 30 s; a phone not heard from for 90 s is dropped
+    p.phone_bye(device)                     # that phone's song goes at once
+    p.phone_showing(device)                 # (shown, why): its song is the one on Discord / what keeps it off
 
     # status and switches
     p.status()          # dict with YTM Beacon's raw /v1/status keys: feed it to starcast.beacon.normalize()
-                        #   (contains paths and the application id: never send it to the apps as is)
+                        #   (contains paths and the application id: never send it to the apps as is). Also
+                        #   nowPlaying["from"] ("phone", "browser" or "test") and "phone": {"lastSeenAgoSec"} or None
     p.enabled                               # the on/off switch (parts.discord), from memory
     p.set_enabled(on)                       # switch it (saved); a timed hide is left alone
     p.visibility_state()                    # {"enabled", "snoozeSec", "visible"}

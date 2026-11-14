@@ -10,14 +10,15 @@ from starcast.discord import settings as st
 from starcast.discord.build import (DEFAULT_ASSETS, HIDDEN_FILTERED, HIDDEN_OFF, HIDDEN_PAUSED, HIDDEN_SNOOZED,
                                   activity_key, asset_base_for, build_activity, field, track_url)
 from starcast.discord.engine import STATE_CONNECTED, STATE_DISCONNECTED, STATE_NO_CLIENT_ID
-from starcast.discord.tracker import (SOURCE_TTL, STATE_PAUSED, STATE_PLAYING, TEST_SOURCE, TEST_TTL, SanitizeError,
-                                    Selected, Tracker, Update, quiet_after)
+from starcast.discord.tracker import (MAX_PHONES, PHONE_PREFIX, SOURCE_TTL, STATE_PAUSED, STATE_PLAYING, TEST_SOURCE,
+                                    TEST_TTL, SanitizeError, Selected, Tracker, Update, is_phone, quiet_after)
 
 from .test_discord_fakes import (GUARD, T0, T0_MS, FakeClock, FakeConn, Harness, no_client_id_env, song,
                                  config_with_id)
 
 ART = DEFAULT_ASSETS
 REPO = Path(__file__).resolve().parent.parent
+PHONE = PHONE_PREFIX + "pixel-7a"      # a phone that plays music itself (POST /api/phone/playing)
 
 
 def setUpModule():
@@ -355,6 +356,85 @@ class TrackerTests(unittest.TestCase):
     def test_quiet_after_is_over_one_minute(self):
         self.assertGreater(quiet_after(), 65)
 
+    # ---- a phone playing music itself ----
+    def test_phone_is_not_the_extension(self):
+        self.assertTrue(is_phone(PHONE))
+        self.assertFalse(is_phone("tab-1") or is_phone(TEST_SOURCE) or is_phone(None))
+        self.tr.put(song(PHONE, "P", STATE_PLAYING, 0, 0))
+        self.assertIsNone(self.tr.last_extension_seen(), "a phone is not the browser extension")
+        self.assertEqual(self.tr.last_phone_seen(), T0)
+        self.assertEqual(self.title(), "P")
+        self.assertEqual(self.tr.sources(), [], "the extension's tab list leaves phones out")
+        self.clk.advance(10)
+        self.assertTrue(self.tr.touch(PHONE))
+        self.assertIsNone(self.tr.last_extension_seen(), "nor does keeping a phone alive count as the extension")
+        self.assertEqual(self.tr.last_phone_seen(), T0 + 10)
+        self.tr.put(song("tab-1", "T", STATE_PAUSED, 0, 0))
+        self.assertEqual(self.tr.last_extension_seen(), T0 + 10)
+        self.assertEqual([s["id"] for s in self.tr.sources()], ["tab-1"])
+
+    def test_phone_against_a_tab_both_ways(self):
+        self.tr.put(song("tab-1", "Tab", STATE_PLAYING, 0, 0))
+        self.clk.advance(1)
+        self.tr.put(song(PHONE, "Phone", STATE_PLAYING, 0, 0))
+        self.assertEqual(self.title(), "Phone", "play pressed on the phone last: the phone wins")
+        self.clk.advance(1)
+        self.tr.put(song("tab-1", "Tab", STATE_PAUSED, 0, 0))
+        self.clk.advance(1)
+        self.tr.put(song("tab-1", "Tab", STATE_PLAYING, 0, 0))
+        self.assertEqual(self.title(), "Tab", "play pressed in the tab last: the tab wins")
+        self.tr.put(song("tab-1", "Tab", STATE_PAUSED, 0, 0))
+        self.assertEqual(self.title(), "Phone", "a playing phone beats a paused tab")
+        self.clk.advance(1)
+        self.tr.put(song(PHONE, "Phone", STATE_PAUSED, 0, 0))
+        self.tr.put(song("tab-1", "Tab", STATE_PLAYING, 0, 0))
+        self.assertEqual(self.title(), "Tab", "a playing tab beats a paused phone")
+
+    def test_phone_expires_without_heartbeats(self):
+        self.tr.put(song(PHONE, "P", STATE_PAUSED, 10, 200))
+        for _ in range(20):         # paused, the phone still reports every 30 s: kept for as long as it does
+            self.clk.advance(30)
+            self.tr.put(song(PHONE, "P", STATE_PAUSED, 10, 200))
+        self.assertEqual(self.title(), "P")
+        self.assertEqual(self.tr.select().paused_since, T0, "heartbeats keep the time it was paused")
+        self.clk.advance(SOURCE_TTL)
+        self.assertEqual(self.title(), "P", "kept for 90 s after the last heartbeat")
+        self.clk.advance(1)
+        self.assertIsNone(self.tr.select(), "gone 90 s after the last heartbeat")
+        self.assertIsNotNone(self.tr.last_phone_seen(), "last-seen survives expiry")
+
+    def test_phone_heartbeats_do_not_flip(self):
+        self.tr.put(song(PHONE, "Phone", STATE_PLAYING, 0, 0))
+        self.clk.advance(1)
+        self.tr.put(song("tab-1", "Tab", STATE_PLAYING, 0, 0))     # play pressed in the tab last
+        for i in range(1, 31):
+            self.clk.advance(2)
+            self.tr.put(song("tab-1", "Tab", STATE_PLAYING, 2 * i, 0))
+            if i % 15 == 0:                                         # the phone's heartbeat, every 30 s
+                self.tr.put(song(PHONE, "Phone", STATE_PLAYING, 30 * i, 0))
+            self.assertEqual(self.title(), "Tab", "report %d flipped the card" % i)
+        self.tr.put(song("tab-1", "Tab", STATE_PAUSED, 0, 0))
+        self.assertEqual(self.title(), "Phone")
+        for _ in range(4):
+            self.clk.advance(30)
+            self.tr.put(song(PHONE, "Phone", STATE_PLAYING, 0, 0))
+            self.tr.put(song("tab-1", "Tab", STATE_PAUSED, 0, 0))
+            self.assertEqual(self.title(), "Phone")
+
+    def test_made_up_phone_ids_cannot_pile_up(self):
+        # nothing calls select() here (as when Discord is closed): reports alone must keep the list small
+        self.tr.put(song(PHONE, "Mine", STATE_PAUSED, 0, 0))
+        for i in range(MAX_PHONES * 5):
+            self.clk.advance(0.01)
+            self.tr.put(song(PHONE_PREFIX + "fake%04d" % i, "Fake", STATE_PAUSED, 0, 0))
+        self.assertEqual(len(self.tr._m), MAX_PHONES)
+        self.assertNotIn(PHONE, self.tr._m, "the phone heard from longest ago goes first")
+        self.tr.put(song("tab-1", "Tab", STATE_PAUSED, 0, 0))
+        self.assertIn("tab-1", self.tr._m, "browser tabs don't count against the phones")
+        self.clk.advance(SOURCE_TTL + 1)
+        self.tr.put(song(PHONE, "Mine", STATE_PLAYING, 0, 0))
+        self.assertEqual(list(self.tr._m), [PHONE], "what expired is forgotten as new reports arrive")
+
 
 # ---- Engine ----
 
@@ -433,6 +513,45 @@ class EngineTests(unittest.TestCase):
             h.step()
         self.assertIsNone(h.conn().last(), "cleared after the pause timeout")
         self.assertFalse(h.engine.snapshot()["presenceActive"])
+
+    def test_card_shows_the_phones_song(self):
+        h = Harness(config_with_id())
+        h.tracker.put(song(PHONE, "From the phone", STATE_PLAYING, 30, 200))
+        h.step()
+        last = h.conn().last()
+        self.assertEqual((last["details"], last["state"]), ("From the phone", "Artist"))
+        self.assertEqual(last["timestamps"], {"start": T0_MS - 30000, "end": T0_MS + 170000})
+        self.assertEqual(last["buttons"][0]["url"], "https://music.youtube.com/watch?v=dQw4w9WgXcQ")
+        snap = h.engine.snapshot()
+        self.assertEqual((snap["nowPlaying"]["title"], snap["nowPlaying"]["from"]), ("From the phone", "phone"))
+        self.assertEqual(h.engine.showing(PHONE), (True, ""))
+        self.assertEqual(h.engine.showing("tab-1"), (False, ""), "a source that isn't chosen is not shown")
+        h.clock.advance(5)
+        h.tracker.put(song("tab-1", "From the tab", STATE_PLAYING, 0, 200))
+        h.step()
+        self.assertEqual(h.conn().last()["details"], "From the tab")
+        self.assertEqual(h.engine.snapshot()["nowPlaying"]["from"], "browser")
+        self.assertEqual(h.engine.showing(PHONE), (False, ""), "another song was chosen: no reason of its own")
+        h.clock.advance(1)
+        h.engine.inject_test()
+        self.assertEqual(h.engine.snapshot()["nowPlaying"]["from"], "test")
+
+    def test_phone_song_follows_the_settings(self):
+        h = Harness(config_with_id())
+        h.store.update(lambda c: c.__setitem__("privateMode", True))
+        h.tracker.put(song(PHONE, "Secret", STATE_PLAYING, 30, 200))
+        h.step()
+        self.assertEqual(h.conn().last()["details"], build.PRIVATE_DETAILS)
+        self.assertNotIn("Secret", str(h.conn().last()), "private mode: no song details")
+        h.store.update(lambda c: c.update(privateMode=False, showPaused=False))
+        h.clock.advance(3)
+        h.tracker.put(song(PHONE, "Secret", STATE_PAUSED, 33, 200))
+        h.step()
+        self.assertIsNone(h.conn().last(), "paused, and show when paused is off: cleared")
+        self.assertEqual(h.engine.showing(PHONE), (False, HIDDEN_PAUSED))
+        self.assertEqual(h.engine.snapshot()["hidden"], HIDDEN_PAUSED)
+        h.store.update(lambda c: c.__setitem__("enabled", False))
+        self.assertEqual(h.engine.showing(PHONE), (False, HIDDEN_OFF))
 
     def test_clears_when_source_vanishes(self):
         h = Harness(config_with_id())

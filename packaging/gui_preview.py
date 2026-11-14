@@ -13,7 +13,7 @@ from PIL import ImageGrab
 from starcast.gui import core, tk_ui
 
 ANSWERS = {
-    "api/info": {"name": "YTM Starcast", "version": "0.2.3-alpha", "auth": False},
+    "api/info": {"name": "YTM Starcast", "version": "0.2.4-alpha", "auth": False},
     "api/state": {"volume": {"percent": 62, "device": "Speakers (Realtek(R) Audio)"}, "capabilities": {"eq_toggle": True},
                   "engine": {"enabled": True}, "parts": {"remote": True, "discord": True, "refine": False, "audio": True}},
     "api/ytm/state": {"connected": True, "source": "ytm", "now": {"title": "Midnight Satellites"}},
@@ -30,7 +30,7 @@ def stand_in():
         http=lambda url, headers=None, timeout=1.2: ANSWERS.get(url.split("/", 3)[3] if url.count("/") >= 3 else url),
         tailscale_ip=lambda: None, lan_ip=lambda: None, post=lambda *a, **k: None,
     )
-    ctl.update_info = lambda refresh=False: {"current": "0.2.3-alpha", "latest": "v0.2.3-alpha", "available": False}
+    ctl.update_info = lambda refresh=False: {"current": "0.2.4-alpha", "latest": "v0.2.4-alpha", "available": False}
     ctl.autostart_enabled = lambda: True
     return ctl
 

@@ -410,8 +410,10 @@ data class BeaconApp(
     val version: String? = null,
 )
 
+/** [from]: where the song comes from: "browser" (YouTube Music on the computer), "phone" (a phone playing music itself),
+ *  "test"; "" from a computer that doesn't say. */
 @Immutable
-data class BeaconSong(val title: String, val artist: String, val playing: Boolean)
+data class BeaconSong(val title: String, val artist: String, val playing: Boolean, val from: String = "")
 
 @Immutable
 data class BeaconInstall(
@@ -453,7 +455,9 @@ fun parseBeacon(o: JSONObject, receivedAt: Long): BeaconStatus {
         visible = o.optBoolean("visible", false),
         snoozeSec = o.optInt("snoozeSec", 0),
         discordUser = o.optJSONObject("discord")?.str("user"),
-        song = if (np == null) null else BeaconSong(np.str("title").orEmpty(), np.str("artist").orEmpty(), np.optString("state") == "playing"),
+        song = if (np == null) null else BeaconSong(
+            np.str("title").orEmpty(), np.str("artist").orEmpty(), np.optString("state") == "playing", np.str("from").orEmpty(),
+        ),
         settings = if (s == null) BeaconSettings() else BeaconSettings(
             privateMode = s.optBoolean("privateMode", false),
             showPaused = s.optBoolean("showPaused", true),

@@ -288,6 +288,7 @@ object LocalPlayer {
     /** The app was swiped away: the music stops, and the queue and the place in the song are kept for next time. */
     fun closedByUser() {
         exo?.pause()
+        PhonePresence.end()          // the song comes off the computer's Discord status now, not when the pause runs out
         save()
         // our own link to the playback service would keep it alive
         controller?.let { runCatching { androidx.media3.session.MediaController.releaseFuture(it) } }
@@ -515,6 +516,15 @@ object LocalPlayer {
             liked = Library.isLiked(cur.videoId),
             repeat = when (p.repeatMode) { Player.REPEAT_MODE_ONE -> "ONE"; Player.REPEAT_MODE_ALL -> "ALL"; else -> "NONE" },
             shuffle = shuffled, autoplay = autoplay,
+        )
+        // the computer's Discord status can show it too (Settings → Discord status); only from here, once the player runs:
+        // a queue restored from last time isn't music playing
+        PhonePresence.update(
+            if (cur == null || now == null) null else PhoneSong(
+                key = cur.key, title = cur.title, artist = cur.artist, album = cur.album, art = now.art, videoId = cur.videoId,
+                playing = now.playing, position = p.currentPosition / 1000.0, duration = now.duration,
+                speed = p.playbackParameters.speed.toDouble(),
+            )
         )
         val queue = items.mapIndexed { i, it -> trackOf(it, i, i == idx) }
         Remote.applyLocal(now, queue, Progress(p.currentPosition / 1000.0, SystemClock.elapsedRealtime()), sleepLeft(p))

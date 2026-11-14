@@ -336,6 +336,24 @@ class HeadlineTests(unittest.TestCase):
         for status, want in cases:
             self.assertEqual(self.h(status), want, want)
 
+    def test_a_phones_song_needs_no_extension(self):
+        phone_song = {**PLAYING["nowPlaying"], "from": "phone"}
+        for ext in ({"lastSeenAgoSec": None, "everConnected": False}, {"lastSeenAgoSec": None, "everConnected": True},
+                    {"lastSeenAgoSec": 300}):
+            self.assertEqual(self.h(variant(extension=ext, nowPlaying=phone_song)), "showing", ext)
+            self.assertEqual(self.h(variant(extension=ext, nowPlaying=phone_song, hidden="paused",
+                                            presenceActive=False)), "paused-hidden", ext)
+            # a phone that has just stopped: nothing plays, which is no reason to ask for the extension
+            self.assertEqual(self.h(variant(extension=ext, nowPlaying=None, phone={"lastSeenAgoSec": 20})), "idle", ext)
+        missing = {"lastSeenAgoSec": None, "everConnected": False}
+        self.assertEqual(self.h(variant(extension=missing, nowPlaying=None, phone={"lastSeenAgoSec": 200})),
+                         "extension-missing", "a phone gone quiet long ago")
+        self.assertEqual(self.h(variant(extension=missing, nowPlaying={**phone_song, "from": "browser"})),
+                         "extension-missing")
+        self.assertEqual(self.h(variant(extension=missing, nowPlaying=phone_song, discord={"state": "disconnected"})),
+                         "discord-down")
+        self.assertEqual(bc.normalize(variant(nowPlaying=phone_song))["nowPlaying"]["from"], "phone")
+
     def test_built_in_states(self):
         idle = variant(nowPlaying=None, presenceActive=False)
         self.assertEqual(bc.builtin_headline(idle, ad=True), "ad")
@@ -589,6 +607,33 @@ class StatusTests(TempCase):
         self.assertTrue(ds.ad_playing())
         clock[0] += bc.AD_TTL + 1                                           # ...and vanished without a goodbye
         self.assertFalse(ds.ad_playing())
+
+    def test_a_phone(self):
+        ds = self.discord()
+        now = {"title": "Phone song", "artist": "Artist", "playing": True, "position": 10, "duration": 200}
+        self.assertTrue(ds.feed_phone("pixel-7a", now))
+        self.assertEqual(ds.phone_showing("pixel-7a"), (True, ""))
+        st = ds.status()
+        self.assertEqual((st["nowPlaying"]["title"], st["nowPlaying"]["from"]), ("Phone song", "phone"))
+        self.assertIsNone(st["extension"]["lastSeenAgoSec"])
+        self.assertEqual(st["preview"]["details"], "Phone song")
+        self.assertNotIn("pixel-7a", json.dumps(st), "the phone's id stays on the computer")
+        # phones report no adverts, and a browser tab can't speak for a phone
+        self.assertFalse(ds.feed("phone:pixel-7a", {"title": "Advert", "ad": True}))
+        self.assertFalse(ds.ad_playing())
+        ds.bye("phone:pixel-7a")
+        self.assertEqual(ds.status()["nowPlaying"]["title"], "Phone song")
+        self.assertFalse(ds.feed_phone("pixel-7a", None))
+        self.assertIsNone(ds.status()["nowPlaying"])
+        ds.feed_phone("pixel-7a", now)
+        ds.phone_bye("pixel-7a")
+        self.assertIsNone(ds.status()["nowPlaying"])
+
+    def test_a_phone_is_not_shown_while_the_old_app_runs(self):
+        b = self.old_app()
+        ds = self.discord(ports=(b.port,))
+        ds.feed_phone("pixel-7a", {"title": "Phone song", "playing": True})
+        self.assertEqual(ds.phone_showing("pixel-7a"), (False, ""), "the old app shows the status, not this one")
 
     def test_one_switch(self):
         ds = self.discord()

@@ -49,7 +49,8 @@ status, `capabilities.beacon`, the `pf_token` cookie), so apps already on phones
   "engine": {"connected": false, "level": 0.0, "eq": {}, "routing": {}},
   "capabilities": {"volume": true, "eq": false, "eq_toggle": false, "meter": false, "outputs": true,
                    "engine_actions": [], "engine_label": "", "media": true, "ytm_bridge": false,
-                   "lyrics": true, "beacon": true, "discord": true, "sleep": true, "audio": true, "ytm_focus": true},
+                   "lyrics": true, "beacon": true, "discord": true, "phone_discord": true, "sleep": true, "audio": true,
+                   "ytm_focus": true},
   "limits": {"eq_min": -12.0, "eq_max": 12.0},
   "sleep": {"remainingSec": 0},
   "parts": {"remote": true, "discord": true, "refine": true, "audio": true}
@@ -81,6 +82,8 @@ shows the same. New in 0.2.0a10.
 
 `capabilities.discord` and `parts` are new in 0.2.0: an app that sees neither is talking to an older server, where
 every part counts as on. `capabilities.beacon` stays `true` because older apps show their Discord page only when it is set.
+`capabilities.phone_discord` (new in 0.2.4-alpha) is `true` on servers that can show music playing on the phone itself
+on Discord (`POST /api/phone/playing`, see [Music playing on the phone](#music-playing-on-the-phone)).
 
 ```jsonc
 // /api/lyrics
@@ -177,7 +180,8 @@ connection itself is reachable through them.
   "detail": "…",                            // optional: the last problem talking to Discord, in words
   "extension": {"lastSeenAgoSec": 2, "quietAfterSec": 90, "everConnected": true},
   "nowPlaying": {"title": "…", "artist": "…", "album": "…", "artwork": "https://…",
-                 "state": "playing", "positionSec": 12.3, "durationSec": 200.0},     // or null
+                 "state": "playing", "positionSec": 12.3, "durationSec": 200.0,
+                 "from": "browser"},        // or null. from (new in 0.2.4-alpha): "browser", "phone" or "test"
   "presenceActive": true,                   // a card is on Discord right now
   "settings": {"privateMode": false, "showPaused": true, "showProgress": true, "showStateIcon": true,
                "showButtons": true, "showAlbumArt": true, "pauseTimeoutMinutes": 5, "statusDisplay": "name",
@@ -193,6 +197,9 @@ connection itself is reachable through them.
   "dryRun": true                            // only under --dry-run
 }
 ```
+
+`nowPlaying.from` says where the song comes from: a YouTube Music tab in the browser (`browser`), a phone that plays
+music itself (`phone`, see [Music playing on the phone](#music-playing-on-the-phone)) or the test song (`test`).
 
 `beaconApp` describes the separate YTM Beacon app on this computer: `running` (it answers on its local port, so YTM Starcast
 leaves Discord to it), `installed` and `canMigrate` (its program is where its installer puts it, so
@@ -212,8 +219,8 @@ leaves Discord to it), `installed` and `canMigrate` (its program is where its in
 | `paused-timeout` | Paused longer than `pauseTimeoutMinutes`. |
 | `filtered` | The song matches one of the never-show words. |
 | `discord-down` | The Discord desktop app can't be reached. |
-| `extension-missing` | The browser extension has never reported. |
-| `extension-quiet` | The browser extension stopped reporting. |
+| `extension-missing` | The browser extension has never reported. (Not said while a phone's song is shown, or for 90 seconds after a phone reported.) |
+| `extension-quiet` | The browser extension stopped reporting. (Not said while a phone's song is shown, or for 90 seconds after a phone reported.) |
 | `beacon-running` | The separate YTM Beacon app still runs, so YTM Starcast leaves Discord to it. (New in 0.2.0.) |
 | `unsupported`, `unreachable` | Kept for older apps. The built-in Discord status never says `unsupported`; `unreachable` means it couldn't answer. |
 
@@ -242,25 +249,50 @@ nothing and answer `409 {"error": "beacon_running", "message": "…"}`: move ove
 Other errors: `400` for a bad body, and `500 {"error": "<words>"}` when the settings can't be saved. Under `--dry-run`
 Discord is never contacted, and visibility and settings changes are kept in memory only.
 
-## Extension channel (loopback)
+### Music playing on the phone
 
-Used only by the browser extension. Each YouTube Music tab names itself (`i` on the poll, `instance` in its state);
+When the Android app plays music on the phone itself, it can report the song to the computer, and the computer's
+Discord status shows it through the Discord desktop app there (the phone never talks to Discord). Like every `/api`
+route it needs the access token when one is set (`401` without it), and the `Origin` and `Host` checks above apply
+(`403` for any other site's origin, the extension's own included).
+
+| Endpoint | Body | Notes |
+|---|---|---|
+| `POST /api/phone/playing` | `{"device": "<id>", "now": {...} or null, "ts": <ms>}` | `device` is the phone's own id: 6 to 32 letters, digits, `-` or `_`. `now` is `{"playing": bool, "title": "…", "artist": "…", "album": "…", "art": "https://…", "videoId": "<11 characters>", "position": <s>, "duration": <s>, "speed": 1.0}`: only `title` is required; `art` is used only when it starts with `https://`, `videoId` only when it is a YouTube video id; `position` and `duration` are divided by `speed` as for a browser tab. `now: null` means the music stopped: the phone's song is cleared at once. `ts` is when the phone read the position (milliseconds since 1970), used when it is within 5 s of the computer's clock. Replies `{"ok": true, "shown": bool, "why": "…", "every": 30}`. `400 {"error": "…"}` for a bad `device`, a missing `now` or one that isn't an object or `null`, a missing `title`, or a `playing` that isn't `true` or `false`. |
+
+- `every`: send the song again this many seconds later while it plays or is paused. A phone not heard from for 90
+  seconds is dropped, as a browser tab is. Send it at once when the song changes, play or pause is pressed, or the
+  position jumps.
+- `shown`: the phone's song is the one given to Discord. When it is `false`, `why` says what keeps it off: `off`
+  (Discord status is switched off), `snoozed` (hidden for a while), `paused` (paused, and "show when paused" is off),
+  `paused-timeout` or `filtered` (as in `hidden` above). `why` is `""` when it is shown, and when another song (say, a
+  YouTube Music tab on the computer that started playing later) is shown instead.
+- With Discord status switched off, nothing about the song is kept: the reply is `{"ok": true, "shown": false,
+  "why": "off", "every": 30}` and whatever the phone had reported goes.
+- When both the phone and a YouTube Music tab on the computer report, the usual choice applies: a playing song beats
+  a paused one, and between two playing ones the one where play was pressed last wins.
+- A phone is never counted as the browser extension (`extension.lastSeenAgoSec` doesn't change).
+
+## Extension channel
+
+Used only by the browser extension. From this computer these routes need no token (the extension runs outside any
+browser session); from anywhere else, including through a tunnel, they need it like every other route. Each YouTube Music tab names itself (`i` on the poll, `instance` in its state);
 with several tabs open the server follows one (the one playing) and only that tab receives commands. A command that
 times out is dropped, not run later.
 
 | Endpoint | Body | Notes |
 |---|---|---|
 | `GET /ext/poll?i=<tab>` | — | Long poll (≤ 25 s). Replies with a command `{id, type, …}`, or with no `id` when there is none; both carry `"cfg": {"remote", "discord", "refine"}`. A waiting poll is answered at once when one of those switches changes or another tab says goodbye. Each poll also tells Discord status the tab is still open (a paused tab sends nothing else). A tab that hasn't reported since the server started gets `"resend": true` once, at once, and answers by sending its whole state again. |
-| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, speed, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Discord status divides `position` and `duration` by `speed` (the playback rate, 0.25 to 4; anything else counts as 1), so its times run at the pace the song is heard. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. |
+| `POST /ext/state` | `{instance, now: {title, artist, album, art, playing, paused, buffering, position, duration, speed, videoId, ad, …}, queue, ts, …}` (or `partial: true` with only `now`) | What the tab plays. Feeds the remote, the lyrics and Discord status. `now.album` (a string or `null`) and `now.ad` (`true` while an advert plays) are new in extension 2.0. Discord status divides `position` and `duration` by `speed` (the playback rate, 0.25 to 4; anything else counts as 1), so its times run at the pace the song is heard. Replies `{"ok": true, "cfg": {...}}`. The isolated script adds `ext`, the extension's version. An `instance` starting with `phone:` (those names belong to phones) is refused with `400`. |
 | `POST /ext/result` | `{id, data}` | The answer to a command. |
-| `POST /ext/bye` | `{"instance": "<tab>"}` | The tab is closing or leaving the page (sent on `pagehide`, as `text/plain`). The server forgets that tab at once, and clears its Discord card. Replies `{"ok": true}`; `400` without `instance`. |
+| `POST /ext/bye` | `{"instance": "<tab>"}` | The tab is closing or leaving the page (sent on `pagehide`, as `text/plain`). The server forgets that tab at once, and clears its Discord card. Replies `{"ok": true}`; `400` without `instance`, or with one starting with `phone:`. |
 | `GET /ext/discord` | — | For the extension's Discord status options: the same reply as `GET /api/beacon`. |
-| `POST /ext/discord/settings`, `/ext/discord/visibility`, `/ext/discord/test` | as `/api/beacon/settings`, `/visibility`, `/test` | The extension's copies of those routes (YouTube Music's origin, loopback only), with the same checks and replies. |
+| `POST /ext/discord/settings`, `/ext/discord/visibility`, `/ext/discord/test` | as `/api/beacon/settings`, `/visibility`, `/test` | The extension's copies of those routes (YouTube Music's origin; no token needed from this computer), with the same checks and replies. |
 | `GET /ext/status` | — | For the extension's toolbar button and Refine's panel: `{"app": "YTM Starcast", "version", "parts": {...all four}, "discord": {"headline", "visible", "state"}}`. `headline` uses the values above; it is `off` while `parts.discord` is off. |
 | `POST /ext/parts` | any subset of `remote`, `discord`, `refine` (booleans) | Same as `POST /api/parts`; replies `{"parts": {...}}`. The extension may not switch `audio` (`400`). |
 | `GET /ext/lyrics` | — | `/api/lyrics` for the extension's live lyrics inside YouTube Music (same parameters and answer). |
 | `GET /ext/sound` | — | The computer's sound for Refine's panel: `{"audio": true, "volume": {...}, "outputs": [...] or null, "engine": {...}, "engineLabel", "limits": {"eq_min", "eq_max"}, "capabilities": {"volume", "eq", "eq_toggle", "outputs"}}`, the same values as `/api/state` and `/api/outputs`. Only `{"audio": false}` while the "Computer audio" part is off. |
-| `POST /ext/sound/volume`, `/ext/sound/output`, `/ext/sound/output/volume`, `/ext/sound/eq` | as `/api/volume`, `/api/output`, `/api/output/volume`, `/api/eq` | The extension's copies of those routes (YouTube Music's origin, loopback only), with the same checks and replies; `409 {"error": "part_off"}` while "Computer audio" is off. From the page, the extension's script passes a change on only right after a real press, drag or key inside Refine's sound controls. |
+| `POST /ext/sound/volume`, `/ext/sound/output`, `/ext/sound/output/volume`, `/ext/sound/eq` | as `/api/volume`, `/api/output`, `/api/output/volume`, `/api/eq` | The extension's copies of those routes (YouTube Music's origin; no token needed from this computer), with the same checks and replies; `409 {"error": "part_off"}` while "Computer audio" is off. From the page, the extension's script passes a change on only right after a real press, drag or key inside Refine's sound controls. |
 
 POSTs must come from `https://music.youtube.com` (the extension's content script) or send no `Origin`; requests from the
 extension's own pages are refused, so its toolbar button goes through an open YouTube Music tab.
