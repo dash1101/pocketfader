@@ -183,15 +183,16 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             r?.sources?.forEach { src ->
+                val chosen = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id
                 FilterChip(
-                    selected = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id, shape = chipShape(if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id),
+                    selected = chosen, shape = chipShape(chosen),
                     onClick = { Settings.update { it.copy(lyricsSource = src.id) } },
                     enabled = src.found,
                     label = { Text(src.label + if (src.found && src.words) " · word-by-word" else if (src.found && src.synced) " · synced" else "") },
                 )
             }
             IconButton(onClick = ui.refresh, enabled = !ui.loading) { Icon(Icons.Filled.Refresh, "Look again") }
-            FilterChip(selected = false, onClick = { layoutOpen = true }, label = { Text("Aa  Layout") })
+            FilterChip(selected = false, shape = chipShape(false), onClick = { layoutOpen = true }, label = { Text("Aa  Layout") })
         }
         if (r != null && r.found) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -26,9 +26,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
@@ -51,7 +55,8 @@ private fun readBattery(i: Intent?): Battery? {
 }
 
 /** A battery as phones draw it now: a rounded outline on its side, filled to the charge (red when low), with a bolt
- *  while charging. */
+ *  while charging. The bolt is cut right through, so whatever lies behind (the cover's wash under the top bar, say)
+ *  shows in it rather than a fixed colour. */
 @Composable
 fun BatteryGlyph(b: Battery, color: Color, modifier: Modifier = Modifier) {
     val fill = when {
@@ -59,8 +64,8 @@ fun BatteryGlyph(b: Battery, color: Color, modifier: Modifier = Modifier) {
         b.percent <= 15 -> MaterialTheme.colorScheme.error
         else -> color
     }
-    val cut = MaterialTheme.colorScheme.surface
-    Canvas(modifier.size(width = 24.dp, height = 12.dp)) {
+    // drawn on its own layer, so clearing the bolt's pixels leaves a real hole instead of a black one
+    Canvas(modifier.size(width = 24.dp, height = 12.dp).graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)) {
         val stroke = 1.2.dp.toPx()
         val nub = 1.8.dp.toPx()
         val bodyW = size.width - nub - 1.dp.toPx()
@@ -93,7 +98,10 @@ fun BatteryGlyph(b: Battery, color: Color, modifier: Modifier = Modifier) {
                 lineTo(w * 0.52f, h * 0.42f)
                 close()
             }
-            drawPath(bolt, cut)
+            drawPath(bolt, Color.Black, blendMode = BlendMode.Clear)
+            // past the end of the charge there is nothing to cut through: the bolt is drawn there in the outline's
+            // colour instead, so it still shows on a nearly empty battery
+            clipRect(left = inset + inner * level) { drawPath(bolt, color) }
         }
     }
 }

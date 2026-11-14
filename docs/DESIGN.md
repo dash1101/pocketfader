@@ -45,7 +45,12 @@ arriving. The Android app uses Compose's own springs for the same moments.
 | medium | 300 ms | Something moving or opening |
 | long | 450 ms | A whole screen, the cover growing or shrinking |
 
-Slow, endless movements (the breathing glow, the wavy progress bar, the turning round cover) have their own timings.
+**Arriving rows:** when a list's content arrives (a tab opens, a page or results load), the rows in view glide in from the
+right one after another, 26 ms apart, along Material's emphasized curve (`cubic-bezier(.05, .7, .1, 1)`, about half a
+second). Rows scrolled into view later just appear. Refine does this for Up next, the Android app for its lists.
+
+Slow, endless movements (the breathing glow, the wavy progress bar, the turning round cover, the Halo and Orbit
+visualizers) have their own timings.
 They stop with "Reduce animations" in the Android app, and with the system's reduced-motion setting in Refine and for
 the web app's wavy bar.
 
@@ -57,13 +62,22 @@ instead of size.
 ## Shapes with a meaning
 
 - **Play button:** round while music plays, a soft square (30 % corners) while it is paused.
+- **Round buttons:** round at rest; a squircle while pressed, and on a tonal squircle while they are on (shuffle, loop).
+- **Tabs:** one pill-shaped bar, the chosen tab on a tonal pill that slides to it. A tab that can't open for what plays
+  (Comments when they are turned off) stays in its place, crossed out.
 - **Chips:** softly squared at rest, a pill once chosen.
 - **The big cover:** rounded by default; the other cover shapes (soft, round, cut) are a setting. The light behind it
   follows the cover's outline, whatever the shape.
 
 ## Colour
 
-Violet is the brand colour. Filled accents use `#8b5cf6`; on a dark background the bright accent tone is `#b69cff`. Dark
+**Album colours** (the default in all three): the colours come from the cover of what plays. Its most vivid hue (in
+10-degree bins, each pixel weighted by how colourful and bright it is) gives one set of tones: page `hsl(h 14% 7%)`,
+cards and bars 10 to 21 %, the accent `hsl(h 78% 76%)` with text on it at 15 %, the tonal container `hsl(h 42% 27%)` with
+text on it at 90 %. A grey cover gives nearly neutral tones. The Android app makes light and true-black versions of the
+same hue and keeps every text colour readable on them (checked in its tests).
+
+Violet is the brand colour, used where no cover is involved. Filled accents use `#8b5cf6`; on a dark background the bright accent tone is `#b69cff`. Dark
 surfaces step up from near black (`#0a0a0c` page, `#131318` panel, `#1a1a21` card). The web app's themes and the Android
 app's dynamic colours replace these values, never the scale above.
 

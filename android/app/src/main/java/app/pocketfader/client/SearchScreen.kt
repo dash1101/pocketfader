@@ -9,8 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,30 +20,28 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,10 +54,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,9 @@ private object SearchMemory {
 private val FILTERS: List<Pair<String, String>> = listOf(
     "" to "All", "songs" to "Songs", "artists" to "Artists", "albums" to "Albums", "playlists" to "Playlists",
 )
+
+/** The library tabs under the search box. */
+private val TABS = listOf("For you", "Playlists", "On this phone")
 
 private fun resultKey(it: SearchItem): String = (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind
 
@@ -139,6 +143,7 @@ private suspend fun searchFor(q: String, filter: String, ytm: Boolean): List<Sea
  * playlists, and what's on this phone (downloads and music files). Without the computer's YouTube Music the
  * recommendations are made on the phone and the playlists come from the last sync.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)   // the chip and text field colour defaults
 @Composable
 fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     var query by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(SearchMemory.query)) }
@@ -154,6 +159,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     val savedIds = remember(saved) { saved.mapTo(HashSet()) { it.videoId } }
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
+    val scheme = MaterialTheme.colorScheme
     // opening an album or artist replaces this screen; coming back, the results are where you left them
     val resultsState = rememberLazyListState(SearchMemory.index, SearchMemory.offset)
     DisposableEffect(resultsState) {
@@ -211,6 +217,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     }
 
     Column(modifier.fillMaxSize()) {
+        // Refine's search box: a pill on a tonal surface, with no outline until it is in use
         OutlinedTextField(
             value = query,
             onValueChange = { query = it; if (it.text.isEmpty() && searched) clear() },
@@ -219,27 +226,42 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
             placeholder = { Text("Search YouTube Music") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             trailingIcon = {
-                if (query.text.isNotEmpty() || searched) IconButton(onClick = { clear() }) { Icon(Icons.Filled.Close, "Clear") }
+                if (query.text.isNotEmpty() || searched) {
+                    ShapeIconButton(Icons.Filled.Close, "Clear", onClick = { clear() }, sizeDp = 44, iconDp = 22, tint = scheme.onSurfaceVariant)
+                }
             },
             singleLine = true,
-            shape = PfShape.Xl,
+            shape = PfShape.Full,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = scheme.surfaceContainerHigh,
+                unfocusedContainerColor = scheme.surfaceContainerHigh,
+                focusedBorderColor = scheme.primary,
+                unfocusedBorderColor = Color.Transparent,
+            ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { doSearch() }),
         )
 
         val typing = focused && query.text.isNotBlank() && !(searched && query.text.trim() == SearchMemory.query)
         val filter = SearchMemory.filter
-        // what to look for: shown once something was searched, and not over the suggestions while typing
+        // what to look for: shown once something was searched, and not over the suggestions while typing. Five kinds
+        // don't fit a pill bar, so they stay a row of chips that scrolls, the chosen one a tonal pill
         if (SearchMemory.query.isNotEmpty() && !typing && !(focused && query.text.isBlank())) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 for ((id, label) in FILTERS) {
+                    val chosen = filter == id
                     FilterChip(
-                        selected = filter == id, shape = chipShape(filter == id),
+                        selected = chosen, shape = chipShape(chosen),
                         onClick = { if (filter != id && !busy) { SearchMemory.filter = id; doSearch(SearchMemory.query) } },
                         label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = scheme.surfaceContainerHigh, labelColor = scheme.onSurfaceVariant,
+                            selectedContainerColor = scheme.primaryContainer, selectedLabelColor = scheme.onPrimaryContainer,
+                        ),
+                        border = null,
                     )
                 }
             }
@@ -250,22 +272,32 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
         if (searched && results.isNotEmpty() && !typing) {
             // (its room is always there, so the list doesn't hop when the bar comes and goes)
             Box(Modifier.fillMaxWidth().height(4.dp).padding(horizontal = 16.dp)) {
-                if (refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (refreshing) LinearProgressIndicator(Modifier.fillMaxWidth(), strokeCap = StrokeCap.Round)
             }
         }
         when {
             busy && !refreshing -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            typing && suggestions.isNotEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
-                items(suggestions, key = { "s-$it" }) { sug -> TextRow(sug, Icons.Filled.Search, onClick = { doSearch(sug) }) }
-            }
-            focused && query.text.isBlank() && recent.isNotEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
-                item(key = "recent-h") {
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Recent searches", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        androidx.compose.material3.TextButton(onClick = { Library.forgetSearches() }) { Text("Clear") }
-                    }
+            typing && suggestions.isNotEmpty() -> {
+                // the first suggestions glide in; later ones, as you go on typing, just appear
+                val arrival = rememberPageArrival()
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(suggestions, key = { "s-$it" }) { sug -> TextRow(sug, Icons.Filled.Search, onClick = { doSearch(sug) }, arrival = arrival) }
                 }
-                items(recent, key = { "r-$it" }) { q -> TextRow(q, Icons.Filled.History, onClick = { doSearch(q) }) }
+            }
+            focused && query.text.isBlank() && recent.isNotEmpty() -> {
+                val arrival = rememberPageArrival()
+                LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "recent-h") {
+                        Row(
+                            Modifier.fillMaxWidth().arrive(arrival).padding(start = 16.dp, end = 8.dp, top = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            PageSmallLabel("Recent searches", Modifier.weight(1f))
+                            androidx.compose.material3.TextButton(onClick = { Library.forgetSearches() }) { Text("Clear") }
+                        }
+                    }
+                    items(recent, key = { "r-$it" }) { q -> TextRow(q, Icons.Filled.History, onClick = { doSearch(q) }, arrival = arrival) }
+                }
             }
             error != null -> Note(error ?: "")
             searched && results.isEmpty() -> Note(
@@ -277,21 +309,31 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                     else -> "No results."
                 }
             )
-            searched -> LazyColumn(Modifier.fillMaxSize().edgeFade(resultsState), state = resultsState) {
-                items(results, key = { resultKey(it) }) { item -> ResultRow(item, item.videoId in savedIds) }
+            searched -> {
+                // the rows glide in one after another each time an answer arrives (another search, another kind)
+                val arrival = rememberPageArrival(results)
+                val nowId = s.now?.videoId
+                val nowPlaying = s.now?.playing == true
+                LazyColumn(Modifier.fillMaxSize().edgeFade(resultsState), state = resultsState) {
+                    items(results, key = { resultKey(it) }) { item ->
+                        ResultRow(
+                            item, item.videoId in savedIds, arrival,
+                            current = item.videoId != null && item.videoId == nowId, playing = nowPlaying,
+                        )
+                    }
+                }
             }
             else -> {
-                TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-                    Tab(selected = tab == 0, onClick = { SearchMemory.tab = 0 }, text = { Text("For you") })
-                    Tab(selected = tab == 1, onClick = { SearchMemory.tab = 1 }, text = { Text("Playlists") })
-                    Tab(selected = tab == 2, onClick = { SearchMemory.tab = 2 }, text = { Text("On this phone") })
-                }
+                PillTabs(
+                    TABS, tab, onSelect = { SearchMemory.tab = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                )
                 when (tab) {
                     0 -> Column(Modifier.fillMaxSize()) {
-                        FilledTonalButton(
-                            onClick = { Remote.lucky() },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                        ) { Text("🎲  I'm feeling lucky") }
+                        PageHeaderTonal(
+                            Icons.Filled.Casino, "I'm feeling lucky", onClick = { Remote.lucky() },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
                         // your account's home page through the computer; otherwise the phone's own picks
                         if (s.ytm) HomeTab(onOpen = { Detail.open(it) }) else ForYouTab(s, onOpen = { Detail.open(it) })
                     }
@@ -303,10 +345,13 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
     }
 }
 
+/** A suggestion or a recent search: a line with an icon, on Refine's rounded highlight. */
 @Composable
-private fun TextRow(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun TextRow(text: String, icon: ImageVector, onClick: () -> Unit, arrival: Arrival? = null) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().arrive(arrival)
+            .padding(horizontal = 8.dp).clip(PfShape.Sm).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -332,7 +377,7 @@ private fun ForYouTab(s: RemoteState, onOpen: (SearchItem) -> Unit) {
                 Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (busy) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
-            else IconButton(onClick = { Recommend.refresh() }) { Icon(Icons.Filled.Refresh, "Refresh recommendations") }
+            else ShapeIconButton(Icons.Filled.Refresh, "Refresh recommendations", onClick = { Recommend.refresh() }, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         when {
             shelves == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -359,6 +404,9 @@ private fun SyncedPlaylistsTab(s: RemoteState, onOpen: (SearchItem) -> Unit) {
         l.addAll(lists.map { it.toSearchItem() })
         l
     }
+    // the covers glide in when the tab opens (and again after a sync). Keyed on the sync, not on the cards: a like
+    // changes the "Liked music" card's count, and that card shouldn't glide in again each time
+    val arrival = rememberPageArrival(at)
     Column(Modifier.fillMaxSize()) {
         Text(
             "Synced " + ago(at) + if (s.online && !s.ytm) ". Open YouTube Music on the computer to sync again." else ".",
@@ -370,20 +418,16 @@ private fun SyncedPlaylistsTab(s: RemoteState, onOpen: (SearchItem) -> Unit) {
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp),
             state = gridState,
             modifier = Modifier.fillMaxSize().edgeFade({ gridState.canScrollBackward }, { gridState.canScrollForward }),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards.size, key = { cards[it].playlistId ?: cards[it].title }) { i ->
                 val p = cards[i]
-                Column(Modifier.clickable { onOpen(p) }) {
-                    Thumb(p.thumb, 170, 18, Modifier.fillMaxWidth().aspectRatio(1f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(p.title, Modifier.weight(1f).padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (p.playlistId in keep) Icon(Icons.Filled.DownloadDone, "Kept on this phone", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    Text(p.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                PageCoverTile(
+                    p.thumb, p.title, p.subtitle, onClick = { onOpen(p) }, arrival = arrival, sizeDp = 170,
+                    mark = if (p.playlistId in keep) Icons.Filled.DownloadDone else null, markDescription = "Kept on this phone",
+                )
             }
         }
     }
@@ -450,15 +494,20 @@ private fun DeviceTab() {
     val saved = remember(downloads) { downloads.sortedByDescending { it.addedAt } }
     val savedItems = remember(saved) { saved.map { it.toLocal() } }
     val state = rememberLazyListState()
+    // what is here glides in when the tab opens; the music files, read a moment later, glide in when they are there
+    val arrival = rememberPageArrival()
+    val filesArrival = rememberPageArrival(files != null)
+    val playingSong by rememberPlayingSong()
     LazyColumn(Modifier.fillMaxSize().edgeFade(state), state = state) {
-        item(key = "offline-lists") { OfflineListsRow(onOpen = { openList = it }) }
+        item(key = "offline-lists") { OfflineListsRow(onOpen = { openList = it }, arrival = arrival) }
         item(key = "dl-h") {
-            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
-                Text("Downloaded · ${saved.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().arrive(arrival).padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp)) {
+                PageSectionTitle("Downloaded · ${saved.size}")
                 Text(
                     if (saved.isEmpty()) "Save songs from search, a playlist or the queue (⋮ → Download) to play them with no connection."
                     else "Plays with no connection, lyrics included. " + formatBytes(saved.sumOf { it.size }) +
                         Downloads.freeBytes().let { f -> if (f >= 0) " · " + formatBytes(f) + " free on the phone" else "" },
+                    Modifier.padding(top = 2.dp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 val free = Downloads.freeBytes()
@@ -468,60 +517,55 @@ private fun DeviceTab() {
                         Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
                     )
                 }
-                if (saved.isNotEmpty()) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { playOnPhone(savedItems, 0); AppNav.showPlayer() }) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play") }
-                    FilledTonalButton(onClick = { playOnPhone(savedItems, savedItems.indices.random(), shuffle = true); AppNav.showPlayer() }) { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle") }
+                if (saved.isNotEmpty()) Row(
+                    Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PageHeaderPlay(onClick = { playOnPhone(savedItems, 0); AppNav.showPlayer() }, description = "Play downloads")
+                    PageHeaderTonal(
+                        Icons.Filled.Shuffle, "Shuffle",
+                        onClick = { playOnPhone(savedItems, savedItems.indices.random(), shuffle = true); AppNav.showPlayer() },
+                    )
                 }
             }
         }
         if (active.isNotEmpty()) item(key = "dl-active") {
-            DownloadsInProgress(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            DownloadsInProgress(Modifier.arrive(arrival).padding(horizontal = 16.dp, vertical = 8.dp))
         }
         itemsIndexed(saved, key = { _, d -> "dl-" + d.videoId }) { i, d ->
-            DeviceRow(d.art, d.title, d.artist, onClick = { playOnPhone(savedItems, i) }) {
-                IconButton(onClick = { adding = d.toLocal().copy(uri = null) }) {
-                    Icon(Icons.Filled.PlaylistAdd, "Add to an offline playlist")
-                }
-                IconButton(onClick = { Downloads.delete(d.videoId) }) { Icon(Icons.Filled.Delete, "Remove download") }
+            PageSongRow(
+                d.art, d.title, d.artist, onClick = { playOnPhone(savedItems, i) }, arrival = arrival,
+                current = d.videoId == playingSong.first, playing = playingSong.second,
+            ) {
+                val tint = LocalContentColor.current
+                ShapeIconButton(Icons.Filled.PlaylistAdd, "Add to an offline playlist", onClick = { adding = d.toLocal().copy(uri = null) }, tint = tint)
+                ShapeIconButton(Icons.Filled.Delete, "Remove download", onClick = { Downloads.delete(d.videoId) }, tint = tint)
             }
         }
         item(key = "files-h") {
-            Text(
-                "Music on this phone", Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
-                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+            PageSectionTitle(
+                "Music on this phone", Modifier.arrive(arrival).padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 6.dp),
             )
         }
         val f = files
         when {
             !granted -> item(key = "files-ask") {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Column(Modifier.fillMaxWidth().arrive(arrival).padding(16.dp)) {
                     Text("YTM Starcast needs your permission to see the music files on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FilledTonalButton(onClick = { ask.launch(DeviceMusic.permission) }, modifier = Modifier.padding(top = 8.dp)) { Text("Allow access to music") }
+                    PageHeaderTonal(null, "Allow access to music", onClick = { ask.launch(DeviceMusic.permission) }, modifier = Modifier.padding(top = 10.dp))
                 }
             }
             f == null -> item(key = "files-load") { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             f.isEmpty() -> item(key = "files-none") { Note("No music files found on this phone.") }
             else -> itemsIndexed(f, key = { _, it -> "f-" + it.key }) { i, it ->
-                DeviceRow(it.art, it.title, listOf(it.artist, it.album).filter { s -> s.isNotBlank() }.joinToString(" · "), onClick = { playOnPhone(f, i) }) {}
+                // a file playing on this phone is known by its address (the key), as it has no YouTube id
+                PageSongRow(
+                    it.art, it.title, listOf(it.artist, it.album).filter { s -> s.isNotBlank() }.joinToString(" · "),
+                    onClick = { playOnPhone(f, i) }, arrival = filesArrival,
+                    current = it.key == playingSong.first, playing = playingSong.second,
+                )
             }
         }
         item(key = "end") { androidx.compose.foundation.layout.Spacer(Modifier.padding(24.dp)) }
-    }
-}
-
-@Composable
-private fun DeviceRow(art: String?, title: String, sub: String, onClick: () -> Unit, trailing: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Thumb(art, 48, 10)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        trailing()
     }
 }
 
@@ -531,36 +575,23 @@ fun formatBytes(b: Long): String = when {
     else -> "${b / 1024} KB"
 }
 
+/** A search result: a song plays (on the phone its radio follows, as in YouTube Music); an artist, album or playlist opens its page. */
 @Composable
-private fun ResultRow(item: SearchItem, downloaded: Boolean) {
+private fun ResultRow(item: SearchItem, downloaded: Boolean, arrival: Arrival?, current: Boolean, playing: Boolean) {
     val opens = item.videoId != null || item.playlistId != null || item.browseId != null
-    Row(
-        Modifier
-            .fillMaxWidth()
-            // a song plays (on the phone its radio follows, as in YouTube Music); an artist, album or playlist opens its page
-            .clickable(enabled = opens) { activate(item) { Detail.open(it) } }
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    PageSongRow(
+        item.thumb, item.title, item.subtitle.ifBlank { item.kind.replaceFirstChar { it.uppercase() } },
+        onClick = { activate(item) { Detail.open(it) } }, enabled = opens, arrival = arrival,
+        round = item.kind == "artist", thumbDp = 52, current = current, playing = playing,
     ) {
-        Thumb(item.thumb, 52, if (item.kind == "artist") 26 else 10)
-        Column(Modifier.weight(1f)) {
-            Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                item.subtitle.ifBlank { item.kind.replaceFirstChar { it.uppercase() } },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
         if (downloaded) {
             Icon(Icons.Filled.DownloadDone, "Downloaded", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         }
+        val pl = item.playlistId
         if (item.videoId != null && item.kind == "song") {
             SongMenuButton(item)
-        } else if (item.playlistId != null) {
-            IconButton(onClick = { Remote.startPlaylist(item.playlistId, false) }) { Icon(Icons.Filled.PlayArrow, "Play") }
+        } else if (pl != null) {
+            ShapeIconButton(Icons.Filled.PlayArrow, "Play", onClick = { Remote.startPlaylist(pl, false) }, tint = LocalContentColor.current)
         }
     }
 }

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.text.HtmlCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -157,6 +158,9 @@ class CommentsUi(val videoId: String?) {
     /** There is something to read: the tab is only shown then. */
     val hasComments: Boolean get() = loaded && !disabled && items.isNotEmpty()
 
+    /** The song was looked up and has its comments turned off (its tab is shown crossed out). */
+    val turnedOff: Boolean get() = loaded && disabled
+
     suspend fun loadFirst() {
         val id = videoId?.takeIf { isYtId(it) } ?: return
         if (loading) return
@@ -169,6 +173,10 @@ class CommentsUi(val videoId: String?) {
             disabled = b.disabled
             count = b.count
             loaded = true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // the screen went away or moved on: not an error to show, and a later look can start again
+            loading = false
+            throw e
         } catch (e: Exception) {
             error = Comments.friendly(e)
         }
@@ -185,6 +193,9 @@ class CommentsUi(val videoId: String?) {
             val seen = items.map { it.id }.toHashSet()
             items = items + b.items.filter { it.id !in seen }
             next = b.next
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            loading = false
+            throw e
         } catch (e: Exception) {
             error = Comments.friendly(e)
         }
@@ -252,8 +263,9 @@ private fun Spinner() {
     }
 }
 
-/** The comments as rows of a list (the phone's player page, below its tabs). */
-fun LazyListScope.commentItems(ui: CommentsUi, scope: CoroutineScope) {
+/** The comments as rows of a list (the phone's player page, below its tabs). With an [arrival], the rows drawn when it
+ *  starts glide in one after another. */
+fun LazyListScope.commentItems(ui: CommentsUi, scope: CoroutineScope, arrival: Arrival? = null) {
     when {
         !ui.usable -> item(key = "c-none") { CommentsNote("Comments show for songs and videos from YouTube Music, not for files on this phone.") }
         ui.disabled -> item(key = "c-off") { CommentsNote("Comments are turned off for this one.") }
@@ -263,10 +275,10 @@ fun LazyListScope.commentItems(ui: CommentsUi, scope: CoroutineScope) {
                     "%,d comments".format(ui.count),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                    modifier = Modifier.arrive(arrival).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
-            items(ui.items, key = { "c-" + it.id }) { c -> CommentRow(c, ui, scope) }
+            items(ui.items, key = { "c-" + it.id }) { c -> CommentRow(c, ui, scope, Modifier.arrive(arrival)) }
             val err = ui.error
             when {
                 ui.loading -> item(key = "c-loading") { Spinner() }
@@ -284,7 +296,9 @@ fun LazyListScope.commentItems(ui: CommentsUi, scope: CoroutineScope) {
                     LaunchedEffect(ui.next) { ui.loadMore() }
                     Spinner()
                 }
-                ui.loaded && ui.items.isEmpty() -> item(key = "c-empty") { CommentsNote("No comments yet.") }
+                // the first page is looked up a moment after the song starts (or at once, when the tab is opened)
+                !ui.loaded -> item(key = "c-loading") { Spinner() }
+                ui.items.isEmpty() -> item(key = "c-empty") { CommentsNote("No comments yet.") }
             }
         }
     }
@@ -353,9 +367,9 @@ private fun CommentBody(c: Comment, reply: Boolean, footer: @Composable () -> Un
 }
 
 @Composable
-private fun CommentRow(c: Comment, ui: CommentsUi, scope: CoroutineScope) {
+private fun CommentRow(c: Comment, ui: CommentsUi, scope: CoroutineScope, modifier: Modifier = Modifier) {
     val r = ui.replies[c.id]
-    Column {
+    Column(modifier) {
         CommentBody(c, reply = false) {
             if (c.replyCount > 0 && c.replies != null) {
                 TextButton(onClick = { ui.toggleReplies(c, scope) }, modifier = Modifier.height(36.dp)) {
@@ -384,8 +398,11 @@ private fun CommentRow(c: Comment, ui: CommentsUi, scope: CoroutineScope) {
 fun CommentsPane(ui: CommentsUi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val state = rememberLazyListState()
+    val transitions = Settings.prefs.collectAsStateWithLifecycle().value.transitions
+    // the rows glide in when the pane opens and when a song's comments arrive
+    val arrival = rememberArrival(ui, ui.loaded).takeIf { transitions }
     LazyColumn(modifier.fillMaxSize().edgeFade(state), state = state) {
-        commentItems(ui, scope)
+        commentItems(ui, scope, arrival)
         item(key = "c-pad") { Spacer(Modifier.height(24.dp)) }
     }
 }

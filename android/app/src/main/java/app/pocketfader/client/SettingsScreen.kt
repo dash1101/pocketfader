@@ -56,9 +56,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -98,7 +105,12 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
     } else if (current == "sound") {
         MixerScreen(s, Modifier.weight(1f).fillMaxWidth())
     } else {
-    CompositionLocalProvider(LocalPageTitle provides (allCats.firstOrNull { it.key == current }?.title ?: "")) {
+    // the page's rows glide in one after another as it opens (not when screen transitions are switched off)
+    val arrival = rememberArrival(current)
+    CompositionLocalProvider(
+        LocalPageTitle provides (allCats.firstOrNull { it.key == current }?.title ?: ""),
+        LocalSettingsArrival provides (if (p.transitions) arrival else null),
+    ) {
     val pageScroll = rememberScrollState()
     Column(
         Modifier.weight(1f).edgeFade(pageScroll).verticalScroll(pageScroll).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -116,11 +128,11 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "YouTube Music extension",
                 if (!s.remoteOn) "Not used: the YouTube Music remote is switched off" else if (s.ytm) "Connected" else "Not connected",
             )
-            FilledTonalButton(onClick = onEditConnection, modifier = Modifier.padding(top = 4.dp)) { Text("Edit connection") }
-            if (s.online && !s.ytm) OutlinedButton(onClick = { page = "extension" }) { Text("Set up the browser extension") }
+            FilledTonalButton(onClick = onEditConnection, modifier = Modifier.pageGlide().padding(top = 4.dp)) { Text("Edit connection") }
+            if (s.online && !s.ytm) OutlinedButton(onClick = { page = "extension" }, modifier = Modifier.pageGlide()) { Text("Set up the browser extension") }
         }
 
-        if (page == "extension") Section("Browser extension") { ExtensionSetup(s) }
+        if (page == "extension") Section("Browser extension") { ExtensionSetup(s, LocalSettingsArrival.current) }
 
         if (page == "parts") Section("Parts") {
             // fresh from the computer each time the page opens (another phone or the browser may have changed them)
@@ -129,6 +141,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             if (parts == null) {
                 Text(
                     "This computer's YTM Starcast has no parts to switch on or off yet. Update YTM Starcast on the computer.",
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
@@ -136,6 +149,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Text(
                     "Switch off the parts you don't use. They are switched on the computer, so the change counts for every phone " +
                         "and browser that uses it.",
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Toggle(
@@ -162,10 +176,22 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "Theme", "Black turns pixels fully off on OLED screens.",
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark", "black" to "Black"), p.theme,
             ) { v -> Settings.update { it.copy(theme = v) } }
+            Toggle(
+                "Album colours",
+                "The whole app takes the colours of the cover that plays, as Refine does in YouTube Music." +
+                    (if (p.accent != 0) " The accent colour chosen below replaces them while it's set." else ""),
+                p.albumColors,
+            ) { v -> Settings.update { it.copy(albumColors = v) } }
             if (Build.VERSION.SDK_INT >= 31) {
-                Toggle("Material You colours", "Use colours from your wallpaper (when the accent colour below is on Auto).", p.dynamicColor) { v -> Settings.update { it.copy(dynamicColor = v) } }
+                // the theme takes Album colours first, so the wallpaper's colours would change nothing while it is on
+                val albumOn = p.albumColors && p.accent == 0
+                Toggle(
+                    "Material You colours",
+                    if (albumOn) "Not used while Album colours is on." else "Use colours from your wallpaper (when the accent colour below is on Auto).",
+                    p.dynamicColor, enabled = !albumOn,
+                ) { v -> Settings.update { it.copy(dynamicColor = v) } }
             }
-            AccentPicker(p)
+            AccentPicker(p, Modifier.pageGlide())
             Toggle("Cover colours in the background", "Tint the Now playing screen with the cover's colour.", p.coverWash) { v -> Settings.update { it.copy(coverWash = v) } }
             Toggle("Lyric highlight follows the cover", "Off: the line being sung uses your accent colour.", p.coverHighlight) { v -> Settings.update { it.copy(coverHighlight = v) } }
             Choice(
@@ -180,9 +206,16 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
         if (page == "effects") Section("Effects") {
             Choice(
-                "Cover glow", "A halo of the cover's colour around the album art. Extreme is the brightest.",
+                "Cover glow", "How bright the cover's colours shine around the album art. Extreme is the brightest.",
                 listOf("off" to "Off", "soft" to "Soft", "strong" to "Strong", "extreme" to "Extreme"), p.coverGlow,
             ) { v -> Settings.update { it.copy(coverGlow = v) } }
+            Choice(
+                "Cover visualizer",
+                "Glow: the cover's colours shine softly around it. Halo: the blurred cover turns slowly around it. " +
+                    "Orbit: a ring of the album's colours runs round its edge." +
+                    (if (p.coverGlow == "off") " Turn on Cover glow to use one." else ""),
+                listOf("glow" to "Glow", "halo" to "Halo", "orbit" to "Orbit"), p.coverViz, enabled = p.coverGlow != "off",
+            ) { v -> Settings.update { it.copy(coverViz = v) } }
             Choice(
                 "Cover shape", "Circle spins slowly like a record while music plays.",
                 listOf("rounded" to "Rounded", "soft" to "Soft", "circle" to "Circle", "cut" to "Cut corners"), p.coverShape,
@@ -191,9 +224,13 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Settings.update { it.copy(glowUi = v) }
             }
             Toggle("Wavy seek bar", "The played part of the bar ripples while music plays.", p.wavyBar) { v -> Settings.update { it.copy(wavyBar = v) } }
-            Toggle("Screen transitions", "A short fade and slide between Playing, Search and Settings.", p.transitions) { v -> Settings.update { it.copy(transitions = v) } }
+            Toggle(
+                "Screen transitions", "A short fade and slide between Playing, Search and Settings, and settings that glide in as a page opens.",
+                p.transitions,
+            ) { v -> Settings.update { it.copy(transitions = v) } }
             Text(
                 "These are light drawing effects. “Reduce animations” (under Performance) stops all motion and keeps the rest.",
+                modifier = Modifier.pageGlide(),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -248,17 +285,6 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 ) { v -> Settings.update { it.copy(volumeStep = v.toInt()) } }
             }
             Toggle("Haptic feedback", "A small buzz on the main buttons.", p.haptics) { v -> Settings.update { it.copy(haptics = v) } }
-            Toggle(
-                "Keep playing when the app is swiped away",
-                "For music playing on this device. When off, swiping the app away stops the music; the queue and your place in the song are kept.",
-                p.keepPlayingClosed,
-            ) { v -> Settings.update { it.copy(keepPlayingClosed = v) } }
-            Toggle(
-                "Pause when headphones disconnect",
-                "For music playing on this device: pauses when the sound would move to the phone's speaker, as when headphones " +
-                    "or an AUX cable are unplugged, or a Bluetooth or USB speaker disconnects.",
-                p.pauseOnUnplug,
-            ) { v -> Settings.update { it.copy(pauseOnUnplug = v) }; LocalPlayer.setPauseOnUnplug(v) }
             // other players on the computer (Spotify, a video in another tab, VLC...)
             var pauseOthers by remember { mutableStateOf<Boolean?>(null) }
             androidx.compose.runtime.LaunchedEffect(s.online) {
@@ -273,7 +299,39 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     on,
                 ) { v -> pauseOthers = v; Remote.setServerPref("pauseOthers", v) }
             }
-            OutlinedButton(onClick = { Remote.pauseOthers() }, enabled = s.online) { Text("Pause other players now") }
+            OutlinedButton(onClick = { Remote.pauseOthers() }, enabled = s.online, modifier = Modifier.pageGlide()) { Text("Pause other players now") }
+        }
+
+        // what only matters when the phone itself plays the music: how a changed speed sounds, and when it stops
+        if (page == "controls") Section("Music on this phone") {
+            Toggle(
+                "Keep the pitch when the speed changes",
+                "Off: a slower song also sounds lower and a faster one higher, as on a record.",
+                p.keepPitch,
+            ) { v -> Settings.update { it.copy(keepPitch = v) } }
+            Text(
+                "The speed is set from the player while music plays on this phone" +
+                    (if (p.phoneSpeed != 100) " (now ${speedLabel(p.phoneSpeed)})." else "."),
+                modifier = Modifier.pageGlide(),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // the phone's player follows this setting as it changes, so this works whether or not music is playing
+            if (p.phoneSpeed != 100) {
+                OutlinedButton(onClick = { Settings.update { it.copy(phoneSpeed = 100) } }, modifier = Modifier.pageGlide()) {
+                    Text("Back to normal speed")
+                }
+            }
+            Toggle(
+                "Keep playing when the app is swiped away",
+                "When off, swiping the app away stops the music; the queue and your place in the song are kept.",
+                p.keepPlayingClosed,
+            ) { v -> Settings.update { it.copy(keepPlayingClosed = v) } }
+            Toggle(
+                "Pause when headphones disconnect",
+                "Pauses when the sound would move to the phone's speaker, as when headphones or an AUX cable are unplugged, " +
+                    "or a Bluetooth or USB speaker disconnects.",
+                p.pauseOnUnplug,
+            ) { v -> Settings.update { it.copy(pauseOnUnplug = v) }; LocalPlayer.setPauseOnUnplug(v) }
         }
 
         if (page == "lyrics") Section("Lyrics") {
@@ -287,7 +345,8 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "Sync", "Shift the lyrics if they run early or late on this device. You can also nudge them while viewing lyrics.",
                 listOf("-500" to "−0.5 s", "-200" to "−0.2 s", "0" to "On time", "200" to "+0.2 s", "500" to "+0.5 s"), p.lyricsOffsetMs.toString(),
             ) { v -> Settings.update { it.copy(lyricsOffsetMs = v.toInt()) } }
-            LyricsLayoutControls()
+            // one block, so its titles stay close to their chips and it glides in as one row
+            Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(6.dp)) { LyricsLayoutControls() }
             Choice(
                 "Preferred source", "Used first when it has the song. You can also switch while viewing lyrics.",
                 listOf("auto" to "Automatic", "kugou" to "KuGou", "lrclib" to "LRCLIB", "netease" to "NetEase", "ytm" to "YouTube Music"), p.lyricsSource,
@@ -307,16 +366,18 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
 
         if (page == "discord") {
             if (s.canBeacon) {
-                BeaconCard(s.online)
+                BeaconCard(s.online, Modifier.pageGlide())
             } else {
                 Text(
                     "This computer's YTM Starcast doesn't support Discord status yet. Update YTM Starcast on the computer.",
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(
                 "Discord status shows the song playing in YouTube Music on your Discord profile. Here you can see whether it's " +
                     "working, turn it on or off, hide it for a while and change what it shows. Discord has to be open on the computer.",
+                modifier = Modifier.pageGlide().padding(horizontal = 8.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             // only the song playing goes to the computer this app is connected to; with no computer there is nothing to show it
@@ -349,9 +410,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             Text(
                 "Downloads keep the song, its cover and its lyrics, and play with no connection. Download from a song's ⋮ menu, " +
                     "a playlist, the queue or the player. They're stored in the app's own folder and removed if you uninstall it.",
+                modifier = Modifier.pageGlide(),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = { confirm = true }, enabled = saved.isNotEmpty()) { Text("Delete all downloads") }
+            OutlinedButton(onClick = { confirm = true }, enabled = saved.isNotEmpty(), modifier = Modifier.pageGlide()) { Text("Delete all downloads") }
             if (confirm) ConfirmDialog("Delete all downloads?", "${saved.size} songs will be removed from this phone.", "Delete",
                 onDismiss = { confirm = false }) { confirm = false; Downloads.deleteAll() }
         }
@@ -371,16 +433,17 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Info("Synced from your account", if (at == 0L) "Not yet" else "${ago(at).replaceFirstChar { it.uppercase() }} · ${lists.size} playlists · ${liked.size} liked songs")
                 val waiting = Library.pendingCount
                 if (waiting > 0) Info("Waiting to be sent", "$waiting change" + (if (waiting == 1) "" else "s") + " made without the account (likes, songs added to playlists)")
-                status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                status?.let { Text(it, Modifier.pageGlide(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                 if (status == null) problem?.let { Info("The last automatic sync stopped", it) }
-                FilledTonalButton(onClick = { Library.sync() }, enabled = s.ytm && status == null) {
+                FilledTonalButton(onClick = { Library.sync() }, enabled = s.ytm && status == null, modifier = Modifier.pageGlide()) {
                     Text(if (status != null) "Syncing…" else "Sync now")
                 }
                 Text(
                     "Your playlists, liked songs and YouTube Music home page are copied to this phone while YouTube Music is open on " +
                         "the computer, so they're here when it isn't: on the go, with no computer at all, or with no connection " +
                         "(for downloaded songs). Likes and playlist additions made in the meantime are sent at the next sync." +
-                        if (!s.ytm) " Open YouTube Music on the computer to sync." else "",
+                        (if (!s.ytm) " Open YouTube Music on the computer to sync." else ""),
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Toggle("Sync automatically", "Each time this phone pairs with or connects to a computer with YouTube Music open, and every few hours while it stays connected.", p.autoSync) { v ->
@@ -446,7 +509,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     "Downloaded automatically",
                     "${autoNow.size} songs · ${formatBytes(autoNow.sumOf { it.size })}" + if (plan.first > 0) " (the rules want ${plan.first}, about ${formatBytes(plan.second)})" else "",
                 )
-                OutlinedButton(onClick = { AutoDownload.soon(); Remote.notify("Checking for songs to download…") }) { Text("Download now") }
+                OutlinedButton(onClick = { AutoDownload.soon(); Remote.notify("Checking for songs to download…") }, modifier = Modifier.pageGlide()) { Text("Download now") }
             }
             Section("Recommendations") {
                 Info("Listening history", "${history.size} plays remembered on this phone")
@@ -454,9 +517,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                     "When YouTube Music on the computer isn't connected, “For you”, autoplay and “I'm feeling lucky” are worked out on " +
                         "this phone from what you play (here and on the computer), skip and like, using YouTube Music's own song radios. " +
                         "Your listening history is kept only on this phone. Songs from it are used to ask YouTube for similar music.",
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedButton(onClick = { confirmHistory = true }, enabled = history.isNotEmpty()) { Text("Clear listening history") }
+                OutlinedButton(onClick = { confirmHistory = true }, enabled = history.isNotEmpty(), modifier = Modifier.pageGlide()) { Text("Clear listening history") }
             }
             if (confirmHistory) ConfirmDialog("Clear listening history?", "The recommendations start over from your likes and playlists.", "Clear",
                 onDismiss = { confirmHistory = false }) { confirmHistory = false; Library.clearHistory() }
@@ -468,11 +532,11 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             val newer = UpdateManager.available(ctx)
             Info("Installed", version.ifBlank { "unknown" })
             Info("Latest release", info?.latest?.ifBlank { null } ?: "Not checked yet")
-            UpdateManager.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            UpdateManager.message?.let { Text(it, Modifier.pageGlide(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (UpdateManager.needsReinstall) {
-                OutlinedButton(onClick = { UpdateManager.openReleasePage(ctx) }) { Text("Open the download page") }
+                OutlinedButton(onClick = { UpdateManager.openReleasePage(ctx) }, modifier = Modifier.pageGlide()) { Text("Open the download page") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.pageGlide(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(onClick = { scope.launch { UpdateManager.check(ctx, refresh = true) } }, enabled = !UpdateManager.checking) {
                     Text(if (UpdateManager.checking) "Checking…" else "Check now")
                 }
@@ -488,7 +552,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             val notes = remember(info?.notes) { info?.notes?.let { parseReleaseNotes(it) } }
             if (notes != null) {
                 // just the "What's new" part of the release, as a list, not the whole release page
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         notes.heading.replace("What's new in", "What's new in").ifBlank { "What's new" },
                         style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
@@ -504,9 +568,18 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
         }
 
         if (page == "about") Section("About") {
-            Info("YTM Starcast app", version.ifBlank { "unknown" })
+            Row(Modifier.pageGlide(), verticalAlignment = Alignment.CenterVertically) {
+                StarcastTile(52.dp)
+                Column(Modifier.padding(start = 14.dp)) {
+                    Text("YTM Starcast", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Android app · " + version.ifBlank { "version unknown" },
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            OutlinedButton(onClick = { confirmReset = true }) { Text("Reset all settings") }
+            OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.pageGlide()) { Text("Reset all settings") }
         }
         if (page == "about") Section("If the app closed by itself") {
             // what Android says about the last times the app stopped (Android 11 and later), and errors the app wrote down
@@ -517,17 +590,18 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 Text(
                     if (Build.VERSION.SDK_INT >= 30) "Nothing has gone wrong that the app knows of."
                     else "No errors written down. (Android only tells apps why they were closed from Android 11 on.)",
+                    modifier = Modifier.pageGlide(),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (exits.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("The last times it stopped", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     for (e in exits.take(4)) Text(e, style = MaterialTheme.typography.bodySmall)
                 }
             }
             errors?.let { text ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Errors written down", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         text.lineSequence().filter { it.isNotBlank() }.take(5).joinToString("\n"),
@@ -540,9 +614,10 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
                 "When Android closes the app to free memory, that isn't an error in the app, but it is why the music's place can be " +
                     "lost; switching off battery optimisation for YTM Starcast in Android's settings helps on devices that do it often. " +
                     "This report stays on this device unless you copy it somewhere.",
+                modifier = Modifier.pageGlide(),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.pageGlide(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(onClick = {
                     clipboard.setText(androidx.compose.ui.text.AnnotatedString(CrashLog.report(ctx)))
                     Remote.notify("Report copied")
@@ -572,14 +647,15 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     val pageTitle = LocalPageTitle.current
     Column {
         if (pageTitle == null) {
-            Row(Modifier.padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.pageGlide().padding(start = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(allCats.firstOrNull { it.title == title }?.icon ?: Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Text(title, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             }
         } else if (title in SUBHEADS) {
+            // small and in the accent colour, as the overview's group names
             Text(
-                title, Modifier.padding(start = 8.dp, top = 4.dp, bottom = 6.dp), style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                title, Modifier.pageGlide().padding(start = 8.dp, top = 4.dp, bottom = 6.dp), style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
             )
         }
         Card(
@@ -594,7 +670,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 
 @Composable
 private fun Info(label: String, value: String) {
-    Column {
+    Column(Modifier.pageGlide()) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }
@@ -602,12 +678,20 @@ private fun Info(label: String, value: String) {
 
 @Composable
 private fun Toggle(title: String, subtitle: String?, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    // the whole row flips the switch (its words too, not only the switch), and reads as one switch to TalkBack
+    Row(
+        Modifier.pageGlide().fillMaxWidth().heightIn(min = 48.dp).clip(PfShape.Sm)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                title, style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 
@@ -620,14 +704,28 @@ private fun Choice(
     enabled: Boolean = true,
     onSelect: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
+    Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            title, style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        )
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { (value, label) ->
                 FilterChip(selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
+    }
+}
+
+/** A speed as the player writes it: 100 -> "1×", 150 -> "1.5×", 125 -> "1.25×". */
+private fun speedLabel(percent: Int): String {
+    val whole = percent / 100
+    val part = percent % 100
+    return when {
+        part == 0 -> "$whole×"
+        part % 10 == 0 -> "$whole.${part / 10}×"
+        else -> "$whole.${part.toString().padStart(2, '0')}×"
     }
 }
 
@@ -652,7 +750,7 @@ private fun NumberChoice(
 ) {
     var asking by remember { mutableStateOf(false) }
     val isPreset = presets.any { it.first == value }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.pageGlide(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (warning != null) Text(warning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -710,6 +808,13 @@ object SettingsNav {
 
 private val LocalPageTitle = androidx.compose.runtime.compositionLocalOf<String?> { null }
 
+/** The open page's arrival: its rows glide in one after another (null: they just appear). */
+private val LocalSettingsArrival = androidx.compose.runtime.compositionLocalOf<Arrival?> { null }
+
+/** This row takes its turn in the open page's arrival, after the rows above it. */
+@Composable
+private fun Modifier.pageGlide(): Modifier = arrive(LocalSettingsArrival.current)
+
 /** Cards that come after a page's first one, and so need a heading of their own. */
 private val SUBHEADS = setOf("Your library", "Automatic downloads", "Recommendations", "If the app closed by itself", "Music on this phone")
 
@@ -735,6 +840,8 @@ private val allCats = groups.flatMap { it.second }
 
 private fun themeLabel(t: String) = when (t) { "light" -> "Light"; "dark" -> "Dark"; "black" -> "Black"; else -> "System" }
 
+private fun vizName(v: String) = when (v) { "halo" -> "Halo"; "orbit" -> "Orbit"; else -> "Glow" }
+
 private fun partsSummary(p: Parts): String {
     val off = listOfNotNull(
         "Remote".takeIf { !p.remote }, "Discord status".takeIf { !p.discord },
@@ -757,8 +864,9 @@ private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, 
         (if (p.autoDlLiked || p.smartDownloads != 0 || Library.keepOffline.value.isNotEmpty()) " · automatic downloads on" else "")
     "lyrics" -> (if (p.lyricsRoman) "Romanized" else "Original text") + " · " + (if (p.lyricsSource == "auto") "automatic source" else p.lyricsSource)
     "controls" -> "Notification " + (if (p.notification) "on" else "off") + (if (s.audioOn) " · volume keys " + (if (p.volumeKeys) "on" else "off") else "")
-    "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else "") + " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")
-    "effects" -> "Glow " + p.coverGlow + " · " + (if (p.wavyBar) "wavy bar" else "plain bar")
+    "appearance" -> themeLabel(p.theme) + " theme" + (if (p.accent != 0) " · custom accent" else if (p.albumColors) " · album colours" else "") +
+        " · " + (if (p.navStyle == "pill") "pill navigation" else "classic navigation")
+    "effects" -> (if (p.coverGlow == "off") "No cover glow" else vizName(p.coverViz) + " " + p.coverGlow) + " · " + (if (p.wavyBar) "wavy bar" else "plain bar")
     "screen" -> when (p.keepAwake) { "always" -> "Always on"; "playing" -> "On while playing"; else -> "Screen sleeps normally" } + (if (p.pixelShift) " · pixel shift" else "")
     "connection" -> if (!s.configured) "Not set up" else if (s.online) "Connected · " + cfg.url.removePrefix("http://").removePrefix("https://").trimEnd('/') else "Can't reach the computer"
     "parts" -> s.parts?.let { partsSummary(it) } ?: "Switch parts of YTM Starcast on or off"
@@ -772,24 +880,29 @@ private fun summaryOf(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig, 
 @Composable
 private fun SettingsOverview(p: Prefs, s: RemoteState, cfg: ServerConfig, version: String, modifier: Modifier, open: (String) -> Unit) {
     val scroll = rememberScrollState()
+    // the categories glide in one after another each time the overview appears
+    val arrival = rememberArrival("overview").takeIf { p.transitions }
     Column(
         modifier.edgeFade(scroll).verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (s.online && s.remoteOn && s.extNeverSet) ExtensionPrompt { open("extension") }
+        if (s.online && s.remoteOn && s.extNeverSet) ExtensionPrompt(Modifier.arrive(arrival)) { open("extension") }
         for ((label, all) in groups) {
             val cats = all.filter { catShown(it.key, s) }
             if (cats.isNotEmpty()) {
+                // group names: small, in the accent colour, as in the web app and Refine
                 Text(
-                    label.uppercase(), Modifier.padding(start = 8.dp, top = 10.dp), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                    label, Modifier.arrive(arrival).padding(start = 8.dp, top = 10.dp), style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
                 )
                 Card(
                     Modifier.fillMaxWidth(), shape = PfShape.Lg,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 ) {
                     Column {
-                        for (c in cats) CategoryRow(c, summaryText(c.key, p, s, cfg, version)) { open(c.key) }
+                        cats.forEachIndexed { i, c ->
+                            CategoryRow(c, summaryText(c.key, p, s, cfg, version), divider = i > 0, arrival = arrival) { open(c.key) }
+                        }
                     }
                 }
             }
@@ -806,10 +919,24 @@ private fun summaryText(key: String, p: Prefs, s: RemoteState, cfg: ServerConfig
     return summaryOf(key, p, s, cfg, version)
 }
 
+/** One category: its icon on a tonal circle, its name and a line saying how it is set. [divider]: a hairline above it. */
 @Composable
-private fun CategoryRow(c: Cat, summary: String, onClick: () -> Unit) {
+private fun CategoryRow(c: Cat, summary: String, divider: Boolean = false, arrival: Arrival? = null, onClick: () -> Unit) {
+    val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.arrive(arrival).fillMaxWidth()
+            .drawBehind {
+                // from where the words start to the card's edge; drawn in the row so it glides in with it
+                if (divider) {
+                    val inset = 70.dp.toPx()
+                    val rtl = layoutDirection == LayoutDirection.Rtl
+                    drawLine(
+                        line, Offset(if (rtl) 0f else inset, 0f), Offset(if (rtl) size.width - inset else size.width, 0f),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+            }
+            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
@@ -829,7 +956,7 @@ private fun CategoryRow(c: Cat, summary: String, onClick: () -> Unit) {
 @Composable
 private fun PageHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back to settings") }
+        ShapeIconButton(Icons.Filled.ArrowBack, "Back to settings", onBack)
         Text(title, Modifier.padding(start = 4.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
 }

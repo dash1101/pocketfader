@@ -90,17 +90,21 @@ private val presets = listOf(
     "Red" to 0xFFEF4444.toInt(), "Pink" to 0xFFEC4899.toInt(), "White" to 0xFFFFFFFF.toInt(), "Black" to 0xFF000000.toInt(),
 )
 
-/** Accent colour chooser: automatic, a handful of colours, or any colour. Shows how it will really look. */
+/**
+ * Accent colour chooser: automatic (Album colours, or Material You), a handful of colours, or any colour. Shows how it
+ * will really look.
+ */
 @Composable
-fun AccentPicker(prefs: Prefs) {
+fun AccentPicker(prefs: Prefs, modifier: Modifier = Modifier) {
     val bg = MaterialTheme.colorScheme.background
     val chosen = prefs.accent
     val isPreset = presets.any { it.second == chosen }
     var custom by remember { mutableStateOf(chosen != 0 && !isPreset) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Accent colour", style = MaterialTheme.typography.bodyLarge)
         Text(
-            "Used for highlights, the lyric being sung, and buttons. It's adjusted automatically if it would be hard to see on your theme.",
+            "Used for highlights, the lyric being sung, and buttons. A chosen colour replaces Album colours. It's adjusted " +
+                "automatically if it would be hard to see on your theme.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(

@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
@@ -41,8 +43,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -271,8 +275,17 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Chat, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Text("Discord status", Modifier.padding(start = 10.dp).weight(1f), style = MaterialTheme.typography.titleMedium)
+                // the same tonal circle as the settings categories' icons
+                Box(
+                    Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Chat, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                Text(
+                    "Discord status", Modifier.padding(start = 14.dp).weight(1f), style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 if (st != null) Dot(headlineText(st).second)
             }
 
@@ -301,12 +314,17 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
 
                 MoveOver(st, online)
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // the whole row flips the switch, as in the settings
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(PfShape.Sm)
+                        .toggleable(value = st.visible, enabled = usable, role = Role.Switch) { on -> scope.launch { BeaconModel.setVisibility(on) } },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
                         Text("Show on Discord", style = MaterialTheme.typography.bodyLarge)
                         st.discordUser?.let { Text("as $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
-                    Switch(checked = st.visible, enabled = usable, onCheckedChange = { on -> scope.launch { BeaconModel.setVisibility(on) } })
+                    Switch(checked = st.visible, enabled = usable, onCheckedChange = null)
                 }
 
                 val left = if (st.snoozeSec > 0) st.snoozeSec - ((clock.value - st.receivedAt) / 1000).toInt() else 0
@@ -407,10 +425,12 @@ private fun leftText(sec: Int): String {
 @Composable
 private fun Dot(tone: Tone) {
     val bg = MaterialTheme.colorScheme.surfaceContainer
+    // a status light: green and amber keep their usual meaning whatever the album's colours are (the theme has no roles
+    // for them); a problem uses the theme's own error colour
     val base = when (tone) {
         Tone.Good -> Color(0xFF2EB872)
         Tone.Warn -> Color(0xFFE0A100)
-        Tone.Bad -> Color(0xFFE5484D)
+        Tone.Bad -> MaterialTheme.colorScheme.error
         Tone.Off -> MaterialTheme.colorScheme.outline
     }
     Box(Modifier.size(12.dp).background(readableOn(base, bg, 3f), CircleShape))
@@ -495,11 +515,15 @@ private fun NeverShowWords(words: List<String>, enabled: Boolean, onChange: (Lis
 
 @Composable
 private fun BRow(title: String, subtitle: String?, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(PfShape.Sm)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Normal)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }

@@ -3,13 +3,8 @@ package app.pocketfader.client
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -93,10 +88,5 @@ fun DetailHost(modifier: Modifier = Modifier) {
 /** For when there's no YouTube Music tab: asks the computer to open it in its browser (the music then starts from here). */
 @Composable
 fun OpenYtmButton(modifier: Modifier = Modifier) {
-    FilledTonalButton(onClick = { Remote.openYtm() }, modifier = modifier) {
-        Row {
-            Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
-            Text("  Open YouTube Music on the computer")
-        }
-    }
+    PageHeaderTonal(Icons.Filled.OpenInNew, "Open YouTube Music on the computer", onClick = { Remote.openYtm() }, modifier = modifier)
 }

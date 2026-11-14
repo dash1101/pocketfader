@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -139,12 +140,13 @@ fun PillTabs(
         BoxWithConstraints(Modifier.padding(4.dp)) {
             val n = labels.size.coerceAtLeast(1)
             val w = maxWidth / n
-            val x by animateDpAsState(
+            // read only while placing the pill, so its slide moves it without recomposing the bar
+            val x = animateDpAsState(
                 w * selected.coerceIn(0, n - 1),
                 if (reduce) snap() else spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow), label = "tab-pill",
             )
             if (selected in labels.indices) {
-                Box(Modifier.offset(x = x).width(w).height(40.dp).background(scheme.primaryContainer, PfShape.Full))
+                Box(Modifier.offset { IntOffset(x.value.roundToPx(), 0) }.width(w).height(40.dp).background(scheme.primaryContainer, PfShape.Full))
             }
             Row(Modifier.fillMaxWidth().height(40.dp).selectableGroup()) {
                 labels.forEachIndexed { i, label ->

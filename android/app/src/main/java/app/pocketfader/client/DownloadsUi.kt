@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,8 +33,10 @@ fun DownloadsInProgress(modifier: Modifier = Modifier, shown: Int = 5) {
     if (progress.isEmpty()) return
     val sum = remember(progress) { Downloads.summary(progress) }
     val list = remember(progress) { progress.values.sortedByDescending { it.started > 0 } }
+    // a card on the shared scale (PfShape.Lg) on a raised tonal surface; the bars have round ends, as Material You's do
     Card(
         modifier.fillMaxWidth(),
+        shape = PfShape.Lg,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -47,7 +50,7 @@ fun DownloadsInProgress(modifier: Modifier = Modifier, shown: Int = 5) {
                     TextButton(onClick = { Downloads.cancelPending() }) { Text("Cancel the rest") }
                 }
             }
-            LinearProgressIndicator(progress = { sum.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp))
+            LinearProgressIndicator(progress = { sum.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp), strokeCap = StrokeCap.Round)
             Text(
                 listOfNotNull(
                     if (sum.totalBytes > 0) formatBytes(sum.doneBytes) + " of about " + formatBytes(sum.totalBytes) else null,
@@ -81,9 +84,9 @@ private fun DownloadRow(d: DlProgress) {
             Text(d.item.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (d.started > 0) {
                 if (d.total > 0) {
-                    LinearProgressIndicator(progress = { d.fraction }, modifier = Modifier.fillMaxWidth().height(4.dp))
+                    LinearProgressIndicator(progress = { d.fraction }, modifier = Modifier.fillMaxWidth().height(4.dp), strokeCap = StrokeCap.Round)
                 } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))     // the size isn't known yet
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp), strokeCap = StrokeCap.Round)     // the size isn't known yet
                 }
             }
             Text(

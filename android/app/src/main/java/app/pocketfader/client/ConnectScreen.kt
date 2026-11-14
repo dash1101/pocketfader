@@ -31,10 +31,10 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,7 +66,8 @@ private sealed interface TestResult {
     data class Fail(val text: String) : TestResult
 }
 
-/** The connection form, shared by the first-run screen and the settings dialog. */
+/** The connection form, shared by the first-run screen and the settings dialog. [logo]: YTM Starcast's logo heads the
+ *  form (the first-run screen, where it is the first thing the app shows). */
 @Composable
 fun ConnectForm(
     initial: ServerConfig,
@@ -74,6 +75,7 @@ fun ConnectForm(
     modifier: Modifier = Modifier,
     onForget: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
+    logo: Boolean = false,
 ) {
     var address by rememberSaveable { mutableStateOf(initial.url) }
     var token by rememberSaveable { mutableStateOf(initial.token) }
@@ -105,11 +107,15 @@ fun ConnectForm(
             .padding(horizontal = 24.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(
-            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Tune, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        if (logo) {
+            StarcastLogo(Modifier.padding(top = 8.dp, bottom = 6.dp), tile = 48.dp)
+        } else {
+            Box(
+                Modifier.size(52.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Tune, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
         }
         Text(
             if (initial.isSet) "Connection" else "Connect to your computer",
@@ -207,7 +213,8 @@ fun ConnectForm(
                 color = when {
                     ok -> MaterialTheme.colorScheme.primaryContainer
                     bad -> MaterialTheme.colorScheme.errorContainer
-                    else -> MaterialTheme.colorScheme.surfaceVariant
+                    // a step above the dialog's own surfaceContainerHigh, so the card still stands out in it
+                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
                 },
             ) {
                 Row(
@@ -234,8 +241,9 @@ fun ConnectForm(
             }
         }
 
+        // full pill buttons: a tonal one to try the address, the filled one to keep it
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = {
                     val cfg = build()
                     result = TestResult.Running
@@ -248,12 +256,14 @@ fun ConnectForm(
                     }
                 },
                 enabled = canSave && result !is TestResult.Running,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = PfShape.Full,
             ) { Text("Test") }
             Button(
                 onClick = { onSave(build()) },
                 enabled = canSave,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = PfShape.Full,
             ) { Text("Save") }
         }
         if (onForget != null || onCancel != null) {
@@ -278,7 +288,9 @@ fun ConnectDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             shape = PfShape.Xl,
-            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            // named outright: the dialog's text must never fall back to a default black on the dark themes
+            contentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 680.dp),
         ) {
             ConnectForm(initial = initial, onSave = onSave, onForget = onForget, onCancel = onDismiss)

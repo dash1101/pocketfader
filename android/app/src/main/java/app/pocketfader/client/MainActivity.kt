@@ -29,27 +29,36 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -62,6 +71,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -252,14 +263,25 @@ private fun DestContent(d: Dest, s: RemoteState, cfg: ServerConfig, remoteOff: B
     }
 }
 
-private enum class Dest(val key: String, val label: String, val icon: ImageVector) {
-    Playing("playing", "Playing", Icons.Filled.PlayCircle),
-    Search("search", "Search", Icons.Filled.Search),
-    Settings("settings", "Settings", Icons.Filled.Settings),
+// [icon] for the chosen page, [idle] (outlined) for the others, as Material's navigation does
+private enum class Dest(val key: String, val label: String, val icon: ImageVector, val idle: ImageVector) {
+    Playing("playing", "Playing", Icons.Filled.PlayCircle, Icons.Filled.PlayCircleOutline),
+    Search("search", "Search", Icons.Filled.Search, Icons.Outlined.Search),
+    Settings("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
 }
 
 // On wide screens the player is always visible on the left, so the right pane gets its own tabs.
 private enum class Pane(val label: String) { Queue("Queue"), Lyrics("Lyrics"), Comments("Comments"), Search("Search") }
+
+@Composable
+private fun WidePaneContent(p: Pane, s: RemoteState, comments: CommentsUi) {
+    when (p) {
+        Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
+        Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
+        Pane.Comments -> CommentsPane(comments, Modifier.fillMaxSize())
+        Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -267,7 +289,7 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     if (!cfg.isSet && !prefs.standalone) {
         Scaffold { inner ->
             Column(Modifier.padding(inner).fillMaxSize()) {
-                ConnectForm(initial = cfg, onSave = onSave, modifier = Modifier.weight(1f).fillMaxWidth())
+                ConnectForm(initial = cfg, onSave = onSave, modifier = Modifier.weight(1f).fillMaxWidth(), logo = true)
                 // no computer? the app works on its own too: YouTube Music, downloads and the phone's own music
                 androidx.compose.material3.TextButton(
                     onClick = { Settings.update { it.copy(standalone = true, playOn = "phone") }; Remote.configure(cfg) },
@@ -335,6 +357,13 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     val washBrush = wash.brush
     val pageBg = MaterialTheme.colorScheme.background
     val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
+    // the frame's own small motions (the title's fade, the tablet's panes, the notices) follow the screen-transition and
+    // fewer-animations settings, as the screens do
+    val calm = prefs.reduceMotion || !prefs.transitions
+    val noticeIn = if (prefs.reduceMotion) EnterTransition.None else
+        expandVertically(tween(Motion.Medium, easing = Motion.Ease)) + fadeIn(tween(Motion.Short, delayMillis = 60))
+    val noticeOut = if (prefs.reduceMotion) ExitTransition.None else
+        shrinkVertically(tween(Motion.Short, easing = Motion.Ease)) + fadeOut(tween(Motion.Quick))
     androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null), LocalEdgeFade provides EdgeFade(wash.colorAt(0.11f), wash.colorAt(0.93f))) {
     Box(Modifier.fillMaxSize().background(washBrush)) {
     Scaffold(
@@ -342,21 +371,29 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         // Without this, text that doesn't name a colour falls back to black, which vanishes on the dark themes.
         contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
+            // Phones name the page they show; where the page would just be called "YTM Starcast" (tablets, and the
+            // player while the remote is off) the app's logo stands in its place.
+            val heading: String? = when {
+                showSettings -> "Settings"
+                wide -> null
+                dest == Dest.Playing -> if (remoteOff) null else "Now playing"
+                else -> dest.label
+            }
             TopAppBar(
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                 title = {
-                    Text(
-                        when {
-                            showSettings -> "Settings"
-                            wide -> "YTM Starcast"
-                            dest == Dest.Playing -> if (remoteOff) "YTM Starcast" else "Now playing"
-                            else -> dest.label
-                        },
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    )
+                    // the old name fades into the new one as the page changes
+                    Crossfade(heading, animationSpec = tween(if (calm) 0 else Motion.Short, easing = Motion.Ease), label = "title") { h ->
+                        if (h == null) StarcastLogo()
+                        else Text(h, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 },
                 navigationIcon = {
-                    if (showSettings) IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
+                    when {
+                        showSettings -> IconButton(onClick = { showSettings = false }) { Icon(Icons.Filled.ArrowBack, "Back") }
+                        // on phones a small logo leads the page's name (not when the logo is the title already)
+                        !wide && heading != null -> StarcastTile(26.dp, Modifier.padding(start = 12.dp, end = 8.dp))
+                    }
                 },
                 actions = {
                     // full screen hides the status bar's clock and battery: shown here instead when asked for
@@ -388,13 +425,28 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
             }
             if (!wide && !showSettings) {
                 if (prefs.navStyle == "pill") {
-                    PillNav(dests.map { it.label }, dests.map { it.icon }, dests.indexOf(dest).coerceAtLeast(0)) { dest = dests[it] }
+                    PillNav(
+                        dests.map { it.label }, dests.map { it.icon }, dests.indexOf(dest).coerceAtLeast(0),
+                        idleIcons = dests.map { it.idle },
+                    ) { dest = dests[it] }
                 } else {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
+                    val scheme = MaterialTheme.colorScheme
+                    NavigationBar(containerColor = scheme.surfaceContainer.copy(alpha = 0.92f)) {
+                        // the chosen page sits on a tonal pill in the cover's colours, as in Refine
+                        val itemColors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = scheme.onPrimaryContainer,
+                            selectedTextColor = scheme.onSurface,
+                            indicatorColor = scheme.primaryContainer,
+                            unselectedIconColor = scheme.onSurfaceVariant,
+                            unselectedTextColor = scheme.onSurfaceVariant,
+                        )
                         dests.forEach { d ->
+                            val on = dest == d
                             NavigationBarItem(
-                                selected = dest == d, onClick = { dest = d },
-                                icon = { Icon(d.icon, d.label) }, label = { Text(d.label) },
+                                selected = on, onClick = { dest = d },
+                                icon = { Icon(if (on) d.icon else d.idle, d.label) },
+                                label = { Text(d.label, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium) },
+                                colors = itemColors,
                             )
                         }
                     }
@@ -405,9 +457,16 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         snackbarHost = { SnackbarHost(snackbar) },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
-            if (!showSettings && !UpdateManager.dismissed && UpdateManager.available(ctx)) {
-                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            // notices float as rounded tonal cards under the top bar, and open and close smoothly
+            AnimatedVisibility(
+                visible = !showSettings && !UpdateManager.dismissed && UpdateManager.available(ctx),
+                enter = noticeIn, exit = noticeOut,
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer, shape = PfShape.Lg,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Row(Modifier.padding(start = 16.dp, end = 6.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(
                             "A new version is ready: ${UpdateManager.info?.latest}",
                             Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -417,8 +476,14 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     }
                 }
             }
-            if (!s.online && !showSettings && cfg.isSet && !Remote.local) {
-                Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+            AnimatedVisibility(
+                visible = !s.online && !showSettings && cfg.isSet && !Remote.local,
+                enter = noticeIn, exit = noticeOut,
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer, shape = PfShape.Md,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
                     Text(
                         "Can't reach the computer. ${s.error ?: "Trying again…"}",
                         style = MaterialTheme.typography.bodySmall,
@@ -438,20 +503,34 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             // an artist, album or playlist page opens beside the player, which stays in view
                             DetailHost(Modifier.fillMaxSize())
                         } else {
-                            // see-through, as on phones: the cover's glow carries on under the tabs instead of stopping
-                            // at a hard edge
-                            // Comments only for songs that have comments to show
-                            val panes = Pane.values().filter { it != Pane.Comments || comments.hasComments }
+                            // Refine's pill bar of tabs: the chosen one sits on a tonal pill that slides to it.
+                            // Comments only for songs that have comments to show; when a song has them turned off the
+                            // tab stays in its place, crossed out, as in Refine
+                            val commentsOff = comments.loaded && comments.disabled
+                            val panes = Pane.values().filter { it != Pane.Comments || comments.hasComments || commentsOff }
                             LaunchedEffect(comments.hasComments) { if (!comments.hasComments && pane == Pane.Comments) pane = Pane.Queue }
-                            TabRow(selectedTabIndex = panes.indexOf(pane).coerceAtLeast(0), containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-                                panes.forEach { p -> Tab(selected = pane == p, onClick = { pane = p }, text = { Text(p.label) }) }
-                            }
+                            PillTabs(
+                                labels = panes.map { it.label },
+                                selected = panes.indexOf(pane).coerceAtLeast(0),
+                                onSelect = { i -> panes.getOrNull(i)?.let { pane = it } },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                                crossed = if (commentsOff) setOf(panes.indexOf(Pane.Comments)) else emptySet(),
+                            )
                             Box(Modifier.weight(1f).fillMaxWidth()) {
-                                when (pane) {
-                                    Pane.Queue -> QueuePane(s, Modifier.fillMaxSize())
-                                    Pane.Lyrics -> LyricsPane(s, Modifier.fillMaxSize())
-                                    Pane.Comments -> CommentsPane(comments, Modifier.fillMaxSize())
-                                    Pane.Search -> SearchScreen(s, Modifier.fillMaxSize())
+                                if (!calm) {
+                                    // the new pane fades in with a hint of a slide from the side of its tab
+                                    AnimatedContent(
+                                        targetState = pane,
+                                        transitionSpec = {
+                                            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                                            val enter = fadeIn(tween(Motion.Short, delayMillis = 60, easing = Motion.Ease)) +
+                                                slideInHorizontally(tween(Motion.Medium, easing = Motion.Ease)) { dir * it / 24 }
+                                            enter togetherWith fadeOut(tween(Motion.Quick, easing = Motion.Ease))
+                                        },
+                                        label = "pane",
+                                    ) { p -> WidePaneContent(p, s, comments) }
+                                } else {
+                                    WidePaneContent(pane, s, comments)
                                 }
                             }
                         }

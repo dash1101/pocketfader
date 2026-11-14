@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -27,18 +26,14 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -199,42 +195,36 @@ object OfflineLists {
 
 /** The offline playlists as a row of covers (Search → On this phone), with a button to make a new one. */
 @Composable
-fun OfflineListsRow(onOpen: (String) -> Unit) {
+fun OfflineListsRow(onOpen: (String) -> Unit, arrival: Arrival? = null) {
     val lists by OfflineLists.lists.collectAsStateWithLifecycle()
     val downloads by Downloads.items.collectAsStateWithLifecycle()
     val have = remember(downloads) { downloads.map { it.videoId }.toHashSet() }
     var creating by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Offline playlists", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().arrive(arrival).padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PageSectionTitle("Offline playlists", Modifier.weight(1f))
             TextButton(onClick = { creating = true }) { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text(" New") }
         }
         if (lists.isEmpty()) {
             Text(
                 "“Download all” on a playlist or album keeps it here as a whole, in its order. You can also make your own from " +
                     "the songs you've downloaded.",
-                Modifier.padding(horizontal = 16.dp),
+                Modifier.arrive(arrival).padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(lists.size, key = { lists[it].id }) { i ->
                     val l = lists[i]
                     val there = l.songs.count { it.videoId in have }
-                    Column(Modifier.width(132.dp).clickable { onOpen(l.id) }) {
-                        Thumb(l.cover, 132, 16, Modifier.fillMaxWidth().aspectRatio(1f))
-                        Text(
-                            l.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            if (there == l.songs.size) "${l.songs.size} songs" else "$there of ${l.songs.size} on the phone",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                        )
-                    }
+                    PageCoverTile(
+                        l.cover, l.title,
+                        if (there == l.songs.size) "${l.songs.size} songs" else "$there of ${l.songs.size} on the phone",
+                        onClick = { onOpen(l.id) }, modifier = Modifier.width(132.dp), arrival = arrival, sizeDp = 132,
+                    )
                 }
             }
         }
@@ -264,12 +254,18 @@ fun OfflineListView(id: String, onBack: () -> Unit, modifier: Modifier = Modifie
     var menu by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf("") }          // "", "rename", "delete", "add"
     val state = rememberLazyListState()
+    // the header and the songs glide in when the playlist opens
+    val arrival = rememberPageArrival(id)
+    val playingSong by rememberPlayingSong()
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
-            Text(l.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ShapeIconButton(Icons.Filled.ArrowBack, "Back", onClick = onBack)
+            Text(
+                l.title, Modifier.weight(1f).padding(start = 4.dp), style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
             androidx.compose.foundation.layout.Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                ShapeIconButton(Icons.Filled.MoreVert, "More", onClick = { menu = true }, active = menu)
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (l.own) DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; dialog = "rename" })
                     DropdownMenuItem(text = { Text("Delete playlist") }, leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; dialog = "delete" })
@@ -278,25 +274,25 @@ fun OfflineListView(id: String, onBack: () -> Unit, modifier: Modifier = Modifie
         }
         LazyColumn(Modifier.fillMaxSize().edgeFade(state), state = state) {
             item(key = "head") {
-                Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Thumb(l.cover, 180, 20)
+                Column(Modifier.fillMaxWidth().arrive(arrival).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Thumb(l.cover, 180, 24)
                     val bytes = l.songs.sumOf { have[it.videoId]?.size ?: 0L }
                     Text(
                         (if (l.songs.size == 1) "1 song" else "${l.songs.size} songs") + (if (bytes > 0) " · " + formatBytes(bytes) else "") +
                             if (l.own) "" else " · saved from YouTube Music",
-                        Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { playOnPhone(l.songs, 0); AppNav.showPlayer() }, enabled = l.songs.isNotEmpty()) {
-                            Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Text(" Play")
-                        }
-                        FilledTonalButton(onClick = { playOnPhone(l.songs, l.songs.indices.random(), shuffle = true); AppNav.showPlayer() }, enabled = l.songs.isNotEmpty()) {
-                            Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)); Text(" Shuffle")
-                        }
-                        if (l.own) OutlinedButton(onClick = { dialog = "add" }) { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text(" Add") }
+                    Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        PageHeaderPlay(onClick = { playOnPhone(l.songs, 0); AppNav.showPlayer() }, enabled = l.songs.isNotEmpty())
+                        PageHeaderTonal(
+                            Icons.Filled.Shuffle, "Shuffle",
+                            onClick = { playOnPhone(l.songs, l.songs.indices.random(), shuffle = true); AppNav.showPlayer() },
+                            enabled = l.songs.isNotEmpty(),
+                        )
+                        if (l.own) PageHeaderTonal(Icons.Filled.Add, "Add", onClick = { dialog = "add" })
                     }
                     if (missing.isNotEmpty()) {
-                        TextButton(onClick = { Downloads.enqueue(missing) }, Modifier.padding(top = 4.dp)) {
+                        TextButton(onClick = { Downloads.enqueue(missing) }, Modifier.padding(top = 6.dp)) {
                             Icon(Icons.Filled.Download, null, Modifier.size(18.dp)); Text(" Download ${missing.size} missing")
                         }
                     }
@@ -309,27 +305,26 @@ fun OfflineListView(id: String, onBack: () -> Unit, modifier: Modifier = Modifie
                 }
             }
             itemsIndexed(l.songs, key = { _, s -> "o-" + s.videoId }) { i, s ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { playOnPhone(l.songs, i) }.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp).heightIn(min = 48.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                PageSongRow(
+                    s.art, s.title, s.artist, onClick = { playOnPhone(l.songs, i) }, arrival = arrival,
+                    current = s.videoId != null && s.videoId == playingSong.first, playing = playingSong.second,
                 ) {
-                    Thumb(s.art, 48, 10)
-                    Column(Modifier.weight(1f)) {
-                        Text(s.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(s.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
                     val progress = active[s.videoId]
                     when {
                         s.videoId in have -> Icon(Icons.Filled.DownloadDone, "On this phone", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                         progress != null -> androidx.compose.material3.CircularProgressIndicator(
                             progress = { progress }, modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                         )
-                        else -> Icon(Icons.Filled.Download, "Not downloaded yet", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Icon(Icons.Filled.Download, "Not downloaded yet", Modifier.size(18.dp), tint = LocalContentColor.current)
                     }
-                    if (l.own) IconButton(onClick = { s.videoId?.let { OfflineLists.removeSong(l.id, it) } }) {
-                        Icon(Icons.Filled.Close, "Take out of this playlist")
-                    } else Spacer(Modifier.width(12.dp))
+                    if (l.own) {
+                        ShapeIconButton(
+                            Icons.Filled.Close, "Take out of this playlist",
+                            onClick = { s.videoId?.let { OfflineLists.removeSong(l.id, it) } }, tint = LocalContentColor.current,
+                        )
+                    } else {
+                        Spacer(Modifier.width(8.dp))
+                    }
                 }
             }
             item(key = "end") { Spacer(Modifier.padding(24.dp)) }
@@ -356,17 +351,22 @@ private fun DeletePrompt(l: OfflineList, onDismiss: () -> Unit, onDelete: (withS
     var withSongs by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = PfShape.Xl,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Delete “${l.title}”?") },
         text = {
             Column {
                 Text("The playlist goes. Its songs stay in Downloaded unless you remove them too.")
-                if (l.songs.isNotEmpty()) Row(Modifier.padding(top = 8.dp).clickable { withSongs = !withSongs }, verticalAlignment = Alignment.CenterVertically) {
+                if (l.songs.isNotEmpty()) Row(
+                    Modifier.padding(top = 10.dp).clip(PfShape.Sm).clickable { withSongs = !withSongs }.padding(end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Checkbox(checked = withSongs, onCheckedChange = { withSongs = it })
                     Text("Also remove its songs from this phone (ones in another offline playlist stay)")
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onDelete(withSongs) }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+        confirmButton = { PageDialogConfirm("Delete", onClick = { onDelete(withSongs) }, danger = true) },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -379,6 +379,8 @@ private fun PickDownloadsDialog(exclude: Set<String>, onDismiss: () -> Unit, onP
     val picked = remember { mutableStateListOf<String>() }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = PfShape.Xl,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Add downloaded songs") },
         text = {
             if (choices.isEmpty()) {
@@ -389,11 +391,14 @@ private fun PickDownloadsDialog(exclude: Set<String>, onDismiss: () -> Unit, onP
                         val d = choices[i]
                         val on = d.videoId in picked
                         Row(
-                            Modifier.fillMaxWidth().clickable { if (on) picked.remove(d.videoId) else picked.add(d.videoId) }.padding(vertical = 4.dp),
+                            Modifier.fillMaxWidth().clip(PfShape.Sm)
+                                .clickable { if (on) picked.remove(d.videoId) else picked.add(d.videoId) }
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Checkbox(checked = on, onCheckedChange = { if (it) picked.add(d.videoId) else picked.remove(d.videoId) })
-                            Column(Modifier.weight(1f)) {
+                            Thumb(d.art, 40, 8)
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                 Text(d.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(d.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
@@ -403,10 +408,11 @@ private fun PickDownloadsDialog(exclude: Set<String>, onDismiss: () -> Unit, onP
             }
         },
         confirmButton = {
-            TextButton(
+            PageDialogConfirm(
+                if (picked.isEmpty()) "Add" else "Add ${picked.size}",
                 onClick = { onPick(choices.filter { it.videoId in picked }.map { it.toLocal().copy(uri = null) }) },
                 enabled = picked.isNotEmpty(),
-            ) { Text(if (picked.isEmpty()) "Add" else "Add ${picked.size}") }
+            )
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -429,28 +435,24 @@ fun AddToOfflineDialog(song: LocalItem, onDone: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDone,
+        shape = PfShape.Xl,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Add to an offline playlist") },
         text = {
             LazyColumn(Modifier.heightIn(max = 360.dp)) {
                 item(key = "new") {
-                    Row(Modifier.fillMaxWidth().clickable { creating = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Add, null, Modifier.padding(end = 12.dp))
-                        Text("New offline playlist", fontWeight = FontWeight.SemiBold)
-                    }
+                    PageDialogRow("New offline playlist", onClick = { creating = true }, icon = Icons.Filled.Add)
                 }
                 items(own.size, key = { own[it].id }) { i ->
                     val l = own[i]
-                    Row(
-                        Modifier.fillMaxWidth().clickable {
+                    PageDialogRow(
+                        l.title, withThumb = true, thumb = l.cover,
+                        onClick = {
                             OfflineLists.add(l.id, listOf(song))
                             Remote.notify("Added to “${l.title}”")
                             onDone()
-                        }.padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Thumb(l.cover, 40, 8)
-                        Text(l.title, Modifier.padding(start = 12.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                        },
+                    )
                 }
             }
         },

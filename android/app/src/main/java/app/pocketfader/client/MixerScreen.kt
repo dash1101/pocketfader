@@ -1,6 +1,8 @@
 package app.pocketfader.client
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
@@ -24,7 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -38,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -49,12 +52,15 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
         Remote.setWantOutputs(true)
         onDispose { Remote.setWantOutputs(false) }
     }
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
+    // the cards glide in one after another as the page opens, as the other settings pages' rows do
+    val arrival = rememberArrival("mixer").takeIf { prefs.transitions }
     val scroll = rememberScrollState()
     Column(
         modifier.edgeFade(scroll).verticalScroll(scroll).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Panel("Volume") {
+        Panel("Volume", arrival) {
             Text(
                 if (s.volume.available) s.volume.device.ifBlank { "Computer output" } else "No audio output found",
                 style = MaterialTheme.typography.bodySmall,
@@ -64,7 +70,7 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
         }
 
         if (s.canOutputs && s.outputs.isNotEmpty()) {
-            Panel("Output devices") {
+            Panel("Output devices", arrival) {
                 Text(
                     "Set each device's level before you switch to it.",
                     style = MaterialTheme.typography.bodySmall,
@@ -74,21 +80,34 @@ fun MixerScreen(s: RemoteState, modifier: Modifier = Modifier) {
             }
         }
 
-        if (s.eq.available) EqPanel(s.eq)
+        if (s.eq.available) EqPanel(s.eq, arrival)
     }
 }
 
+/** A card of the sound page. [arrival]: the page's, so the card glides in after the ones above it. */
 @Composable
-private fun Panel(title: String, content: @Composable () -> Unit) {
+private fun Panel(title: String, arrival: Arrival? = null, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier.arrive(arrival).fillMaxWidth(),
         shape = PfShape.Lg,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             content()
         }
+    }
+}
+
+/** A device's icon on a circle: tonal in the accent's colours for the one the sound goes to now, quiet for the others. */
+@Composable
+private fun DeviceIcon(icon: ImageVector, active: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        Modifier.size(40.dp).background(if (active) scheme.primaryContainer else scheme.surfaceContainerHighest, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, null, Modifier.size(22.dp), tint = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant)
     }
 }
 
@@ -105,16 +124,22 @@ private fun OutputRow(o: Output) {
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = o.isDefault, onClick = { Remote.setOutput(o.name) })
-            Icon(iconFor(o.kind), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                iconFor(o.kind), null, Modifier.size(20.dp),
+                tint = if (o.isDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 o.description,
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (o.isDefault) FontWeight.SemiBold else null,
                 modifier = Modifier.weight(1f).padding(start = 10.dp),
                 maxLines = 1,
             )
-            IconButton(onClick = { Remote.setOutputMuted(o.name, !o.muted) }) {
-                Icon(if (o.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (o.muted) "Unmute" else "Mute")
-            }
+            // a muted device keeps its button on a tonal squircle, so it is clear at a glance which ones are silent
+            ShapeIconButton(
+                if (o.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (o.muted) "Unmute" else "Mute",
+                onClick = { Remote.setOutputMuted(o.name, !o.muted) }, active = o.muted,
+            )
         }
         Row(Modifier.padding(start = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Slider(
@@ -139,8 +164,8 @@ private fun OutputRow(o: Output) {
 private val BAND_LABELS = listOf("bass" to "Bass", "mid" to "Mid", "high" to "High")
 
 @Composable
-private fun EqPanel(eq: EqState) {
-    Panel(if (eq.label.isNotBlank()) "Equalizer · ${eq.label}" else "Equalizer") {
+private fun EqPanel(eq: EqState, arrival: Arrival? = null) {
+    Panel(if (eq.label.isNotBlank()) "Equalizer · ${eq.label}" else "Equalizer", arrival) {
         if (eq.toggle) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -158,7 +183,7 @@ private fun EqPanel(eq: EqState) {
             if (eq.presets.isNotEmpty()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     eq.presets.forEach { p ->
-                        AssistChip(onClick = { Remote.eqPreset(p) }, label = { Text(p.replace('-', ' ')) })
+                        AssistChip(onClick = { Remote.eqPreset(p) }, label = { Text(p.replace('-', ' ')) }, shape = chipShape(false))
                     }
                 }
             }
@@ -261,12 +286,14 @@ fun PhoneSoundScreen(modifier: Modifier = Modifier) {
         am.registerAudioDeviceCallback(cb, android.os.Handler(android.os.Looper.getMainLooper()))
         onDispose { am.unregisterAudioDeviceCallback(cb) }
     }
+    val prefs by Settings.prefs.collectAsStateWithLifecycle()
+    val arrival = rememberArrival("phone-sound").takeIf { prefs.transitions }
     val scroll = rememberScrollState()
     Column(
         modifier.edgeFade(scroll).verticalScroll(scroll).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Panel("Volume") {
+        Panel("Volume", arrival) {
             Text(
                 "Music is playing on this phone: " + (outputs.firstOrNull { it.active }?.name ?: "this phone") + ".",
                 style = MaterialTheme.typography.bodySmall,
@@ -274,11 +301,14 @@ fun PhoneSoundScreen(modifier: Modifier = Modifier) {
             )
             PhoneVolumeRow()
         }
-        Panel("Output") {
+        Panel("Output", arrival) {
             outputs.forEach { o ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(o.icon, null, Modifier.size(22.dp), tint = if (o.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(o.name, Modifier.weight(1f).padding(start = 14.dp), style = MaterialTheme.typography.bodyLarge)
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DeviceIcon(o.icon, o.active)
+                    Text(
+                        o.name, Modifier.weight(1f).padding(start = 14.dp), style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (o.active) FontWeight.SemiBold else null,
+                    )
                     if (o.active) Text("Playing here", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }

@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -22,6 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +65,27 @@ object LocalPlayer {
         ctx = c.applicationContext
         restored = load()
         restored?.let { autoplay = it.autoplay; shuffled = it.shuffled }
+        // the speed chosen for music on this phone (the player screen's speed menu) reaches the player as it changes;
+        // collected on the main thread, where the player lives
+        scope.launch {
+            Settings.prefs.map { it.phoneSpeed to it.keepPitch }.distinctUntilChanged().collect { applySpeed(it.first, it.second) }
+        }
+    }
+
+    /**
+     * Music on this phone plays at [percent] of its own speed. With [keepPitch] off the pitch moves with it (slower is
+     * lower, as on a record). Main thread only; does nothing before the player exists (it takes the setting when made).
+     * Music playing on the computer is never touched: this is only the phone's own player.
+     */
+    fun applySpeed(percent: Int = Settings.prefs.value.phoneSpeed, keepPitch: Boolean = Settings.prefs.value.keepPitch) {
+        val p = exo ?: return
+        val params = speedParams(percent, keepPitch)
+        if (p.playbackParameters != params) p.playbackParameters = params
+    }
+
+    private fun speedParams(percent: Int, keepPitch: Boolean): PlaybackParameters {
+        val speed = percent.coerceIn(25, 300) / 100f
+        return PlaybackParameters(speed, if (keepPitch) 1f else speed)
     }
 
     val hasQueue: Boolean get() = items.isNotEmpty() || (restored?.items?.isNotEmpty() == true)
@@ -105,6 +129,7 @@ object LocalPlayer {
             .setHandleAudioBecomingNoisy(Settings.prefs.value.pauseOnUnplug)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        Settings.prefs.value.let { p.playbackParameters = speedParams(it.phoneSpeed, it.keepPitch) }
         p.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) { publish() }
 
@@ -458,9 +483,10 @@ object LocalPlayer {
         publish()
     }
 
-    /** Seconds until the sleep timer pauses playback (0 = none). */
+    /** Seconds until the sleep timer pauses playback (0 = none); the rest of the song takes longer when it plays slower. */
     private fun sleepLeft(p: ExoPlayer?): Int = when {
-        sleepEndOfSong && p != null -> (((p.duration - p.currentPosition).coerceAtLeast(0)) / 1000).toInt().coerceAtLeast(1)
+        sleepEndOfSong && p != null ->
+            ((p.duration - p.currentPosition).coerceAtLeast(0) / 1000.0 / p.playbackParameters.speed.coerceAtLeast(0.1f)).toInt().coerceAtLeast(1)
         sleepAt > 0 -> ((sleepAt - SystemClock.elapsedRealtime()) / 1000).toInt().coerceAtLeast(0)
         else -> 0
     }
@@ -527,7 +553,9 @@ object LocalPlayer {
             )
         )
         val queue = items.mapIndexed { i, it -> trackOf(it, i, i == idx) }
-        Remote.applyLocal(now, queue, Progress(p.currentPosition / 1000.0, SystemClock.elapsedRealtime()), sleepLeft(p))
+        // with the speed, so the seek bar and the lyrics move on at the pace the song really plays
+        val rate = p.playbackParameters.speed.toDouble()
+        Remote.applyLocal(now, queue, Progress(p.currentPosition / 1000.0, SystemClock.elapsedRealtime(), rate), sleepLeft(p))
         // keep the position fresh while playing
         if (now?.playing == true && ticker?.isActive != true) {
             ticker = scope.launch {
@@ -536,7 +564,7 @@ object LocalPlayer {
                     delay(1000)
                     val e = exo ?: break
                     track(e)
-                    Remote.applyProgress(Progress(e.currentPosition / 1000.0, SystemClock.elapsedRealtime()))
+                    Remote.applyProgress(Progress(e.currentPosition / 1000.0, SystemClock.elapsedRealtime(), e.playbackParameters.speed.toDouble()))
                     if (++n % 15 == 0) save()             // the position, now and then, in case the app is closed
                 }
             }

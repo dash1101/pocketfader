@@ -36,16 +36,15 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.ThumbUp
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -77,6 +76,7 @@ import coil.transform.RoundedCornersTransformation
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -151,6 +151,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
             if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else Motion.Long, easing = Motion.Ease), label = "cover",
         )
         val shape = coverShape(prefs.coverShape)
+        // a new song's cover settles into place (a little small and faint, then full), as in Refine
+        val settle = rememberSettle(now?.videoId ?: now?.art, calm)
         // "Vinyl": the round cover turns slowly while music plays
         val spin: State<Float> = if (prefs.coverShape == "circle" && playing && !calm) {
             androidx.compose.animation.core.rememberInfiniteTransition(label = "spin").animateFloat(
@@ -164,7 +166,14 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
             Cover(
                 now?.art,
                 Modifier.fillMaxSize()
-                    .graphicsLayer { scaleX = scale; scaleY = scale; rotationZ = spin.value }
+                    .graphicsLayer {
+                        val k = settle.value
+                        val sc = scale * (0.94f + 0.06f * k)
+                        scaleX = sc
+                        scaleY = sc
+                        rotationZ = spin.value
+                        alpha = 0.35f + 0.65f * k
+                    }
                     .then(if (calm || prefs.coverGlow != "off") Modifier else Modifier.shadow(20.dp, shape, clip = false)),
                 shape = shape,
             )
@@ -201,6 +210,8 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            // the speed of music playing on this phone (the computer's player keeps its own)
+            if (s.source == "phone") SpeedButton()
             if (s.canSleep) SleepButton(s)
             // save the song that's playing to this phone
             if (isYtId(videoId)) {
@@ -252,6 +263,10 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
 /**
  * The soft light around the cover. It lives behind the scrolling list (not inside it) and follows the cover's position, so
  * it can spread under the top bar instead of being cut off at the top edge of the list.
+ *
+ * It moves as Refine's cover visualizers do (the coverViz setting): "glow" breathes, "halo" also turns slowly, and
+ * "orbit" is a ring of the album's colours running round the cover's outline. The strength setting (coverGlow) still
+ * applies to all three, and "off" means no light at all.
  */
 @Composable
 fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: Modifier = Modifier) {
@@ -259,29 +274,99 @@ fun PlayerGlow(s: RemoteState, visible: Boolean, scrollPx: () -> Int, modifier: 
     if (!visible || prefs.coverGlow == "off") return
     val calm = LocalReduceMotion.current
     val playing = s.now?.playing == true
+    val viz = prefs.coverViz
     val scale by androidx.compose.animation.core.animateFloatAsState(
         if (playing || calm) 1f else 0.9f, androidx.compose.animation.core.tween(if (calm) 0 else Motion.Long, easing = Motion.Ease), label = "glow-scale",
     )
-    val pulse = rememberPulse(playing && !calm)
+    val pulse = rememberPulse(playing && !calm && viz != "orbit")
+    // halo turns once in 38 s, orbit once in 7 s; both only while music plays, and a pause leaves them where they are
+    val spin = rememberSpin(playing && !calm && (viz == "halo" || viz == "orbit"), if (viz == "orbit") 7000 else 38000)
+    val spinNow = remember(spin) { { spin.value } }
+    // the orbit ring hugs the cover's outline, so it settles with a new song's cover too
+    val settle = rememberSettle(s.now?.videoId ?: s.now?.art, calm)
     val thumb = LocalArtThumb.current
     val tint = LocalTint.current ?: MaterialTheme.colorScheme.primary
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize()) {
         val coverW = minOf(420.dp, maxWidth - 48.dp)
         val coverPx = with(androidx.compose.ui.platform.LocalDensity.current) { coverW.toPx() }
         // the light dims as the cover scrolls away, instead of vanishing all at once
-        val fade = { (1f - scrollPx() / (coverPx * 0.9f)).coerceIn(0f, 1f) }
+        val away = { (1f - scrollPx() / (coverPx * 0.9f)).coerceIn(0f, 1f) }
         Box(
             Modifier
                 .offset { androidx.compose.ui.unit.IntOffset(((maxWidth - coverW) / 2).roundToPx(), 8.dp.roundToPx() - scrollPx()) }
                 .size(coverW),
         ) {
-            if (thumb != null) {
-                AmbientGlow(thumb, prefs.coverGlow, prefs.coverShape, coverW.value, scale, pulse, Modifier.matchParentSize(), fade)
-            } else {
-                Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade() }.coverGlow(tint, prefs.coverGlow, pulse))
+            when {
+                viz == "orbit" -> {
+                    val strength = orbitStrength(prefs.coverGlow)
+                    OrbitRing(
+                        prefs.coverShape, tint, spin,
+                        Modifier.matchParentSize().graphicsLayer {
+                            val k = scale * (0.94f + 0.06f * settle.value)
+                            scaleX = k
+                            scaleY = k
+                        },
+                        fade = { away() * strength },
+                    )
+                }
+                thumb != null -> AmbientGlow(
+                    thumb, prefs.coverGlow, prefs.coverShape, coverW.value, scale, pulse, Modifier.matchParentSize(), away,
+                    turn = if (viz == "halo") spinNow else null,
+                )
+                else -> Box(Modifier.matchParentSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = away() }.coverGlow(tint, prefs.coverGlow, pulse))
             }
         }
     }
+}
+
+/** How bright the orbit ring is at each strength of the light. */
+private fun orbitStrength(level: String): Float = when (level) {
+    "soft" -> 0.6f
+    "extreme" -> 1f
+    else -> 0.85f
+}
+
+/**
+ * An angle in degrees that turns once every [periodMs] while [on], and stays where it is when stopped, so a pause
+ * doesn't snap the light back to its start and play carries on from there.
+ */
+@Composable
+private fun rememberSpin(on: Boolean, periodMs: Int): androidx.compose.runtime.State<Float> {
+    val angle = remember { Animatable(0f) }
+    LaunchedEffect(on, periodMs) {
+        if (!on) return@LaunchedEffect
+        while (true) {
+            val from = angle.value % 360f
+            angle.snapTo(from)
+            angle.animateTo(from + 360f, androidx.compose.animation.core.tween(periodMs, easing = androidx.compose.animation.core.LinearEasing))
+        }
+    }
+    return angle.asState()
+}
+
+/**
+ * 0 to 1 over three quarters of a second each time the song ([key]) changes, for a cover settling into place. Not on
+ * the first showing, and at once with "Reduce animations".
+ */
+@Composable
+private fun rememberSettle(key: Any?, calm: Boolean): Animatable<Float, AnimationVector1D> {
+    val settle = remember { Animatable(1f) }
+    val seen = remember { arrayOfNulls<Any>(1).also { it[0] = key } }
+    LaunchedEffect(key) {
+        // the same song again (or none for a moment, between two): just be whole
+        if (key == null || key == seen[0]) {
+            settle.snapTo(1f)
+            return@LaunchedEffect
+        }
+        seen[0] = key
+        if (calm) {
+            settle.snapTo(1f)
+            return@LaunchedEffect
+        }
+        settle.snapTo(0f)
+        settle.animateTo(1f, androidx.compose.animation.core.tween(750, easing = Motion.Emphasized))
+    }
+    return settle
 }
 
 /** An icon button that dips a little when pressed and can glow when it's "on". */
@@ -340,7 +425,10 @@ private fun SeekBar(duration: Double, playing: Boolean, wavy: Boolean) {
     }
 }
 
-/** Shuffle · previous · play/pause · next · loop. The two outer buttons light up (and glow, if enabled) when they're on. */
+/**
+ * Shuffle · previous · play/pause · next · loop, as Refine's player: round buttons that soften into a squircle when
+ * pressed; shuffle and loop sit on a tonal squircle while they're on (and glow, if enabled).
+ */
 @Composable
 private fun Transport(now: Now?, bridge: Boolean, enabled: Boolean) {
     val tap = rememberTap()
@@ -354,18 +442,27 @@ private fun Transport(now: Now?, bridge: Boolean, enabled: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val shuffle = now?.shuffle == true
-        PressIconButton(Icons.Filled.Shuffle, if (shuffle) "Shuffle on" else "Shuffle off", 48, 24, if (shuffle) on else off, shuffle, bridge && enabled) {
-            tap(); Remote.setShuffle(!shuffle)
-        }
-        PressIconButton(Icons.Filled.SkipPrevious, "Previous", 60, 34, plain, false, enabled) { tap(); Remote.transport("prev") }
+        ShapeIconButton(
+            Icons.Filled.Shuffle, if (shuffle) "Shuffle on" else "Shuffle off", onClick = { tap(); Remote.setShuffle(!shuffle) },
+            modifier = Modifier.iconGlow(on, shuffle && bridge && enabled, 34), tint = off, active = shuffle, enabled = bridge && enabled,
+        )
+        ShapeIconButton(
+            Icons.Filled.SkipPrevious, "Previous", onClick = { tap(); Remote.transport("prev") },
+            sizeDp = 60, iconDp = 34, tint = plain, enabled = enabled,
+        )
         PlayButton(playing, enabled) { tap(); Remote.transport("playpause") }
-        PressIconButton(Icons.Filled.SkipNext, "Next", 60, 34, plain, false, enabled) { tap(); Remote.transport("next") }
+        ShapeIconButton(
+            Icons.Filled.SkipNext, "Next", onClick = { tap(); Remote.transport("next") },
+            sizeDp = 60, iconDp = 34, tint = plain, enabled = enabled,
+        )
         val repeat = now?.repeat ?: "NONE"
-        PressIconButton(
+        val looping = repeat != "NONE"
+        ShapeIconButton(
             if (repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-            when (repeat) { "ALL" -> "Loop queue"; "ONE" -> "Loop track"; else -> "Loop off" }, 48, 24,
-            if (repeat != "NONE") on else off, repeat != "NONE", bridge && enabled,
-        ) { tap(); Remote.setRepeat(when (repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) }
+            when (repeat) { "ALL" -> "Loop queue"; "ONE" -> "Loop track"; else -> "Loop off" },
+            onClick = { tap(); Remote.setRepeat(when (repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
+            modifier = Modifier.iconGlow(on, looping && bridge && enabled, 34), tint = off, active = looping, enabled = bridge && enabled,
+        )
     }
 }
 
@@ -382,7 +479,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
         onClick = onClick, enabled = enabled, interactionSource = src,
         shape = RoundedCornerShape(percent = percent.toInt()),
         color = if (enabled) primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-        contentColor = MaterialTheme.colorScheme.onPrimary,
+        contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
         modifier = Modifier.size(76.dp).pressScale(src).iconGlow(primary, playing && enabled, 58),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -482,8 +579,27 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val ui = rememberLyrics(s.now, active = tab == 1)
     val comments = rememberComments(s.now?.videoId)
-    // the Comments tab only for songs that have comments to show; leaving it when the next song has none
-    LaunchedEffect(comments.hasComments) { if (!comments.hasComments && tab == 2) tab = 0 }
+    // The Comments tab: shown once a song's comments have been looked up, crossed out (and not openable) for a song that
+    // has them turned off, as in Refine. After the first look it stays for the songs that follow, while theirs are looked
+    // up, so the tab bar doesn't change shape at every song; it goes for what can't have comments (files on this phone).
+    var commentsSeen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(comments.loaded) { if (comments.loaded) commentsSeen = true }
+    val showComments = comments.usable && (comments.loaded || commentsSeen)
+    val commentsOff = comments.turnedOff
+    // leaving the Comments tab when the song playing now can't show any
+    LaunchedEffect(showComments, commentsOff) { if ((!showComments || commentsOff) && tab == 2) tab = 0 }
+    // with the tab open, the comments are looked up at once (not after the usual short wait). Keyed on the song only, so
+    // switching tabs doesn't cut the lookup short, and skipping to the next song does (no lookups for songs skipped past)
+    LaunchedEffect(comments) {
+        androidx.compose.runtime.snapshotFlow { tab == 2 }.first { it }
+        if (comments.usable && !comments.loaded && !comments.loading && comments.error == null) comments.loadFirst()
+    }
+    val tabLabels = remember(showComments) { if (showComments) listOf("Up next", "Lyrics", "Comments") else listOf("Up next", "Lyrics") }
+    val crossed = remember(commentsOff) { if (commentsOff) setOf(2) else emptySet<Int>() }
+    val still = !prefs.transitions || prefs.reduceMotion
+    // the rows glide in one after another when a tab opens (and the comments' when they arrive), as in Refine
+    val arrival = rememberArrival(tab).takeIf { prefs.transitions }
+    val commentArrival = rememberArrival(tab, comments, comments.loaded).takeIf { prefs.transitions }
     val lines = ui.result?.lines.orEmpty()
     val active = rememberActiveLine(lines, ui.result?.synced == true, s.now?.playing == true)
     // list items before the first lyric line: player, tabs, lyrics controls
@@ -496,30 +612,35 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
         LazyColumn(Modifier.fillMaxSize().edgeFade(listState), state = listState) {
             item(key = "player") { PlayerPanel(s) }
             stickyHeader(key = "tabs") {
-                Surface(color = MaterialTheme.colorScheme.background.copy(alpha = 0.94f)) {
-                    TabRow(selectedTabIndex = tab, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-                        Tab(selected = tab == 0, onClick = { tab = 0; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Up next") })
-                        Tab(selected = tab == 1, onClick = { tab = 1; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Lyrics") })
-                        if (comments.hasComments) {
-                            Tab(selected = tab == 2, onClick = { tab = 2; scope.launch { listState.animateScrollToItem(1) } }, text = { Text("Comments") })
-                        }
-                    }
+                // see-through while it sits under the player (the cover's light carries on behind it); a backdrop once it
+                // is pinned to the top, so the list doesn't show through
+                val pinned by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+                val backdrop by androidx.compose.animation.animateColorAsState(
+                    MaterialTheme.colorScheme.background.copy(alpha = if (pinned) 0.94f else 0f),
+                    androidx.compose.animation.core.tween(if (still) 0 else Motion.Short, easing = Motion.Ease), label = "tabs-backdrop",
+                )
+                Surface(color = backdrop, modifier = Modifier.fillMaxWidth()) {
+                    PillTabs(
+                        tabLabels, tab,
+                        onSelect = { i -> tab = i; scope.launch { listState.animateScrollToItem(1) } },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        crossed = crossed,
+                    )
                 }
             }
             if (tab == 0) {
-                queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
+                queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt, arrival) { menuTrack = it }
             } else if (tab == 1) {
                 item(key = "ly-controls") { LyricsControls(ui) }
                 lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
             } else {
-                commentItems(comments, scope)
+                commentItems(comments, scope, commentArrival)
             }
             item(key = "pad") { Spacer(Modifier.height(88.dp)) }
         }
         menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
         if (tab == 1) JumpToLine(listState, 3, active, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 92.dp)) { jump++ }
         val showMini by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
-        val still = !prefs.transitions || prefs.reduceMotion
         // the slim bar glides up from the bottom when the full controls scroll out of view, and back down when they return
         androidx.compose.animation.AnimatedVisibility(
             visible = showMini,
@@ -542,6 +663,11 @@ fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier = Modifie
     val tap = rememberTap()
     val reduce = LocalReduceMotion.current
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val scheme = MaterialTheme.colorScheme
+    // the play button morphs as the big one does: a soft square while paused, round while playing
+    val round by androidx.compose.animation.core.animateFloatAsState(
+        if (now.playing) 50f else 30f, androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Medium, easing = Motion.Ease), label = "mini-shape",
+    )
     Surface(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         shape = PfShape.Lg,
@@ -556,20 +682,29 @@ fun MiniControls(s: RemoteState, onTap: () -> Unit, modifier: Modifier = Modifie
                 Text(now.title.ifBlank { "Nothing playing" }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(now.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = { tap(); Remote.transport("prev") }) { Icon(Icons.Filled.SkipPrevious, "Previous") }
-            FilledIconButton(onClick = { tap(); Remote.transport("playpause") }, modifier = Modifier.pressScale(src), interactionSource = src) {
-                androidx.compose.animation.Crossfade(now.playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "mini-pp") { p ->
-                    Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play")
+            ShapeIconButton(Icons.Filled.SkipPrevious, "Previous", onClick = { tap(); Remote.transport("prev") }, sizeDp = 44)
+            Surface(
+                onClick = { tap(); Remote.transport("playpause") },
+                shape = RoundedCornerShape(percent = round.roundToInt()),
+                color = scheme.primary,
+                contentColor = scheme.onPrimary,
+                interactionSource = src,
+                modifier = Modifier.padding(horizontal = 2.dp).size(44.dp).pressScale(src),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    androidx.compose.animation.Crossfade(now.playing, animationSpec = androidx.compose.animation.core.tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "mini-pp") { p ->
+                        Icon(if (p) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (p) "Pause" else "Play")
+                    }
                 }
             }
-            IconButton(onClick = { tap(); Remote.transport("next") }) { Icon(Icons.Filled.SkipNext, "Next") }
+            ShapeIconButton(Icons.Filled.SkipNext, "Next", onClick = { tap(); Remote.transport("next") }, sizeDp = 44)
         }
         // a hairline along the bottom shows how far the track is (once a second is plenty at this size)
         val fraction = rememberTrackFraction(now.duration, now.playing, 1000L)
         if (now.duration > 0) {
             androidx.compose.material3.LinearProgressIndicator(
                 progress = { fraction }, modifier = Modifier.fillMaxWidth().height(2.dp),
-                trackColor = androidx.compose.ui.graphics.Color.Transparent,
+                color = scheme.primary, trackColor = androidx.compose.ui.graphics.Color.Transparent,
             )
         }
         }   // Column
@@ -610,8 +745,10 @@ fun QueuePane(s: RemoteState, modifier: Modifier = Modifier) {
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     menuTrack?.let { t -> TrackActionsDialog(t, s.queue.count { it.section != "autoplay" }) { menuTrack = null } }
     val queueState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // the rows glide in one after another when the pane opens
+    val arrival = rememberArrival(Unit).takeIf { prefs.transitions }
     LazyColumn(modifier.fillMaxSize().edgeFade(queueState), state = queueState) {
-        queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt) { menuTrack = it }
+        queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt, arrival) { menuTrack = it }
         item(key = "pad") { Spacer(Modifier.height(24.dp)) }
     }
 }

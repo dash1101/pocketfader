@@ -20,14 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -102,9 +97,12 @@ fun ArtistScreen(browseId: String?, videoId: String?, name: String, onBack: () -
         }
     }
     Column(modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
-            Text(page?.name?.ifBlank { null } ?: name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ShapeIconButton(Icons.Filled.ArrowBack, "Back", onClick = onBack)
+            Text(
+                page?.name?.ifBlank { null } ?: name, Modifier.weight(1f).padding(start = 4.dp),
+                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         val p = page
         when {
@@ -122,37 +120,37 @@ fun ArtistScreen(browseId: String?, videoId: String?, name: String, onBack: () -
 private fun ArtistContent(p: ArtistPage) {
     var expanded by remember(p.browseId) { mutableStateOf(false) }
     val state = rememberLazyListState()
+    // once the page has loaded it glides in, row after row: the header, each shelf's title, its songs or its cards
+    val arrival = rememberPageArrival(p)
+    val playingSong by rememberPlayingSong()
     LazyColumn(Modifier.fillMaxSize().edgeFade(state), state = state) {
         item(key = "head") {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.fillMaxWidth().arrive(arrival).padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Thumb(p.thumb, 104, 52)
+                    Thumb(p.thumb, 112, 56)
                     Column(Modifier.weight(1f)) {
-                        Text(p.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(p.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         p.subscribers?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
                 // three buttons don't fit every phone: the row then scrolls sideways instead of squeezing the last one
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
                     val vid = p.playVideoId
                     val pl = p.playPlaylistId
                     if (vid != null || pl != null) {
-                        Button(onClick = { if (vid != null) Remote.play(vid, pl) else if (pl != null) Remote.startPlaylist(pl, false) }) {
-                            Icon(Icons.Filled.PlayArrow, null, Modifier.width(18.dp))
-                            Text(" Play")
-                        }
+                        PageHeaderPlay(onClick = { if (vid != null) Remote.play(vid, pl) else if (pl != null) Remote.startPlaylist(pl, false) })
                     }
                     if (pl != null) {
-                        FilledTonalButton(onClick = { Remote.startPlaylist(pl, true) }) {
-                            Icon(Icons.Filled.Shuffle, null, Modifier.width(18.dp))
-                            Text(" Shuffle")
-                        }
+                        PageHeaderTonal(Icons.Filled.Shuffle, "Shuffle", onClick = { Remote.startPlaylist(pl, true) })
                     }
                     p.radioPlaylistId?.let { r ->
-                        FilledTonalButton(onClick = { Remote.startPlaylist(r, false) }) {
-                            Icon(Icons.Filled.Radio, null, Modifier.width(18.dp))
-                            Text(" Radio")
-                        }
+                        PageHeaderTonal(Icons.Filled.Radio, "Radio", onClick = { Remote.startPlaylist(r, false) })
                     }
                 }
                 p.description?.let { d ->
@@ -167,23 +165,17 @@ private fun ArtistContent(p: ArtistPage) {
         }
         for (shelf in p.shelves) {
             item(key = "h-" + shelf.title) {
-                Text(
-                    shelf.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp),
+                PageSectionTitle(
+                    shelf.title, Modifier.arrive(arrival).padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 8.dp),
                 )
             }
             if (shelf.items.all { it.kind == "song" && it.videoId != null }) {
                 // a list of songs: rows
                 items(shelf.items.take(10), key = { "s-" + shelf.title + (it.videoId ?: it.title) }) { song ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { song.videoId?.let { Remote.play(it) } }.padding(horizontal = 16.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    PageSongRow(
+                        song.thumb, song.title, song.subtitle, onClick = { song.videoId?.let { Remote.play(it) } }, arrival = arrival,
+                        current = song.videoId != null && song.videoId == playingSong.first, playing = playingSong.second,
                     ) {
-                        Thumb(song.thumb, 48, 8)
-                        Column(Modifier.weight(1f)) {
-                            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(song.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
                         // play next, add to the queue or a playlist, download: as everywhere else a song is listed
                         SongMenuButton(song)
                     }
@@ -191,15 +183,15 @@ private fun ArtistContent(p: ArtistPage) {
             } else {
                 // albums, singles, videos, related artists: a row of cards
                 item(key = "r-" + shelf.title) {
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
+                    LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         items(shelf.items, key = { (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind }) { card ->
-                            Column(Modifier.width(144.dp).padding(horizontal = 4.dp).clickable { activate(card) { Detail.open(it) } }) {
-                                Thumb(card.thumb, 136, if (card.kind == "artist") 68 else 14)
-                                Text(card.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                if (card.subtitle.isNotBlank()) {
-                                    Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
+                            PageCoverTile(
+                                card.thumb, card.title, card.subtitle, onClick = { activate(card) { Detail.open(it) } },
+                                modifier = Modifier.width(136.dp), arrival = arrival, round = card.kind == "artist", sizeDp = 136,
+                            )
                         }
                     }
                 }

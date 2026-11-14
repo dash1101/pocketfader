@@ -31,8 +31,10 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,9 +70,10 @@ fun modesCaption(now: Now?, count: Int): String {
     return parts.joinToString(" ")
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun QueueModes(now: Now?, bridge: Boolean, count: Int, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!bridge || now == null) {
             Text(
                 "Shuffle, loop and autoplay need the YouTube Music extension connected on the computer.",
@@ -77,14 +81,24 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
             )
         } else {
             val tap = rememberTap()
+            val scheme = MaterialTheme.colorScheme
+            // tonal pills, as in Refine: a quiet surface when off, the tonal colour when on (no outline either way)
+            val colors = FilterChipDefaults.filterChipColors(
+                containerColor = scheme.surfaceContainerHigh,
+                disabledContainerColor = scheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                selectedContainerColor = scheme.secondaryContainer,
+                selectedLabelColor = scheme.onSecondaryContainer,
+                selectedLeadingIconColor = scheme.onSecondaryContainer,
+            )
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = now.shuffle, shape = chipShape(now.shuffle), onClick = { tap(); Remote.setShuffle(!now.shuffle) },
+                    colors = colors, border = null,
                     label = { Text(if (now.shuffle) "Shuffle on" else "Shuffle off") },
                     leadingIcon = { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)) },
                 )
                 FilterChip(
-                    selected = now.repeat != "NONE", shape = chipShape(now.repeat != "NONE"),
+                    selected = now.repeat != "NONE", shape = chipShape(now.repeat != "NONE"), colors = colors, border = null,
                     onClick = { tap(); Remote.setRepeat(when (now.repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
                     label = { Text(when (now.repeat) { "ALL" -> "Loop: queue"; "ONE" -> "Loop: track"; else -> "Loop off" }) },
                     leadingIcon = { Icon(if (now.repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat, null, Modifier.size(18.dp)) },
@@ -92,7 +106,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
                 val auto = now.autoplay
                 if (auto != null) {
                     FilterChip(
-                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) },
+                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) }, colors = colors, border = null,
                         // YouTube Music ignores autoplay while the queue is looping
                         enabled = now.repeat == "NONE",
                         label = { Text(if (now.repeat != "NONE") "Autoplay: off while looping" else if (auto) "Autoplay on" else "Autoplay off") },
@@ -107,9 +121,13 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int) {
 
 /**
  * The queue as list items: modes, tracks already played (collapsed), the current track, what's up next,
- * and YouTube Music's autoplay suggestions, which can be added to the queue from here.
+ * and YouTube Music's autoplay suggestions, which can be added to the queue from here. With an [arrival], the rows drawn
+ * when it starts glide in one after another.
  */
-fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit, showArt: Boolean = true, onMore: (Track) -> Unit) {
+fun LazyListScope.queueItems(
+    s: RemoteState, playedOpen: Boolean, onTogglePlayed: () -> Unit, showArt: Boolean = true, arrival: Arrival? = null,
+    onMore: (Track) -> Unit,
+) {
     val main = s.queue.filter { it.section != "autoplay" }
     val auto = s.queue.filter { it.section == "autoplay" }
     val now = s.now
@@ -118,14 +136,14 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
     val current = if (cur >= 0) main[cur] else null
     val upcoming = if (cur >= 0) main.subList(cur + 1, main.size) else main
 
-    item(key = "q-modes") { QueueModes(now, s.bridge, main.size) }
+    item(key = "q-modes") { QueueModes(now, s.bridge, main.size, Modifier.arrive(arrival)) }
 
     if (s.queue.isEmpty()) {
         item(key = "q-empty") {
             Text(
                 if (s.bridge) "The queue is empty." else "The queue needs the YouTube Music extension on the computer.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp),
+                textAlign = TextAlign.Center, modifier = Modifier.arrive(arrival).fillMaxWidth().padding(32.dp),
             )
         }
         return
@@ -134,7 +152,7 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
     if (played.isNotEmpty()) {
         item(key = "q-played-h") {
             Row(
-                Modifier.fillMaxWidth().clickable(onClick = onTogglePlayed).padding(horizontal = 20.dp, vertical = 10.dp),
+                Modifier.arrive(arrival).fillMaxWidth().clickable(onClick = onTogglePlayed).padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
@@ -148,16 +166,18 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
             }
         }
         if (playedOpen) {
-            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1, showArt = showArt, onMore = onMore)
+            items2(played, "qp", dimmed = true, canMove = true, lastIndex = main.size - 1, showArt = showArt, arrival = arrival, onMore = onMore)
         }
     }
     if (current != null) {
-        item(key = "q-now-h") { SectionHeader("Now playing", null) }
-        item(key = "q-now", contentType = "track") { TrackRow(current, dimmed = false, suggestion = false, showArt = showArt, onMore = onMore) }
+        item(key = "q-now-h") { SectionHeader("Now playing", null, Modifier.arrive(arrival)) }
+        item(key = "q-now", contentType = "track") {
+            TrackRow(current, dimmed = false, suggestion = false, showArt = showArt, onMore = onMore, modifier = Modifier.arrive(arrival))
+        }
     }
     if (upcoming.isNotEmpty()) {
-        item(key = "q-up-h") { SectionHeader("Up next · ${upcoming.size}", null) }
-        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1, showArt = showArt, onMore = onMore)
+        item(key = "q-up-h") { SectionHeader("Up next · ${upcoming.size}", null, Modifier.arrive(arrival)) }
+        items2(upcoming, "qu", dimmed = false, canMove = true, lastIndex = main.size - 1, showArt = showArt, arrival = arrival, onMore = onMore)
     }
     if (auto.isNotEmpty()) {
         item(key = "q-auto-h") {
@@ -168,7 +188,7 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
                 now?.autoplay == false -> "Won't play: autoplay is off. You can still add any of them to your queue."
                 else -> "Plays when your queue ends. Tap + to add one to your queue now."
             }
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.arrive(arrival).fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Autoplay suggestions · ${auto.size}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(why, style = MaterialTheme.typography.bodySmall, color = if (wontPlay) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -177,54 +197,75 @@ fun LazyListScope.queueItems(s: RemoteState, playedOpen: Boolean, onTogglePlayed
                 if (s.bridge && a != null) Switch(checked = a, onCheckedChange = { Remote.setAutoplay(it) })
             }
         }
-        items2(auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0, suggestion = true, showArt = showArt, onMore = onMore)
+        items2(
+            auto, "qa", dimmed = (now?.repeat ?: "NONE") != "NONE" || now?.autoplay == false, canMove = false, lastIndex = 0,
+            suggestion = true, showArt = showArt, arrival = arrival, onMore = onMore,
+        )
     }
 }
 
 private fun LazyListScope.items2(
     list: List<Track>, prefix: String, dimmed: Boolean, canMove: Boolean, lastIndex: Int,
-    suggestion: Boolean = false, showArt: Boolean = true, onMore: (Track) -> Unit,
+    suggestion: Boolean = false, showArt: Boolean = true, arrival: Arrival? = null, onMore: (Track) -> Unit,
 ) {
     for (t in list) {
-        item(key = "$prefix-${t.index}-${t.videoId}", contentType = "track") { TrackRow(t, dimmed, suggestion, showArt, onMore) }
+        item(key = "$prefix-${t.index}-${t.videoId}", contentType = "track") {
+            TrackRow(t, dimmed, suggestion, showArt, onMore, Modifier.arrive(arrival))
+        }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String, note: String?) {
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 4.dp)) {
+private fun SectionHeader(title: String, note: String?, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 4.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-/** One light row. No per-row menus or layers: everything heavy lives in [TrackActionsDialog]. */
+/**
+ * One light row. No per-row menus or layers: everything heavy lives in [TrackActionsDialog]. The song playing sits on a
+ * tonal card (the cover's colours), as in Refine's Up next and the web app.
+ */
 @Composable
-private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, showArt: Boolean, onMore: (Track) -> Unit) {
-    val title = if (t.selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    val sub = MaterialTheme.colorScheme.onSurfaceVariant
+private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, showArt: Boolean, onMore: (Track) -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val on = t.selected
+    val title = if (on) scheme.onPrimaryContainer else scheme.onSurface
+    val sub = if (on) scheme.onPrimaryContainer.copy(alpha = 0.72f) else scheme.onSurfaceVariant
+    val icons = if (on) scheme.onPrimaryContainer else LocalContentColor.current
     val fade = if (dimmed) 0.55f else 1f
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
+            // a small margin, so the card's rounded corners show; its inside padding keeps the row's content in line
+            // with the rows around it
+            .then(if (on) Modifier.padding(horizontal = 8.dp, vertical = 2.dp).clip(PfShape.Sm).background(scheme.primaryContainer) else Modifier)
             .clickable(enabled = t.videoId != null) { Remote.queuePlayAt(t) }
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+            .padding(horizontal = if (on) 8.dp else 16.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(46.dp)) {
             if (showArt) Thumb(t.art, 46)
-            if (t.selected) {
+            if (on) {
                 val playing = Remote.state.collectAsStateWithLifecycle().value.now?.playing == true
-                Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), PfShape.Xs), contentAlignment = Alignment.Center) {
-                    EqBars(androidx.compose.ui.graphics.Color.White, playing, Modifier.size(22.dp))
+                if (showArt) {
+                    Box(Modifier.size(46.dp).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), PfShape.Xs), contentAlignment = Alignment.Center) {
+                        EqBars(androidx.compose.ui.graphics.Color.White, playing, Modifier.size(22.dp))
+                    }
+                } else {
+                    // no picture to darken: the bars take the card's own colour
+                    Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+                        EqBars(scheme.onPrimaryContainer, playing, Modifier.size(22.dp))
+                    }
                 }
             }
         }
         Column(Modifier.weight(1f)) {
             Text(
                 t.title, style = MaterialTheme.typography.bodyLarge, color = title.copy(alpha = fade),
-                fontWeight = if (t.selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Text(
                 listOf(t.artist, t.duration).filter { it.isNotBlank() }.joinToString(" · "),
@@ -233,9 +274,9 @@ private fun TrackRow(t: Track, dimmed: Boolean, suggestion: Boolean, showArt: Bo
         }
         if (suggestion) {
             // one tap puts a suggestion on the end of your real queue
-            IconButton(onClick = { Remote.queueAddEnd(t) }) { Icon(Icons.Filled.Add, "Add to your queue") }
+            IconButton(onClick = { Remote.queueAddEnd(t) }) { Icon(Icons.Filled.Add, "Add to your queue", tint = icons) }
         }
-        IconButton(onClick = { onMore(t) }) { Icon(Icons.Filled.MoreVert, "More") }
+        IconButton(onClick = { onMore(t) }) { Icon(Icons.Filled.MoreVert, "More", tint = icons) }
     }
 }
 

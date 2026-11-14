@@ -25,7 +25,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -71,16 +70,17 @@ fun parseExtInfo(o: JSONObject): ExtInfo {
     )
 }
 
-private val OkGreen = Color(0xFF3ECF8E)
-
-/** The page: what is connected now, and the steps to add (or reload) the extension. */
+/**
+ * The page: what is connected now, and the steps to add (or reload) the extension. [arrival]: the settings page's, so
+ * the steps glide in one after another with its other rows.
+ */
 @Composable
-fun ExtensionSetup(s: RemoteState) {
+fun ExtensionSetup(s: RemoteState, arrival: Arrival? = null) {
     var info by remember { mutableStateOf<ExtInfo?>(null) }
     var checked by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
-    // checked again every few seconds while this page is open, so it turns green by itself once the extension is added
+    // checked again every few seconds while this page is open, so it says "Connected" by itself once the extension is added
     LaunchedEffect(s.online) {
         while (true) {
             val j = Remote.extensionStatus()
@@ -95,11 +95,14 @@ fun ExtensionSetup(s: RemoteState) {
             if (!checked) "Checking…"
             else if (!s.online) "Can't reach the computer right now."
             else "This computer's YTM Starcast is too old to help with this. Update it on the computer first.",
+            modifier = Modifier.arrive(arrival),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
     val ok = i.connected && !i.outdated
+    // connected reads in the accent colour (the album's, with Album colours), like the app's other good news
+    val good = MaterialTheme.colorScheme.primary
     Text(
         when {
             ok -> "Connected" + if (i.version.isNotBlank()) " · version ${i.version}" else ""
@@ -107,12 +110,13 @@ fun ExtensionSetup(s: RemoteState) {
             i.everConnected -> "Not connected right now. Open YouTube Music in the computer's browser."
             else -> "Not added to a browser yet. On the computer:"
         },
+        modifier = Modifier.arrive(arrival),
         style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
-        color = if (ok) OkGreen else MaterialTheme.colorScheme.onSurface,
+        color = if (ok) good else MaterialTheme.colorScheme.onSurface,
     )
     val open: (JSONObject) -> Unit = { body -> scope.launch { Remote.notify(Remote.openOnComputer(body)) } }
     if (i.connected && i.outdated) {
-        Step(1, "Reload the extension") {
+        Step(1, "Reload the extension", Modifier.arrive(arrival)) {
             Hint("Open the extensions page in the browser that plays YouTube Music, find YTM Starcast (an older copy may still be called \"Pocketfader\") and press its reload button. If a greyed-out YTM Starcast stays beside it afterwards, remove that one.")
             for (b in i.browsers) {
                 OutlinedButton(onClick = { open(JSONObject().put("what", "page").put("browser", b.id)) }, enabled = s.online) {
@@ -120,10 +124,10 @@ fun ExtensionSetup(s: RemoteState) {
                 }
             }
         }
-        Step(2, "Refresh the YouTube Music tab") {}
+        Step(2, "Refresh the YouTube Music tab", Modifier.arrive(arrival)) {}
         return
     }
-    Step(1, "Open the browser's extensions page") {
+    Step(1, "Open the browser's extensions page", Modifier.arrive(arrival)) {
         for (b in i.browsers) {
             OutlinedButton(onClick = { open(JSONObject().put("what", "page").put("browser", b.id)) }, enabled = s.online) {
                 Text("Open in ${b.name}")
@@ -135,8 +139,8 @@ fun ExtensionSetup(s: RemoteState) {
             else "Type chrome://extensions (Brave: brave://extensions, Edge: edge://extensions) into the computer's browser.",
         )
     }
-    Step(2, "Turn on Developer mode") { Hint("The switch is in the top-right corner of that page.") }
-    Step(3, "Click \"Load unpacked\" and choose this folder") {
+    Step(2, "Turn on Developer mode", Modifier.arrive(arrival)) { Hint("The switch is in the top-right corner of that page.") }
+    Step(3, "Click \"Load unpacked\" and choose this folder", Modifier.arrive(arrival)) {
         SelectionContainer {
             Text(
                 i.folder, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
@@ -150,11 +154,12 @@ fun ExtensionSetup(s: RemoteState) {
         }
         Hint("You can also drag that folder onto the extensions page.")
     }
-    Step(4, "Open YouTube Music") { Hint("Open music.youtube.com in that browser, or refresh its tab if it is already open.") }
+    Step(4, "Open YouTube Music", Modifier.arrive(arrival)) { Hint("Open music.youtube.com in that browser, or refresh its tab if it is already open.") }
     Text(
         if (ok) "✓ The extension is connected." else "Waiting for the extension…",
+        modifier = Modifier.arrive(arrival),
         style = MaterialTheme.typography.bodyMedium,
-        color = if (ok) OkGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (ok) good else MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = if (ok) FontWeight.SemiBold else FontWeight.Normal,
     )
 }
@@ -165,9 +170,9 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun Step(n: Int, title: String, content: @Composable () -> Unit) {
+private fun Step(n: Int, title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(), shape = PfShape.Md,
+        modifier.fillMaxWidth(), shape = PfShape.Md,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -187,13 +192,19 @@ private fun Step(n: Int, title: String, content: @Composable () -> Unit) {
 
 /** At the top of Settings until an extension has ever connected: leads to the steps. */
 @Composable
-fun ExtensionPrompt(onOpen: () -> Unit) {
+fun ExtensionPrompt(modifier: Modifier = Modifier, onOpen: () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(), shape = PfShape.Lg,
+        modifier.fillMaxWidth(), shape = PfShape.Lg,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Add the browser extension", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StarcastTile(36.dp)
+                Text(
+                    "Add the browser extension", Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
             Text(
                 "YTM Starcast needs its extension in the computer's browser to see and control YouTube Music.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer,
