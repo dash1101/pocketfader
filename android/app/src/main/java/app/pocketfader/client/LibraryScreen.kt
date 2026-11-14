@@ -73,6 +73,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -422,7 +423,7 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                             val kept = saveId != null && offline.any { it.id == "pl:$saveId" }
                             PageHeaderIcon(
                                 if (kept) Icons.Filled.DownloadDone else Icons.Filled.Download,
-                                "Download all and keep this playlist on the phone",
+                                if (kept) "Kept on this phone. Download again to update" else "Download all and keep this playlist on the phone",
                                 onClick = {
                                     if (saveId != null) OfflineLists.saveFrom(saveId, title, item.thumb ?: list.firstOrNull()?.thumb, songs)
                                     else Downloads.enqueue(songs)
@@ -440,12 +441,15 @@ internal fun PlaylistDetail(item: SearchItem, onBack: () -> Unit, modifier: Modi
                         if (canKeep && pid != null) {
                             // like YouTube Music's download toggle: the whole playlist stays on the phone, new songs included
                             Row(
-                                Modifier.padding(top = 12.dp).clip(PfShape.Full).clickable { Library.setKeepOffline(pid, pid !in keep) }
+                                // one switch for TalkBack, named by its words, and one stop rather than two
+                                Modifier.padding(top = 12.dp).clip(PfShape.Full)
+                                    .toggleable(value = pid in keep, role = Role.Switch) { Library.setKeepOffline(pid, it) }
+                                    .heightIn(min = 48.dp)
                                     .padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text("Keep on this phone", Modifier.padding(end = 10.dp), style = MaterialTheme.typography.bodyMedium)
-                                androidx.compose.material3.Switch(checked = pid in keep, onCheckedChange = { Library.setKeepOffline(pid, it) })
+                                androidx.compose.material3.Switch(checked = pid in keep, onCheckedChange = null)
                             }
                             if (pid in keep && Settings.prefs.value.dlWifiOnly && Downloads.metered()) {
                                 Text("Downloads start on Wi-Fi.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -101,9 +101,12 @@ fun dominantHue(pixels: IntArray): AlbumHue? {
     }
     if (px == 0 || total < 0.5) return null
     fun around(i: Int) = bins[i] + 0.5 * (bins[(i + 35) % 36] + bins[(i + 1) % 36])
-    var best = 0
-    for (i in 1 until 36) if (around(i) > around(best)) best = i
-    return AlbumHue((sums[best] / bins[best]).toFloat(), vivid.toFloat() / px)
+    // only a bin that holds some colour can win (an empty one between two equal neighbours would give 0 / 0)
+    var best = -1
+    for (i in 0 until 36) if (bins[i] > 0.0 && (best < 0 || around(i) > around(best))) best = i
+    if (best < 0) return null
+    val hue = (sums[best] / bins[best]).toFloat()
+    return if (hue.isFinite()) AlbumHue(hue, vivid.toFloat() / px) else null
 }
 
 /** Which kind of theme the album tones are made for. */
@@ -126,18 +129,24 @@ data class AlbumTones(
  * for the dark theme, the same with true black surfaces for the black theme, and light tones of the same hue for the
  * light theme. A grey cover ([vivid] under 0.12) gives nearly neutral tones.
  */
-fun albumTones(hue: Float, vivid: Float, mode: AlbumMode): AlbumTones {
-    val c = if (vivid < 0.12f) 0.3f else 1f
+fun albumTones(hue: Float, vivid: Float, mode: AlbumMode): AlbumTones = albumTonesAt(hue, albumChroma(vivid), mode)
+
+/** How colourful the tones are for a cover: fully, or nearly neutral for a grey one (as Refine does). */
+fun albumChroma(vivid: Float): Float = if (vivid < 0.12f) 0.3f else 1f
+
+/** The tones at a given colourfulness [c] (1 full, 0.3 nearly neutral), so a change between the two can glide. */
+fun albumTonesAt(hue: Float, c: Float, mode: AlbumMode): AlbumTones {
     val t = hue + 50f     // the third colour sits a little round the colour wheel
     fun hsl(h: Float, s: Float, l: Float) = hslArgb(h, s * c, l)
     val black = 0xFF000000.toInt()
     return when (mode) {
         AlbumMode.Light -> AlbumTones(
-            primary = darkEnough(hue, 62f * c, 38f, 0xFFFFFFFF.toInt(), 4.6), onPrimary = 0xFFFFFFFF.toInt(), primaryContainer = hsl(hue, 72f, 90f),
+            // dark enough to read on the deepest card colour (and so on every lighter one), white text on it reads too
+            primary = darkEnough(hue, 62f * c, 38f, hsl(hue, 22f, 90f), 4.5), onPrimary = 0xFFFFFFFF.toInt(), primaryContainer = hsl(hue, 72f, 90f),
             onPrimaryContainer = hsl(hue, 70f, 14f), inversePrimary = hsl(hue, 78f, 76f),
-            secondary = darkEnough(hue, 22f * c, 38f, 0xFFFFFFFF.toInt(), 4.6), onSecondary = 0xFFFFFFFF.toInt(), secondaryContainer = hsl(hue, 40f, 90f),
+            secondary = darkEnough(hue, 22f * c, 38f, hsl(hue, 22f, 90f), 4.5), onSecondary = 0xFFFFFFFF.toInt(), secondaryContainer = hsl(hue, 40f, 90f),
             onSecondaryContainer = hsl(hue, 40f, 14f),
-            tertiary = darkEnough(t, 50f * c, 36f, 0xFFFFFFFF.toInt(), 4.6), onTertiary = 0xFFFFFFFF.toInt(), tertiaryContainer = hsl(t, 60f, 90f), onTertiaryContainer = hsl(t, 60f, 14f),
+            tertiary = darkEnough(t, 50f * c, 36f, hsl(hue, 22f, 90f), 4.5), onTertiary = 0xFFFFFFFF.toInt(), tertiaryContainer = hsl(t, 60f, 90f), onTertiaryContainer = hsl(t, 60f, 14f),
             background = hsl(hue, 40f, 98f), onBackground = hsl(hue, 15f, 11f), surface = hsl(hue, 40f, 98f), onSurface = hsl(hue, 15f, 11f),
             surfaceVariant = hsl(hue, 22f, 90f), onSurfaceVariant = hsl(hue, 10f, 30f),
             inverseSurface = hsl(hue, 12f, 19f), inverseOnSurface = hsl(hue, 30f, 95f),
@@ -202,10 +211,13 @@ object AlbumMemory {
     fun load(ctx: Context): AlbumHue {
         val sp = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         if (!sp.contains("h")) return DefaultAlbumHue
-        return AlbumHue(sp.getFloat("h", DefaultAlbumHue.hue), sp.getFloat("s", DefaultAlbumHue.vivid))
+        val h = sp.getFloat("h", DefaultAlbumHue.hue)
+        val s = sp.getFloat("s", DefaultAlbumHue.vivid)
+        return if (h.isFinite() && s.isFinite()) AlbumHue(h, s.coerceIn(0f, 1f)) else DefaultAlbumHue
     }
 
     fun save(ctx: Context, a: AlbumHue) {
+        if (!a.hue.isFinite() || !a.vivid.isFinite()) return
         ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putFloat("h", a.hue).putFloat("s", a.vivid).apply()
     }
 }

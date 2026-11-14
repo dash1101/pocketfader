@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -190,6 +191,9 @@ class Arrival internal constructor() {
 
     internal fun begin() { epoch++; at = SystemClock.uptimeMillis(); next = 0 }
 
+    /** The rows drawn so far are the ones that glide in: rows that arrive later (scrolled into view) just appear. */
+    internal fun end() { at = 0L }
+
     /** This row's turn, or -1 when the arrival is over (a row that scrolls into view later). */
     internal fun take(): Int = if (at != 0L && SystemClock.uptimeMillis() - at < WINDOW_MS && next < MAX_ROWS) next++ else -1
 
@@ -206,6 +210,13 @@ fun rememberArrival(vararg keys: Any?): Arrival {
     val a = remember { Arrival() }
     // started during composition, so the rows composed right after it (in the same frame) already belong to it
     remember(*keys) { a.begin(); 0 }
+    // and over once the first frames are drawn: rows each count their turn from when they were composed, so a row that
+    // scrolled in later would otherwise wait, blank, for a turn far down the list
+    LaunchedEffect(*keys) {
+        withFrameNanos { }
+        withFrameNanos { }
+        a.end()
+    }
     return a
 }
 
@@ -235,13 +246,13 @@ fun Modifier.arrive(arrival: Arrival?): Modifier {
 
 /**
  * A round icon button that softens into a squircle with a light tint while pressed, and sits on a tonal squircle while
- * [active] (shuffle on, say). It dips a little when pressed, like the app's other buttons.
+ * [active] (shuffle on, say), its icon then in [activeTint] when given (the accent, so "on" stands out). It dips a little when pressed, like the app's other buttons.
  */
 @Composable
 fun ShapeIconButton(
     icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     sizeDp: Int = 48, iconDp: Int = 24, tint: Color = MaterialTheme.colorScheme.onSurface,
-    active: Boolean = false, enabled: Boolean = true,
+    active: Boolean = false, enabled: Boolean = true, activeTint: Color? = null,
 ) {
     val reduce = LocalReduceMotion.current
     val src = remember { MutableInteractionSource() }
@@ -261,7 +272,7 @@ fun ShapeIconButton(
     )
     val fg = when {
         !enabled -> tint.copy(alpha = 0.38f)
-        active -> scheme.onSecondaryContainer
+        active -> activeTint ?: scheme.onSecondaryContainer
         else -> tint
     }
     Box(

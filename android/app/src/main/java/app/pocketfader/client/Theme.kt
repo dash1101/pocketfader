@@ -6,8 +6,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -19,15 +17,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 private val Violet = Color(0xFF6B3FD6)
 
@@ -89,27 +89,33 @@ private val Light = lightColorScheme(
 val LocalReduceMotion = compositionLocalOf { false }
 
 /**
- * The colours of the cover that plays, as the whole app's theme (Album colours): the hue glides to the new cover's
- * the short way round the colour wheel, and is remembered for the next start.
+ * The colours of the cover that plays, as the whole app's theme (Album colours): they move to the new cover's the short
+ * way round the colour wheel, and are remembered for the next start. The move takes five steps in about half a second
+ * rather than every frame: each step recolours the whole app, which is too much work to do sixty times a second on an
+ * older phone (the soft wash behind the player glides smoothly on its own).
  */
 @Composable
 private fun albumScheme(art: ArtInfo, mode: AlbumMode, calm: Boolean): ColorScheme {
     val ctx = LocalContext.current
-    val start = remember { AlbumMemory.load(ctx) }
-    val target = art.hue ?: start
+    // the last real cover colour: a song with no picture (or before it loads) keeps the colours that are showing
+    val last = remember { arrayOf(AlbumMemory.load(ctx)) }
+    val target = art.hue?.also { last[0] = it } ?: last[0]
     LaunchedEffect(art.hue) { art.hue?.let { AlbumMemory.save(ctx, it) } }
-    val hue = remember { Animatable(start.hue) }
-    val vivid = remember { Animatable(start.vivid) }
+    // what is shown: the hue, and how colourful the tones are (so a grey cover fades to neutral instead of snapping)
+    var shown by remember { mutableStateOf(target.hue to albumChroma(target.vivid)) }
     LaunchedEffect(target) {
-        val spec = tween<Float>(if (calm) 0 else 600, easing = Motion.Ease)
-        launch { vivid.animateTo(target.vivid, spec) }
-        hue.animateTo(hueStep(hue.value, target.hue), spec)
-        hue.snapTo(((hue.value % 360f) + 360f) % 360f)
+        val (h0, c0) = shown
+        val h1 = hueStep(h0, target.hue)
+        val c1 = albumChroma(target.vivid)
+        val steps = if (calm) 1 else 5
+        for (i in 1..steps) {
+            if (steps > 1) delay(110L)
+            val k = Motion.Ease.transform(i / steps.toFloat())
+            shown = (((h0 + (h1 - h0) * k) % 360f) + 360f) % 360f to (c0 + (c1 - c0) * k)
+        }
     }
-    // whole degrees and steps of 0.02: the colours are worked out again only when they would really look different
-    val h = hue.value.roundToInt()
-    val v = (vivid.value * 50f).roundToInt()
-    return remember(h, v, mode) { albumTones(h.toFloat(), v / 50f, mode).toScheme(mode == AlbumMode.Light) }
+    val (h, c) = shown
+    return remember(h, c, mode) { albumTonesAt(h, c, mode).toScheme(mode == AlbumMode.Light) }
 }
 
 /**

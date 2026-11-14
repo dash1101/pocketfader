@@ -153,7 +153,7 @@ fun SpeedDialog(onDismiss: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (p in row) {
                             val chosen = percent == p
-                            FilterChip(
+                            FilterChip(colors = refineChipColors(onDialog = true), border = null, 
                                 selected = chosen, onClick = { saveSpeed(p) }, shape = chipShape(chosen),
                                 label = { Text(speedShort(p)) },
                             )

@@ -42,6 +42,22 @@ class AlbumColorsTest {
     }
 
     @Test
+    fun twoEqualColoursEitherSideOfRedStillGiveAHue() {
+        // equal amounts of a pink-red (355 degrees) and an orange-red (15 degrees): the empty bin between them must not win
+        val px = IntArray(32 * 32) { i -> if (i % 2 == 0) 0xFFFF0015.toInt() else 0xFFFF4000.toInt() }
+        val h = dominantHue(px)!!
+        assertTrue(h.hue.isFinite())
+        assertTrue(h.hue in 10f..20f || h.hue in 350f..360f)
+    }
+
+    @Test
+    fun aGreyCoverFadesTowardNeutral() {
+        assertEquals(1f, albumChroma(0.5f), 0f)
+        assertEquals(0.3f, albumChroma(0.05f), 0f)
+        assertEquals(albumTones(200f, 0.05f, AlbumMode.Dark), albumTonesAt(200f, 0.3f, AlbumMode.Dark))
+    }
+
+    @Test
     fun theHueTakesTheShortWayRound() {
         assertEquals(370f, hueStep(350f, 10f), 0.001f)
         assertEquals(-10f, hueStep(10f, 350f), 0.001f)

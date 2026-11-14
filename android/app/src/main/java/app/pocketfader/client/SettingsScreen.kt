@@ -311,7 +311,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             ) { v -> Settings.update { it.copy(keepPitch = v) } }
             Text(
                 "The speed is set from the player while music plays on this phone" +
-                    (if (p.phoneSpeed != 100) " (now ${speedLabel(p.phoneSpeed)})." else "."),
+                    (if (p.phoneSpeed != 100) " (now ${speedShort(p.phoneSpeed)})." else "."),
                 modifier = Modifier.pageGlide(),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -712,20 +712,9 @@ private fun Choice(
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { (value, label) ->
-                FilterChip(selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
+                FilterChip(colors = refineChipColors(), border = null, selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
-    }
-}
-
-/** A speed as the player writes it: 100 -> "1×", 150 -> "1.5×", 125 -> "1.25×". */
-private fun speedLabel(percent: Int): String {
-    val whole = percent / 100
-    val part = percent % 100
-    return when {
-        part == 0 -> "$whole×"
-        part % 10 == 0 -> "$whole.${part / 10}×"
-        else -> "$whole.${part.toString().padStart(2, '0')}×"
     }
 }
 
@@ -756,9 +745,9 @@ private fun NumberChoice(
         if (warning != null) Text(warning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.forEach { (v, label) ->
-                FilterChip(selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
+                FilterChip(colors = refineChipColors(), border = null, selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
             }
-            FilterChip(
+            FilterChip(colors = refineChipColors(), border = null, 
                 selected = !isPreset, shape = chipShape(!isPreset), onClick = { asking = true },
                 label = { Text(if (isPreset) "Custom…" else custom(value)) },
             )

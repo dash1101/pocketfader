@@ -111,11 +111,11 @@ fun AccentPicker(prefs: Prefs, modifier: Modifier = Modifier) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = chosen == 0, shape = chipShape(chosen == 0), onClick = { custom = false; Settings.update { it.copy(accent = 0) } }, label = { Text("Auto") })
+            FilterChip(colors = refineChipColors(), border = null, selected = chosen == 0, shape = chipShape(chosen == 0), onClick = { custom = false; Settings.update { it.copy(accent = 0) } }, label = { Text("Auto") })
             presets.forEach { (name, argb) ->
                 Swatch(Color(argb), name, selected = chosen == argb) { custom = false; Settings.update { it.copy(accent = argb) } }
             }
-            FilterChip(selected = custom, shape = chipShape(custom), onClick = { custom = true; if (chosen == 0) Settings.update { it.copy(accent = presets[0].second) } }, label = { Text("Custom") })
+            FilterChip(colors = refineChipColors(), border = null, selected = custom, shape = chipShape(custom), onClick = { custom = true; if (chosen == 0) Settings.update { it.copy(accent = presets[0].second) } }, label = { Text("Custom") })
         }
         if (chosen != 0) {
             val raw = Color(chosen)

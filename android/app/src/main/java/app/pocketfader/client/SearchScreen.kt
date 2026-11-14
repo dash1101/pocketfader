@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
@@ -89,7 +88,7 @@ private val FILTERS: List<Pair<String, String>> = listOf(
 )
 
 /** The library tabs under the search box. */
-private val TABS = listOf("For you", "Playlists", "On this phone")
+private val TABS = listOf("For you", "Playlists", "This phone")
 
 private fun resultKey(it: SearchItem): String = (it.videoId ?: it.playlistId ?: it.browseId ?: it.title) + it.kind
 
@@ -257,10 +256,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                         selected = chosen, shape = chipShape(chosen),
                         onClick = { if (filter != id && !busy) { SearchMemory.filter = id; doSearch(SearchMemory.query) } },
                         label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = scheme.surfaceContainerHigh, labelColor = scheme.onSurfaceVariant,
-                            selectedContainerColor = scheme.primaryContainer, selectedLabelColor = scheme.onPrimaryContainer,
-                        ),
+                        colors = refineChipColors(),
                         border = null,
                     )
                 }

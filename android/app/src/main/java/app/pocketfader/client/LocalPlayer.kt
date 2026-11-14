@@ -526,7 +526,7 @@ object LocalPlayer {
             Remote.applyLocal(
                 cur?.let { Now(title = it.title, artist = it.artist, art = bigArt(it.art), playing = false, duration = it.durationSec, videoId = it.videoId ?: it.key, liked = Library.isLiked(it.videoId), shuffle = shuffled, autoplay = autoplay) },
                 r?.items.orEmpty().mapIndexed { i, it -> trackOf(it, i, i == r?.index) },
-                Progress((r?.positionMs ?: 0L) / 1000.0, SystemClock.elapsedRealtime()), 0,
+                Progress((r?.positionMs ?: 0L) / 1000.0, SystemClock.elapsedRealtime(), Settings.prefs.value.phoneSpeed.coerceIn(25, 300) / 100.0), 0,
             )
             return
         }

@@ -312,6 +312,10 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     }
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     val comments = rememberComments(if (wide) s.now?.videoId else null)     // the tablet layout's Comments tab
+    // once any song's comments have shown, the tab stays for the next songs while theirs load (as on phones), so the bar
+    // of tabs doesn't change width at every song; kept out here so opening an artist or album page doesn't forget it
+    var commentsSeen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(comments.loaded) { if (comments.loaded) commentsSeen = true }
     val snackbar = remember { SnackbarHostState() }
     // The YouTube Music remote is switched off on the computer (music playing on this phone doesn't need it).
     val remoteOff = cfg.isSet && prefs.playOn != "phone" && !s.remoteOn
@@ -506,9 +510,10 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                             // Refine's pill bar of tabs: the chosen one sits on a tonal pill that slides to it.
                             // Comments only for songs that have comments to show; when a song has them turned off the
                             // tab stays in its place, crossed out, as in Refine
-                            val commentsOff = comments.loaded && comments.disabled
-                            val panes = Pane.values().filter { it != Pane.Comments || comments.hasComments || commentsOff }
-                            LaunchedEffect(comments.hasComments) { if (!comments.hasComments && pane == Pane.Comments) pane = Pane.Queue }
+                            val commentsOff = comments.turnedOff
+                            val showComments = comments.usable && (comments.loaded || commentsSeen)
+                            val panes = Pane.values().filter { it != Pane.Comments || showComments }
+                            LaunchedEffect(showComments, commentsOff) { if ((!showComments || commentsOff) && pane == Pane.Comments) pane = Pane.Queue }
                             PillTabs(
                                 labels = panes.map { it.label },
                                 selected = panes.indexOf(pane).coerceAtLeast(0),

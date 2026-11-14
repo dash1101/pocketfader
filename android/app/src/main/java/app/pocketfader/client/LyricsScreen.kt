@@ -184,7 +184,7 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             r?.sources?.forEach { src ->
                 val chosen = if (prefs.lyricsSource == "auto") r.source == src.id else prefs.lyricsSource == src.id
-                FilterChip(
+                FilterChip(colors = refineChipColors(), border = null, 
                     selected = chosen, shape = chipShape(chosen),
                     onClick = { Settings.update { it.copy(lyricsSource = src.id) } },
                     enabled = src.found,
@@ -192,19 +192,19 @@ fun LyricsControls(ui: LyricsUi, modifier: Modifier = Modifier) {
                 )
             }
             IconButton(onClick = ui.refresh, enabled = !ui.loading) { Icon(Icons.Filled.Refresh, "Look again") }
-            FilterChip(selected = false, shape = chipShape(false), onClick = { layoutOpen = true }, label = { Text("Aa  Layout") })
+            FilterChip(colors = refineChipColors(), border = null, selected = false, shape = chipShape(false), onClick = { layoutOpen = true }, label = { Text("Aa  Layout") })
         }
         if (r != null && r.found) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (r.lines.any { it.rom != null }) {
-                    FilterChip(
+                    FilterChip(colors = refineChipColors(), border = null, 
                         selected = prefs.lyricsRoman, shape = chipShape(prefs.lyricsRoman),
                         onClick = { Settings.update { it.copy(lyricsRoman = !it.lyricsRoman) } },
                         label = { Text("Romanize") },
                     )
                 }
                 if (r.lines.any { it.tr != null }) {
-                    FilterChip(
+                    FilterChip(colors = refineChipColors(), border = null, 
                         selected = prefs.lyricsTranslation, shape = chipShape(prefs.lyricsTranslation),
                         onClick = { Settings.update { it.copy(lyricsTranslation = !it.lyricsTranslation) } },
                         label = { Text("Translation") },
@@ -416,7 +416,7 @@ fun LyricsLayoutControls() {
     fun chips(title: String, options: List<Pair<String, String>>, selected: String, pick: (String) -> Unit) {
         Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { (v, l) -> FilterChip(selected = selected == v, shape = chipShape(selected == v), onClick = { pick(v) }, label = { Text(l) }) }
+            options.forEach { (v, l) -> FilterChip(colors = refineChipColors(onDialog = true), border = null, selected = selected == v, shape = chipShape(selected == v), onClick = { pick(v) }, label = { Text(l) }) }
         }
     }
     chips("Alignment", listOf("start" to "Left", "center" to "Centered", "end" to "Right"), p.lyricsAlign) { v -> Settings.update { it.copy(lyricsAlign = v) } }

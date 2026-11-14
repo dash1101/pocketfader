@@ -11,7 +11,7 @@ Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows y
 | Tab | What it does |
 |---|---|
 | **Playing** | The player (cover, seek bar, shuffle / previous / play-pause / next / loop, like, volume) with **Up next** and **Lyrics** underneath. |
-| **Search** | Search YouTube Music (suggestions as you type, recent searches), and your library in tabs: **For you** (your home shelves, or recommendations made on the phone), **Playlists** (play, shuffle, download, keep on the phone, and edit your own) and **On this phone** (downloads and the phone's music files). The ⋮ menu on any song can play it, put it next, add it to your queue or a playlist, start a radio, or download it. |
+| **Search** | Search YouTube Music (suggestions as you type, recent searches), and your library in tabs: **For you** (your home shelves, or recommendations made on the phone), **Playlists** (play, shuffle, download, keep on the phone, and edit your own) and **This phone** (downloads and the phone's music files). The ⋮ menu on any song can play it, put it next, add it to your queue or a playlist, start a radio, or download it. |
 | **Settings** | Split into pages: **Sound & outputs** (master volume, every output device with its **own level**, the built-in equalizer), Downloads & playing on this phone, **Library & offline** (sync, automatic downloads, listening history), Lyrics, Controls, Appearance (theme, accent colour, navigation style), Effects, Screen & always-on, Connection, **Parts**, **Discord status**, Updates, Performance and About. |
 
 **Up next** shows what's already played (collapsed), the current track, what's coming, and YouTube Music's

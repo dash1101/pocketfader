@@ -210,8 +210,6 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            // the speed of music playing on this phone (the computer's player keeps its own)
-            if (s.source == "phone") SpeedButton()
             if (s.canSleep) SleepButton(s)
             // save the song that's playing to this phone
             if (isYtId(videoId)) {
@@ -239,7 +237,7 @@ fun PlayerPanel(s: RemoteState, modifier: Modifier = Modifier) {
         if (!hasTrack) {
             Text(
                 when {
-                    s.source == "phone" -> "Nothing is playing on this phone. Search for a song, or play something you downloaded (Search → On this phone)."
+                    s.source == "phone" -> "Nothing is playing on this phone. Search for a song, or play something you downloaded (Search → This phone)."
                     s.online -> "Start something on the computer. Open YouTube Music with the YTM Starcast extension, or any player."
                     else -> "Waiting for the computer…"
                 },
@@ -444,7 +442,7 @@ private fun Transport(now: Now?, bridge: Boolean, enabled: Boolean) {
         val shuffle = now?.shuffle == true
         ShapeIconButton(
             Icons.Filled.Shuffle, if (shuffle) "Shuffle on" else "Shuffle off", onClick = { tap(); Remote.setShuffle(!shuffle) },
-            modifier = Modifier.iconGlow(on, shuffle && bridge && enabled, 34), tint = off, active = shuffle, enabled = bridge && enabled,
+            modifier = Modifier.iconGlow(on, shuffle && bridge && enabled, 34), tint = off, active = shuffle, enabled = bridge && enabled, activeTint = on,
         )
         ShapeIconButton(
             Icons.Filled.SkipPrevious, "Previous", onClick = { tap(); Remote.transport("prev") },
@@ -461,7 +459,7 @@ private fun Transport(now: Now?, bridge: Boolean, enabled: Boolean) {
             if (repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
             when (repeat) { "ALL" -> "Loop queue"; "ONE" -> "Loop track"; else -> "Loop off" },
             onClick = { tap(); Remote.setRepeat(when (repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
-            modifier = Modifier.iconGlow(on, looping && bridge && enabled, 34), tint = off, active = looping, enabled = bridge && enabled,
+            modifier = Modifier.iconGlow(on, looping && bridge && enabled, 34), tint = off, active = looping, enabled = bridge && enabled, activeTint = on,
         )
     }
 }
@@ -538,6 +536,9 @@ fun PhoneVolumeRow(modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f),
         )
         Text("$percent%", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp).widthIn(min = 40.dp), textAlign = TextAlign.End)
+        // the speed of music playing on this phone (the computer's player keeps its own): beside the phone's volume, which
+        // is shown only then, so the song's title keeps its room
+        SpeedButton()
     }
 }
 
@@ -588,9 +589,10 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val commentsOff = comments.turnedOff
     // leaving the Comments tab when the song playing now can't show any
     LaunchedEffect(showComments, commentsOff) { if ((!showComments || commentsOff) && tab == 2) tab = 0 }
-    // with the tab open, the comments are looked up at once (not after the usual short wait). Keyed on the song only, so
-    // switching tabs doesn't cut the lookup short, and skipping to the next song does (no lookups for songs skipped past)
+    // Opening the tab looks the comments up at once. A new song while the tab is already open waits a moment first, so
+    // songs skipped past aren't looked up. Keyed on the song only, so switching tabs doesn't cut a lookup short.
     LaunchedEffect(comments) {
+        if (tab == 2) delay(800)
         androidx.compose.runtime.snapshotFlow { tab == 2 }.first { it }
         if (comments.usable && !comments.loaded && !comments.loading && comments.error == null) comments.loadFirst()
     }

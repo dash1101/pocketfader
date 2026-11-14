@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -83,13 +82,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int, modifier: Modifie
             val tap = rememberTap()
             val scheme = MaterialTheme.colorScheme
             // tonal pills, as in Refine: a quiet surface when off, the tonal colour when on (no outline either way)
-            val colors = FilterChipDefaults.filterChipColors(
-                containerColor = scheme.surfaceContainerHigh,
-                disabledContainerColor = scheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                selectedContainerColor = scheme.secondaryContainer,
-                selectedLabelColor = scheme.onSecondaryContainer,
-                selectedLeadingIconColor = scheme.onSecondaryContainer,
-            )
+            val colors = refineChipColors()
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = now.shuffle, shape = chipShape(now.shuffle), onClick = { tap(); Remote.setShuffle(!now.shuffle) },

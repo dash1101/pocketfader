@@ -148,7 +148,7 @@ object OfflineLists {
         }
         save()
         Downloads.enqueue(wanted)
-        Remote.notify("“$title” is kept on this phone, in Search → On this phone")
+        Remote.notify("“$title” is kept on this phone, in Search → This phone")
     }
 
     /** A new playlist of your own (empty) -> its id. */
@@ -193,7 +193,7 @@ object OfflineLists {
 
 // ---------------------------------------------------------------------------------------------- screens
 
-/** The offline playlists as a row of covers (Search → On this phone), with a button to make a new one. */
+/** The offline playlists as a row of covers (Search → This phone), with a button to make a new one. */
 @Composable
 fun OfflineListsRow(onOpen: (String) -> Unit, arrival: Arrival? = null) {
     val lists by OfflineLists.lists.collectAsStateWithLifecycle()

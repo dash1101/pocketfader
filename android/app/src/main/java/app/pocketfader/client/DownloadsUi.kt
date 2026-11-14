@@ -25,7 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * What is downloading now: how far all of it is (bytes, speed, about how long is left), then each song with its own bar
- * (the first few; the rest are counted). Shown on Search → On this phone while anything downloads.
+ * (the first few; the rest are counted). Shown on Search → This phone while anything downloads.
  */
 @Composable
 fun DownloadsInProgress(modifier: Modifier = Modifier, shown: Int = 5) {

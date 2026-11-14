@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -51,6 +52,7 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -241,28 +243,34 @@ fun rememberTurn(on: Boolean, periodMs: Int): State<Float>? {
 @Composable
 fun OrbitRing(shape: String, tint: Color, turn: State<Float>?, modifier: Modifier = Modifier, fade: () -> Float = { 1f }) {
     val scheme = MaterialTheme.colorScheme
-    val accent = scheme.primary
-    val light = scheme.onPrimaryContainer
+    // the ring is a light: on a light page its tones stay light too (inversePrimary is the light accent there)
+    val lightPage = scheme.surface.luminance() > 0.5f
+    val accent = if (lightPage) scheme.inversePrimary else scheme.primary
+    val glow = if (lightPage) scheme.primaryContainer else scheme.onPrimaryContainer
     val outlineShape = remember(shape) { coverShape(shape) }
-    Canvas(modifier) {
-        val deg = turn?.value ?: 0f
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        val clear = android.graphics.Color.TRANSPARENT
-        val colors = intArrayOf(clear, clear, accent.toArgb(), tint.toArgb(), clear, clear, light.toArgb(), accent.toArgb(), clear, clear)
-        val stops = floatArrayOf(0f, 0.08f, 0.18f, 0.26f, 0.38f, 0.58f, 0.68f, 0.76f, 0.88f, 1f)
-        val brush = object : ShaderBrush() {
-            override fun createShader(size: Size): Shader = android.graphics.SweepGradient(cx, cy, colors, stops).apply {
-                setLocalMatrix(android.graphics.Matrix().apply { setRotate(deg, cx, cy) })
+    androidx.compose.foundation.layout.Spacer(
+        modifier.drawWithCache {
+            // built once per size and colour; only the small gradient turns each frame
+            val outline = outlineShape.createOutline(size, layoutDirection, this)
+            val rings = listOf(30.dp to 0.08f, 20.dp to 0.16f, 12.dp to 0.32f, 6.dp to 0.9f).map { (w, k) -> Stroke(width = w.toPx()) to k }
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val clear = android.graphics.Color.TRANSPARENT
+            val colors = intArrayOf(clear, clear, accent.toArgb(), tint.toArgb(), clear, clear, glow.toArgb(), accent.toArgb(), clear, clear)
+            val stops = floatArrayOf(0f, 0.08f, 0.18f, 0.26f, 0.38f, 0.58f, 0.68f, 0.76f, 0.88f, 1f)
+            val sweep = android.graphics.SweepGradient(cx, cy, colors, stops)
+            val turnMatrix = android.graphics.Matrix()
+            val brush = object : ShaderBrush() {
+                override fun createShader(size: Size): Shader = sweep
             }
-        }
-        val outline = outlineShape.createOutline(size, layoutDirection, this)
-        val a = fade()
-        // the light first (wide and faint), then the ring itself
-        for ((w, k) in listOf(30.dp.toPx() to 0.08f, 20.dp.toPx() to 0.16f, 12.dp.toPx() to 0.32f, 6.dp.toPx() to 0.9f)) {
-            drawOutline(outline, brush, alpha = (k * a).coerceIn(0f, 1f), style = Stroke(width = w))
-        }
-    }
+            onDrawBehind {
+                turnMatrix.setRotate(turn?.value ?: 0f, cx, cy)
+                sweep.setLocalMatrix(turnMatrix)
+                val a = fade()
+                for ((stroke, k) in rings) drawOutline(outline, brush, alpha = (k * a).coerceIn(0f, 1f), style = stroke)
+            }
+        },
+    )
 }
 
 /** A slow breathing value (about 0.85 to 1) while [on], 1 otherwise. */
@@ -326,6 +334,23 @@ fun chipShape(selected: Boolean): Shape {
     // 16 is half a chip's height: a full pill
     val r by animateDpAsState(if (selected) 16.dp else 8.dp, tween(if (reduce) 0 else Motion.Short, easing = Motion.Ease), label = "chip")
     return RoundedCornerShape(r)
+}
+
+/**
+ * Chips in Refine's look, the same everywhere: a quiet surface when not chosen, the tonal container once chosen, no
+ * outline. [onDialog]: a step lighter, for chips on a dialog (which is itself that quiet colour).
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun refineChipColors(onDialog: Boolean = false): androidx.compose.material3.SelectableChipColors {
+    val s = MaterialTheme.colorScheme
+    val off = if (onDialog) s.surfaceContainerHighest else s.surfaceContainerHigh
+    return androidx.compose.material3.FilterChipDefaults.filterChipColors(
+        containerColor = off, labelColor = s.onSurfaceVariant,
+        disabledContainerColor = off.copy(alpha = 0.5f),
+        selectedContainerColor = s.primaryContainer, selectedLabelColor = s.onPrimaryContainer,
+        selectedLeadingIconColor = s.onPrimaryContainer,
+    )
 }
 
 /** Three little bars that dance while music plays (the "now playing" mark). */
