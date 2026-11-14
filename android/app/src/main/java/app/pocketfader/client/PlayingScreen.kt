@@ -76,6 +76,7 @@ import coil.transform.RoundedCornersTransformation
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -627,7 +628,8 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
                 )
                 val edge = LocalEdgeFade.current
                 val page = MaterialTheme.colorScheme.background
-                Box(Modifier.fillMaxWidth().drawBehind { drawRect((edge?.top ?: page).copy(alpha = backdrop.value)) }) {
+                // it also catches the taps that land beside the tabs, so they never reach the row hidden under it
+                Box(Modifier.fillMaxWidth().drawBehind { drawRect((edge?.top ?: page).copy(alpha = backdrop.value)) }.pointerInput(Unit) {}) {
                     PillTabs(
                         tabLabels, shownTab,
                         onSelect = { i -> tab = i; scope.launch { listState.animateScrollToItem(1) } },

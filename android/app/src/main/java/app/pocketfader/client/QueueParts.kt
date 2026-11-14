@@ -99,7 +99,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int, modifier: Modifie
                 val auto = now.autoplay
                 if (auto != null) {
                     FilterChip(
-                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) }, colors = colors, border = refineChipBorder(auto),
+                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) }, colors = colors, border = refineChipBorder(auto, now.repeat == "NONE"),
                         // YouTube Music ignores autoplay while the queue is looping
                         enabled = now.repeat == "NONE",
                         label = { Text(if (now.repeat != "NONE") "Autoplay: off while looping" else if (auto) "Autoplay on" else "Autoplay off") },

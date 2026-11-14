@@ -7,13 +7,14 @@
   turned off). The song playing is on a tonal card in the queue, the round buttons soften into squircles when pressed
   and stay tonal while on (shuffle, loop), the cover settles into place when a song changes, and the rows of a list
   glide in one after another when it opens.
-- **Halo and Orbit around the cover** (Android, Settings → Appearance → Cover visualizer): the blurred cover turning
+- **Halo and Orbit around the cover** (Android, Settings → Effects → Cover visualizer): the blurred cover turning
   slowly around it, or a ring of the album's colours running round its edge, as in Refine.
-- **Speed for music on the phone:** a speed button by the song's title while music plays on the phone: 0.25× to 3×,
+- **Speed for music on the phone:** a speed button beside the phone's volume while music plays on the phone: 0.25× to 3×,
   presets, and Keep the pitch (off: slower sounds lower, as on a record). The times, lyrics and Discord status follow
   the speed.
 - YTM Starcast's logo in the Android app's top bar and on its first screen; settings, search, library, artist and
   album pages in the same tonal look.
+- Refine and the web app: a cover with no colour in it gives neutral tones, as in the Android app.
 
 ### Updating from 0.2.0-alpha.10 or older
 
