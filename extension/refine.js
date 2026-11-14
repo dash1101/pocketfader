@@ -103,6 +103,9 @@
     sparkle: "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
     dice: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM7.5 18c-.83 0-1.5-.67-1.5-1.5S6.67 15 7.5 15s1.5.67 1.5 1.5S8.33 18 7.5 18zm0-9C6.67 9 6 8.33 6 7.5S6.67 6 7.5 6 9 6.67 9 7.5 8.33 9 7.5 9zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm0-9c-.83 0-1.5-.67-1.5-1.5S15.67 6 16.5 6s1.5.67 1.5 1.5S17.33 9 16.5 9z",
     close: "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+    download: "M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z",
+    computer: "M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z",
+    chevron: "M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z",
     playlistAdd: "M14 10H3v2h11v-2zm0-4H3v2h11V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM3 16h7v-2H3v2z",
     refresh: "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
     play: "M8 5v14l11-7z",
@@ -374,6 +377,10 @@
   ytmusic-tab-renderer[data-pf-lyrics] { overflow: hidden !important; }
   .pf-lyr-tab { display: flex; flex-direction: column; min-height: 240px; animation: pf-in .35s var(--pf-ease) both; }
   ytmusic-player-page tp-yt-paper-tab[data-pf-enabled] { opacity: 1 !important; pointer-events: auto !important; cursor: pointer; }
+  /* a tab YouTube Music can't open for this song (Comments, when they are turned off): crossed out, so it doesn't look like the others */
+  ytmusic-player-page tp-yt-paper-tab[aria-disabled="true"]:not([data-pf-enabled]) { opacity: .5 !important; cursor: default; }
+  ytmusic-player-page tp-yt-paper-tab[aria-disabled="true"]:not([data-pf-enabled]), ytmusic-player-page tp-yt-paper-tab[aria-disabled="true"]:not([data-pf-enabled]) * {
+    text-decoration: line-through !important; text-decoration-thickness: 2px !important; }
   .pf-lyr-note { margin: auto; text-align: center; color: var(--pf-muted); font-size: 15px; display: grid; gap: 12px; justify-items: center; }
   .pf-lyr-head { display: flex; align-items: center; gap: 2px; padding: 14px 10px 8px 22px; }
   .pf-lyr-head .pf-head { flex: 1; padding: 0; min-width: 0; }
@@ -477,6 +484,17 @@
     color: var(--ytmusic-text-primary, #fff); font-family: inherit; border-top: 1px solid rgba(255,255,255,.08); }
   .pf-menu-item:hover, .pf-menu-item:focus-visible { background: rgba(255,255,255,.1); outline: none; }
   .pf-menu-item .pf-ico { display: grid; place-items: center; color: var(--pf-accent); }
+  /* Download: a row that opens to its choices, which sit indented under it */
+  [data-pf-dl-own] { display: none !important; }
+  .pf-menu-item .pf-grow { flex: 1; }
+  .pf-dl-head .pf-chev { display: grid; place-items: center; color: var(--ytmusic-text-secondary, #aaa); transition: transform var(--pf-t-short) var(--pf-ease); }
+  .pf-dl-head[aria-expanded="true"] .pf-chev { transform: rotate(90deg); }
+  .pf-dl-opts[hidden] { display: none; }
+  .pf-dl-opts { animation: pf-in .22s var(--pf-ease) both; }
+  .pf-menu-item.pf-inline { border-top: 0; }
+  .pf-menu-item.pf-sub { height: auto; min-height: 52px; padding: 8px 16px 8px 28px; border-top: 0; }
+  .pf-sub-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+  .pf-sub-text small { font-size: 12px; color: var(--ytmusic-text-secondary, #aaa); }
   /* one more row can make a long menu scroll; its scrollbar must not start a sideways one too */
   ytmusic-menu-popup-renderer:has(.pf-menu-item) { overflow-x: hidden !important; scrollbar-width: thin; scrollbar-color: var(--pf-outline) transparent; }
   .pf-dice button.pf-busy .pf-ico, .pf-bar-btn button.pf-busy .pf-ico { animation: pf-spin .8s linear infinite; }
@@ -553,12 +571,16 @@
   .pf-logo .pf-logo-tile { flex: none; filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--pf-glow) 70%, transparent)); transition: transform .4s var(--pf-spring); }
   .pf-logo:hover .pf-logo-tile { transform: rotate(-8deg) scale(1.06); }
   .pf-logo-word { font-family: "YouTube Sans", Roboto, sans-serif; font-size: 21px; font-weight: 600; letter-spacing: -.03em; color: var(--ytmusic-text-primary, #fff); }
+  .pf-logo.pf-logo-compact .pf-logo-word { display: none; }
   /* cover visualizers (experimental): behind the big cover, inside its frame's own layer */
   ytmusic-player[data-pf-viz] { isolation: isolate; overflow: visible !important; }
   .pf-viz { position: absolute; inset: 0; z-index: -1; pointer-events: none; --pf-level: 0; }
-  .pf-viz-art { position: absolute; left: -8%; top: -8%; width: 116%; height: 116%; object-fit: cover; border-radius: 34%;
-    filter: blur(48px) saturate(1.8); opacity: .8; animation: pf-viz-spin 38s linear infinite; will-change: rotate; }
-  .pf-viz-art.pf-b { left: -16%; top: -16%; width: 132%; height: 132%; opacity: .45; filter: blur(66px) saturate(2) brightness(1.1);
+  /* The halo is drawn at a quarter of its size and scaled up as a picture ("will-change: transform" keeps the browser
+     from drawing it again at full size): blurred this much it looks the same, and each new cover costs a fraction of
+     what it did (drawn full size, every new song made the page stutter for a moment). */
+  .pf-viz-art { position: absolute; left: 35.5%; top: 35.5%; width: 29%; height: 29%; object-fit: cover; border-radius: 34%;
+    transform: scale(4); filter: blur(12px) saturate(1.8); opacity: .8; animation: pf-viz-spin 38s linear infinite; will-change: transform; }
+  .pf-viz-art.pf-b { left: 33.5%; top: 33.5%; width: 33%; height: 33%; opacity: .45; filter: blur(16.5px) saturate(2) brightness(1.1);
     animation: pf-viz-spin 24s linear infinite reverse, pf-viz-breathe 8s ease-in-out infinite; }
   .pf-viz[data-mode="pulse"] .pf-viz-art { scale: calc(1 + var(--pf-level) * .24); opacity: calc(.4 + var(--pf-level) * .6); }
   .pf-viz[data-mode="pulse"] .pf-viz-art.pf-b { animation: pf-viz-spin 24s linear infinite reverse; }
@@ -641,7 +663,15 @@
     ytmusic-carousel-shelf-renderer #previous-items-button:not([disabled]):hover, ytmusic-carousel-shelf-renderer #next-items-button:not([disabled]):hover {
       background-color: var(--pf-container) !important; border-radius: var(--pf-r-sm); }
     ytmusic-carousel-shelf-renderer #previous-items-button[disabled], ytmusic-carousel-shelf-renderer #next-items-button[disabled] { opacity: .45; }
-    ytmusic-carousel-shelf-renderer #previous-items-button yt-interaction, ytmusic-carousel-shelf-renderer #next-items-button yt-interaction { display: none; }`,
+    ytmusic-carousel-shelf-renderer #previous-items-button yt-interaction, ytmusic-carousel-shelf-renderer #next-items-button yt-interaction { display: none; }
+    /* the song's progress bar takes the album colour too (YouTube Music's own, seen with the wavy bar off, is a fixed red) */
+    #progress-bar.ytmusic-player-bar, #progress-bar.ytmusic-player-controls, ytmusic-player-bar tp-yt-paper-slider#progress-bar {
+      --paper-slider-active-color: var(--pf-accent) !important; --paper-progress-active-color: var(--pf-accent) !important;
+      --paper-slider-disabled-active-color: var(--pf-accent) !important; --paper-slider-secondary-color: var(--pf-track) !important;
+      --paper-slider-container-color: color-mix(in srgb, var(--pf-text) 14%, transparent) !important; }
+    #progress-bar.ytmusic-player-bar[focused], ytmusic-player-bar:hover #progress-bar.ytmusic-player-bar, #progress-bar.ytmusic-player-controls {
+      --paper-slider-knob-color: var(--pf-accent) !important; --paper-slider-knob-start-color: var(--pf-accent) !important;
+      --paper-slider-knob-start-border-color: var(--pf-accent) !important; }`,
     controls: `
     .ytmusicPlayerControlsPlayPauseButton button, ytmusic-player-bar #play-pause-button {
       width: 56px !important; height: 56px !important; min-width: 56px !important; padding: 0 !important;
@@ -765,9 +795,12 @@
     html.pf-page ytmusic-player-page ytmusic-player { animation: pf-cover .65s var(--pf-ease) both; }
     html.pf-page ytmusic-player-page #side-panel { animation: pf-rise .6s .08s var(--pf-ease) both; }
     /* Up next, Lyrics, Related: what's under the tabs slides in */
-    html.pf-tab ytmusic-player-page #tab-renderer > * { animation: pf-swap .4s var(--pf-ease) both; }
-    html.pf-tab ytmusic-player-queue #contents > ytmusic-player-queue-item:nth-child(-n+12) { animation: pf-swap .4s var(--pf-ease) both; }
-    ${stagger("html.pf-tab ytmusic-player-queue #contents > ytmusic-player-queue-item", 12, 25, 40)}
+    html.pf-tab ytmusic-player-page #tab-renderer > :not(:has(ytmusic-player-queue-item)) { animation: pf-swap .4s var(--pf-ease) both; }
+    /* Up next: every song in view glides in, one after another from the first one seen (however far down the list is
+       scrolled), when the tab opens and when the player page does */
+    @keyframes pf-row { from { opacity: 0; transform: translateX(32px) scale(.97); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+    html:is(.pf-tab, .pf-page) ytmusic-player-page ytmusic-player-queue-item[data-pf-in] {
+      animation: pf-row .55s cubic-bezier(.05,.7,.1,1) both; animation-delay: calc(var(--pf-i, 0) * 26ms + 60ms); }
     ytmusic-player-page tp-yt-paper-tab { transition: color .25s; }
     ytmusic-player-queue-item { transition: background-color .35s var(--pf-ease); }
     }`,
@@ -919,7 +952,7 @@
   // can make the browser lay the whole page out again, and YouTube Music's page is big.
   let rectEpoch = 0;
   let resizeT = 0;
-  window.addEventListener("resize", () => { rectEpoch++; kickWave(); clearTimeout(resizeT); resizeT = setTimeout(syncWave, 200); }, { passive: true });
+  window.addEventListener("resize", () => { rectEpoch++; kickWave(); clearTimeout(resizeT); resizeT = setTimeout(() => { syncWave(); syncLogo(); }, 200); }, { passive: true });
   window.addEventListener("scroll", () => { rectEpoch++; }, { capture: true, passive: true });
   function hostRect(host, o) {
     const now = performance.now();
@@ -1701,7 +1734,7 @@
     if (!el) return;
     tabsObs = new MutationObserver(() => {
       const sel = [...el.querySelectorAll("tp-yt-paper-tab")].map(tabSelected).join();
-      if (sel !== lastTabSel) { if (lastTabSel) pulse("pf-tab", 700); lastTabSel = sel; }
+      if (sel !== lastTabSel) { if (lastTabSel) pulse("pf-tab", 700, numberQueueRows); lastTabSel = sel; }
       syncLyricsTab();
     });
     tabsObs.observe(el, { attributes: true, subtree: true, attributeFilter: ["aria-selected", "class", "disabled", "aria-disabled"] });
@@ -2080,7 +2113,66 @@
         onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } },
         h("span", { class: "pf-ico" }, icon(ICON.playlistAdd)), h("span", { text: "Playlist from this song" }));
       list.append(item);
+      addDownload(list, vid);
     }
+  }
+  // Download: one row that opens to the ways there are, YouTube Music Premium's own download (when the menu has it)
+  // and saving the song as a file on this computer through the YTM Starcast app. YouTube Music's own row stays in the
+  // menu, hidden, and is what the Premium choice presses.
+  const menuKey = (go) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); go(e); } };
+  function addDownload(list, vid) {
+    const own = list.querySelector(":scope > ytmusic-menu-service-item-download-renderer");
+    const closeMenu = () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+    const sub = (ico, text, small, go, attrs) => h("div", { class: "pf-menu-item pf-sub", role: "menuitem", tabindex: "0", ...attrs,
+      onclick: (e) => { e.stopPropagation(); go(); }, onkeydown: menuKey(go) },
+      h("span", { class: "pf-ico" }, icon(ico)), h("span", { class: "pf-sub-text" }, text, h("small", { text: small })));
+    const opts = h("div", { class: "pf-dl-opts", role: "group", hidden: true },
+      own ? sub(ICON.download, "With YouTube Music Premium", "Offline, in YouTube Music", () => {
+        (own.querySelector("tp-yt-paper-item") || own).click();
+      }) : null,
+      sub(ICON.computer, "Save to this computer", "A file in your Music folder", () => {
+        closeMenu();
+        saveSong(vid);
+      }, { "data-pf-save": "" }));
+    const toggle = () => {
+      const open = opts.hidden;
+      opts.hidden = !open;
+      head.setAttribute("aria-expanded", String(open));
+      if (open) { const first = opts.querySelector(".pf-sub"); if (first) first.focus({ preventScroll: true }); opts.scrollIntoView({ block: "nearest" }); }
+    };
+    const head = h("div", { class: "pf-menu-item pf-dl-head", role: "menuitem", tabindex: "0", "aria-haspopup": "true", "aria-expanded": "false",
+      onclick: (e) => { e.stopPropagation(); toggle(); }, onkeydown: menuKey(toggle) },
+      h("span", { class: "pf-ico" }, icon(ICON.download)), h("span", { class: "pf-grow", text: "Download" }), h("span", { class: "pf-chev" }, icon(ICON.chevron, 20)));
+    if (own) {
+      own.setAttribute("data-pf-dl-own", "");
+      head.classList.add("pf-inline");
+      own.before(head, opts);
+    } else list.append(head, opts);
+  }
+  // Saving takes a little while (the app fetches the song): a message now, and another when the file is there.
+  async function saveSong(vid) {
+    toast("Saving the song to this computer\u2026");
+    const r = await askStarcast("save", { videoId: vid });
+    if (!r.ok) {
+      toast(r.error === "offline" ? "YTM Starcast isn't answering on this computer. Start it to save songs."
+        : r.error === "old_app" ? "Saving songs needs a newer YTM Starcast app on this computer. Update it to save songs."
+        : r.error === "no_ytdlp" ? "Saving songs needs yt-dlp on this computer. Install it, then try again."
+        : r.error === "needs_press" ? "Press Save to this computer again to save the song."
+        : "The song couldn't be saved. Try again in a moment.");
+      return;
+    }
+    for (let i = 0; i < 150; i++) {
+      await sleep(2000);
+      const st = await askStarcast("saveStatus", { job: r.id });
+      const job = st.job;
+      if (!job) { if (st.error === "offline" || st.error === "gone") break; continue; }
+      if (job.state === "done") {
+        toast(job.name ? "Saved to your Music folder: " + job.name : "That song is already in your Music folder.");
+        return;
+      }
+      if (job.state === "failed") { toast("The song couldn't be saved: " + (job.error || "unknown error")); return; }
+    }
+    toast("YTM Starcast stopped answering while saving the song.");
   }
   // A second click on the ⋮ that opened YouTube Music's menu closes it. On its own, YouTube Music closes the menu
   // as the button is pressed and then opens it again on the click, so it never closes.
@@ -2645,7 +2737,22 @@
         box.removeAttribute("data-pf-logo-box");
         lg.removeAttribute("data-pf-logo");
       }
+      if (want) fitLogo(lg);
     }
+  }
+  // In a narrow window YouTube Music squeezes the top bar's left part: the name then gives way to the search box,
+  // and the tile stays (the name comes back when there is room for it again).
+  function fitLogo(lg) {
+    const logo = lg.querySelector(".pf-logo");
+    const bar = lg.closest("ytmusic-nav-bar");
+    const next = bar && bar.querySelector("#center-content, .center-content, ytmusic-search-box");
+    if (!logo || !next || !logo.getClientRects().length) return;
+    const room = next.getBoundingClientRect().left - 8;
+    const r = logo.getBoundingClientRect();
+    if (!logo.classList.contains("pf-logo-compact")) {
+      logo.__pfFull = r.width;
+      if (r.right > room) logo.classList.add("pf-logo-compact");
+    } else if (logo.__pfFull && r.left + logo.__pfFull <= room) logo.classList.remove("pf-logo-compact");
   }
 
   // ------------------------------------------------------------------ playlist maker
@@ -2983,16 +3090,17 @@
     if (vizHears()) ensureSound(true);
     syncViz();
   }
-  // the cover at its largest
-  function bigArt() {
+  // the cover, small: it is blurred anyway, and a small picture is quick to load and draw
+  function vizArt() {
     try {
       const md = navigator.mediaSession && navigator.mediaSession.metadata;
       const list = md && md.artwork ? [...md.artwork] : [];
-      list.sort((a, b) => (parseInt(b.sizes, 10) || 0) - (parseInt(a.sizes, 10) || 0));
-      if (list[0] && list[0].src) return list[0].src;
+      list.sort((a, b) => (parseInt(a.sizes, 10) || 0) - (parseInt(b.sizes, 10) || 0));
+      const pick = list.find((x) => (parseInt(x.sizes, 10) || 0) >= 120) || list[list.length - 1];
+      if (pick && pick.src) return pick.src;
     } catch (e) {}
     const vid = API.curVideo();
-    return vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : "";
+    return vid ? `https://i.ytimg.com/vi/${vid}/mqdefault.jpg` : "";
   }
   function vizHost() {
     if (!pageOpen) return null;
@@ -3021,7 +3129,7 @@
       host.setAttribute("data-pf-viz", "");
       viz.src = "";
     }
-    const src = bigArt();
+    const src = vizArt();
     if (src && src !== viz.src) { viz.src = src; for (const im of viz.arts) im.src = src; }
     if (vizHears() && !viz.raf) viz.raf = requestAnimationFrame(vizFrame);
   }
@@ -3118,16 +3226,33 @@
   // The "motion" layer's CSS does the moving; these marks on the page say when: a new page (or a new set of
   // results) has arrived, a new song started, the player page opened, a tab in it changed.
   const pulses = {};
-  function pulse(cls, ms) {
+  // prep (optional) runs just before the mark goes on, once the new content is laid out, and returns how much longer
+  // the animation takes (rows arriving one after another)
+  function pulse(cls, ms, prep) {
     if (!on("motion") || REDUCED.matches) return;
     const de = document.documentElement;
     de.classList.remove(cls);
     clearTimeout(pulses[cls]);
     // added again two frames later, so the animation starts over (without making the page lay itself out now)
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      const more = prep ? prep() || 0 : 0;
       de.classList.add(cls);
-      pulses[cls] = setTimeout(() => de.classList.remove(cls), ms);
+      pulses[cls] = setTimeout(() => de.classList.remove(cls), ms + more);
     }));
+  }
+  // Up next's songs in view, numbered from the first one seen (at most 30: the rest are below the fold anyway). Only
+  // they animate; the others are left where they are.
+  const QUEUE_ROWS = "ytmusic-player-page #tab-renderer ytmusic-player-queue-item";
+  function numberQueueRows() {
+    let k = 0;
+    const vh = innerHeight;
+    for (const el of document.querySelectorAll(QUEUE_ROWS)) {
+      const r = el.getBoundingClientRect();
+      const seen = k < 30 && r.height > 0 && r.bottom > 0 && r.top < vh;
+      el.toggleAttribute("data-pf-in", seen);
+      if (seen) el.style.setProperty("--pf-i", String(k++));
+    }
+    return k * 26;
   }
   // A page's content arriving is seen by the page element's data changing, shortly after an address change or a
   // click on something that leads somewhere (filter chips change the content without changing the address).
@@ -3166,7 +3291,7 @@
   function watchPlayerPage() {
     const open = !!document.querySelector("ytmusic-player-bar[player-page-open], ytmusic-app-layout[player-page-open]");
     if (pageOpen !== null && open !== pageOpen) {
-      if (open) { pulse("pf-page", 1100); setTimeout(lyricsBack, 60); } else lyricsAway();
+      if (open) { pulse("pf-page", 1100, numberQueueRows); setTimeout(lyricsBack, 60); } else lyricsAway();
     }
     pageOpen = open;
     const el = document.querySelector("ytmusic-app-layout") || document.querySelector("ytmusic-player-bar");

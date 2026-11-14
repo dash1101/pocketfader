@@ -36,7 +36,7 @@ from . import qr
 from .updater import Updater, for_old_apps
 from .config import DEFAULT_PORT, JsonFile, config_dir
 from .opener import Opener, music_url, valid_id
-from .audio import AudioFetcher, TYPES as AUDIO_TYPES, parse_range
+from .audio import AudioFetcher, Saver, TYPES as AUDIO_TYPES, parse_range
 
 STATIC = Path(__file__).parent / "static"
 EQ_MIN, EQ_MAX = -12.0, 12.0
@@ -115,7 +115,7 @@ def _phone_name(instance):
 class App:
     """Everything a request handler needs. One instance per server (tests make their own)."""
 
-    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None, audio_fetcher=None, presence=None, dry_run=False, extension=None):
+    def __init__(self, audio, engine, media, prefs=None, token=None, allowed_hosts=(), lyrics=None, updater=None, beacon=None, opener=None, audio_fetcher=None, presence=None, dry_run=False, extension=None, saver=None):
         self.audio, self.engine, self.media = audio, engine, media
         self.bridge = Bridge()
         self.lyrics = lyrics or LyricsService(ytm_lyrics=self._ytm_lyrics)
@@ -125,6 +125,8 @@ class App:
         self.beacon = beacon if beacon is not None else DiscordStatus.in_folder(config_dir(), dry_run=dry_run)
         self.opener = opener or Opener()
         self.fetcher = audio_fetcher or AudioFetcher()
+        # "Save to this computer" in YouTube Music's song menu (Refine): songs saved as files in the Music folder
+        self.saver = saver or Saver(dry_run=dry_run)
         # What the extension's reports are handed to (see "Discord status engine" below): the Discord status itself
         # unless a test gives something else; None = no engine.
         self.presence = presence if presence is not None else (self.beacon if hasattr(self.beacon, "feed") else None)
@@ -250,6 +252,7 @@ class App:
             "phone_discord": True,   # POST /api/phone/playing: music playing on the phone itself can be shown on Discord
             "sleep": True,
             "audio": self.fetcher.available,
+            "save": self.saver.available,
         }
 
     def state(self):
@@ -781,6 +784,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, app.beacon.status())
         if path == "/ext/sound":   # the computer's sound (volume, outputs, EQ) for Refine's panel
             return self._json(200, app.sound_brief())
+        if path == "/ext/save":   # how a "Save to this computer" is getting on
+            job = app.saver.status((parse_qs(urlsplit(self.path).query).get("id") or [""])[0][:16])
+            return self._json(200, job) if job else self._json(404, {"error": "no such save"})
         if path == "/ext/status":   # the extension's toolbar popup and Refine's panel
             parts = app.parts()
             return self._json(200, {"app": APP_NAME, "version": __version__, "parts": parts,
@@ -867,6 +873,14 @@ class Handler(BaseHTTPRequestHandler):
             app.presence_feed(body.get("instance"), body.get("now"),
                               agent=agent_from_user_agent(self.headers.get("User-Agent")), ts=body.get("ts"))
             return self._json(200, {"ok": True, "cfg": app.ext_cfg()})
+        if path == "/ext/save":   # YouTube Music's song menu (Refine): save this song as a file in the Music folder
+            try:
+                jid = app.saver.start(body.get("videoId"))
+            except ValueError:
+                return self._json(400, {"error": "bad video id"})
+            except RuntimeError:
+                return self._json(503, {"error": "no_ytdlp"})
+            return self._json(202, {"ok": True, "id": jid, "folder": str(app.saver.folder)})
         if path == "/ext/result":
             app.bridge.deliver_result(body.get("id"), body.get("data"))
             return self._json(200, {"ok": True})

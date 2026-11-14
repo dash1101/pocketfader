@@ -1,17 +1,22 @@
-### What's new in 0.2.4-alpha
+### What's new in 0.2.5-alpha
 
-- **Discord status for music playing on the phone:** when the Android app plays music on the phone itself, your
-  computer shows it as your Discord status, through the Discord app on the computer, just as it does for YouTube Music
-  in the browser. It works wherever the phone can reach the computer (at home or over Tailscale), and the phone needs no
-  Discord app. Switch it in the Android app: Settings → Discord status → Show what this phone plays (on by default).
-  Whichever started playing last, the phone or the computer, is the one shown.
-- **Privacy and terms:** [Privacy](https://github.com/dash1101/ytm-starcast/blob/main/PRIVACY.md) lists everything YTM
-  Starcast keeps and what it sends where; [Terms of use](https://github.com/dash1101/ytm-starcast/blob/main/TERMS.md)
-  covers the rest.
-- The web app no longer tells Google or GitHub the address it was opened at when it loads covers and images.
+- **The web app looks like Refine:** its colours now come from the cover of what plays, the same tones Refine gives
+  YouTube Music (the new Album colours theme, now the default; the other themes are still in Settings → Appearance).
+  The tabs sit in one pill bar beside YTM Starcast's name, with the chosen one tonal, as do the song playing in the
+  queue and the chosen chips. The play button and switches take Refine's shapes.
+- **Download in YouTube Music's song menu (Refine):** the ⋮ menu's Download opens to two choices: YouTube Music
+  Premium's own download, or **Save to this computer**, which saves the song as an audio file, with its details and
+  cover, in your Music folder (Music › YTM Starcast). Saving uses yt-dlp on the computer (and ffmpeg, when there, for
+  the details and cover).
+- **No more stutter when a song changes on the player page:** the Halo visualizer behind the cover is drawn far more
+  cheaply, and looks the same.
+- With the wavy bar off, the song's progress bar takes the album's colour instead of YouTube Music's red.
+- A tab beside the player that YouTube Music can't open for a song (Comments, when they are turned off) is crossed out.
+- Up next: every song in view glides in, one after another, when the tab or the player page opens (it used to be only
+  the first twelve).
+- YTM Starcast's logo no longer runs into the search box in a narrow window: only its tile shows there.
 
 ### Updating from 0.2.0-alpha.10 or older
- 0.2.0-alpha.10 or older
 
 - **Computer:** versions up to 0.2.0-alpha.10 don't recognize the new version names, so update this once by hand:
   `./install.sh` (Linux), `install-exe.ps1` (Windows) or Orbit.

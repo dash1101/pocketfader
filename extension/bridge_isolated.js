@@ -277,6 +277,44 @@
   for (const type of ["pointerdown", "pointermove", "pointerup", "keydown", "input", "change"]) document.addEventListener(type, noteSndPress, true);
   const sndPressed = () => !!sndPressAt && performance.now() - sndPressAt < 1500;
 
+  // ---- "Save to this computer" in YouTube Music's song menu: the app saves the song in the Music folder ----
+  // Started from the page only right after a real press on Refine's own save row (as with the switches above).
+  let savePressAt = 0;
+  function noteSavePress(ev) {
+    if (!ev.isTrusted) return;
+    if (ev.type === "keyup" && !["Enter", " ", "Spacebar"].includes(ev.key)) return;
+    try { if (ev.target && ev.target.closest && ev.target.closest("[data-pf-save]")) savePressAt = performance.now(); } catch (e) {}
+  }
+  document.addEventListener("pointerup", noteSavePress, true);
+  document.addEventListener("keyup", noteSavePress, true);
+  function savePressed() {
+    const ok = savePressAt && performance.now() - savePressAt < 3000;
+    savePressAt = 0;
+    return !!ok;
+  }
+  async function saveSong(videoId) {
+    if (typeof videoId !== "string" || !/^[\w-]{11}$/.test(videoId)) return { error: "bad_request" };
+    try {
+      const r = await call("/ext/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoId }) });
+      if (r.status === 404) return { error: "old_app" };
+      const j = await r.json().catch(() => null);
+      if (r.status === 503) return { error: "no_ytdlp" };
+      return r.ok && j && j.id ? { ok: true, id: j.id, folder: j.folder } : { error: (j && j.error) || "failed" };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+  async function saveStatus(jid) {
+    if (typeof jid !== "string" || !/^s\d{1,9}$/.test(jid)) return { error: "bad_request" };
+    try {
+      const r = await call("/ext/save?id=" + jid, { method: "GET" });
+      const j = await r.json().catch(() => null);
+      return r.ok && j ? { job: j } : { error: r.status === 404 ? "gone" : "failed" };
+    } catch (e) {
+      return { error: "offline" };
+    }
+  }
+
   async function starcastForPage(id, d) {
     const data = d.op === "status" ? await status()
       : d.op === "parts" ? (pressedFor(d.parts) ? await setParts(d.parts) : { error: "needs_press" })
@@ -284,6 +322,8 @@
       : d.op === "discordSet" ? (dcPressed() ? await discordSet(d.kind, d.body) : { error: "needs_press" })
       : d.op === "sound" ? await sound()
       : d.op === "soundSet" ? (sndPressed() ? await soundSet(d.kind, d.body) : { error: "needs_press" })
+      : d.op === "save" ? (savePressed() ? await saveSong(d.videoId) : { error: "needs_press" })
+      : d.op === "saveStatus" ? await saveStatus(d.job)
       : { error: "bad_request" };
     window.postMessage({ __vmr: "starcast-result", id, data }, "*");
   }

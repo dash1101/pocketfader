@@ -3,6 +3,18 @@
 What changed in each version of YTM Starcast, newest first. Versions are named `0.2.1-alpha`, `0.2.2-alpha` and so on;
 before that they were `0.2.0-alpha.1` to `0.2.0-alpha.10`.
 
+## 0.2.4-alpha
+
+- **Discord status for music playing on the phone:** when the Android app plays music on the phone itself, your
+  computer shows it as your Discord status, through the Discord app on the computer, just as it does for YouTube Music
+  in the browser. It works wherever the phone can reach the computer (at home or over Tailscale), and the phone needs no
+  Discord app. Switch it in the Android app: Settings → Discord status → Show what this phone plays (on by default).
+  Whichever started playing last, the phone or the computer, is the one shown.
+- **Privacy and terms:** [Privacy](https://github.com/dash1101/ytm-starcast/blob/main/PRIVACY.md) lists everything YTM
+  Starcast keeps and what it sends where; [Terms of use](https://github.com/dash1101/ytm-starcast/blob/main/TERMS.md)
+  covers the rest.
+- The web app no longer tells Google or GitHub the address it was opened at when it loads covers and images.
+
 ## 0.2.3-alpha
 
 - **The web app looks and works like the Android app:** Playing, Search and Settings. On phones the player is a page of

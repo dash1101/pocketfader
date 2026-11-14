@@ -22,6 +22,9 @@
     /* the shared scale (docs/DESIGN.md): corners, how long things take, how they move */
     --r-xs:8px; --r-sm:12px; --r-md:16px; --r-lg:24px; --r-xl:28px; --r-full:999px;
     --t-quick:.12s; --t-short:.2s; --t-medium:.3s; --t-long:.45s;
+    /* tonal colours, as in Refine (Material You): a container for what is chosen, the text on it, the text on the accent */
+    --container:color-mix(in srgb, var(--accent) 30%, var(--card)); --on-container:color-mix(in srgb, var(--accent) 30%, var(--text));
+    --on-accent:#0a0512; --glow:color-mix(in srgb, var(--accent) 55%, transparent);
   }
   /* ---------- themes ---------- */
   :root[data-theme="light"]{ --bg:#f5f6fa; --panel:#ffffff; --card:#eceef4; --card2:#e0e3ec; --line:#d2d6e0;
@@ -995,12 +998,14 @@
 
 <div id="app">
   <nav id="nav">
+    <div class="brand"><img src="/icon.svg" alt=""><span class="word">Starcast</span></div>
+    <div class="navtabs">
     <div id="navpill"></div>
-    <div class="brand"><img src="/icon.svg" alt=""></div>
     <button class="navbtn sel" data-view="playing"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm-2 14.5v-9l6 4.5z"/></svg><span>Playing</span></button>
     <button class="navbtn" data-view="queue"><svg viewBox="0 0 24 24"><path d="M15 6H3v2h12zm0 4H3v2h12zM3 16h8v-2H3zM17 6v8.18A3 3 0 1019 17V8h3V6z"/></svg><span>Queue</span></button>
     <button class="navbtn" data-view="lyrics" id="nav-lyrics"><svg viewBox="0 0 24 24"><path d="M4 5h16v2H4zm0 4h10v2H4zm0 4h16v2H4zm0 4h10v2H4z"/></svg><span>Lyrics</span></button>
     <button class="navbtn" data-view="search"><svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg><span>Search</span></button>
+    </div>
     <div class="spacer"></div>
     <button class="navbtn" data-view="settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.6 7.6 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7 7 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.58.24-1.12.56-1.62.94l-2.39-.96a.5.5 0 00-.6.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.6 7.6 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32c.14.24.42.32.6.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.62-.94l2.39.96c.18.08.46 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg><span>Settings</span></button>
     <div id="ndot" class="dot"></div>
@@ -1509,11 +1514,12 @@ function extensionNote() {
 }
 
 /* ==================== themes ==================== */
-const THEMES = [['auto','Auto'],['material','Material You'],['dark','Dark'],['light','Light'],['oled','OLED'],['space','Space'],['sunset','Sunset'],['forest','Forest'],['rose','Rose']];
-const THEME_SW = { auto:['#0a0a0c','#f5f6fa','#8b5cf6'], material:['#1b1b1f','#2f3033','#a8c7fa'], dark:['#0a0a0c','#20212a','#8b5cf6'], light:['#f5f6fa','#e0e3ec','#7c3aed'],
+const THEMES = [['refine','Album colours'],['auto','Auto'],['material','Material You'],['dark','Dark'],['light','Light'],['oled','OLED'],['space','Space'],['sunset','Sunset'],['forest','Forest'],['rose','Rose']];
+const THEME_SW = { refine:['#140e0f','#2b1f21','#f2a7b3'], auto:['#0a0a0c','#f5f6fa','#8b5cf6'], material:['#1b1b1f','#2f3033','#a8c7fa'], dark:['#0a0a0c','#20212a','#8b5cf6'], light:['#f5f6fa','#e0e3ec','#7c3aed'],
   oled:['#000000','#161619','#8b5cf6'], space:['#080a1e','#1c2150','#6d8bff'],
   sunset:['#190d12','#3b2027','#ff7a52'], forest:['#091311','#193026','#37b978'], rose:['#160a11','#391b2b','#f06baf'] };
 const THEME_VARS = ['bg','panel','card','card2','line','text','dim','dim2','accent','accent2'];
+const TONE_VARS = ['container','on-container','on-accent','glow'];   // set only by Album colours (the others mix their own)
 function customThemes() { try { return JSON.parse(localStorage.getItem('vmr-custom-themes')) || []; } catch (e) { return []; } }
 function saveCustomThemes(list) { try { localStorage.setItem('vmr-custom-themes', JSON.stringify(list)); } catch (e) {} }
 // The WebView's prefers-color-scheme is unreliable, so ask the Cue shell when it's there.
@@ -1539,7 +1545,13 @@ function syncSystemBars() {
 function applyTheme(sel) {
   const t = sel === 'auto' ? autoTheme() : sel;   // 'auto' follows the system light/dark
   const rs = document.documentElement.style;
-  THEME_VARS.forEach(k => rs.removeProperty('--' + k));
+  THEME_VARS.concat(TONE_VARS).forEach(k => rs.removeProperty('--' + k));
+  if (t === 'refine') {
+    document.documentElement.dataset.theme = 'refine';
+    try { localStorage.setItem('vmr-theme', sel); } catch (e) {}
+    paintAlbum();
+    return;
+  }
   // Material You — pull Android's dynamic palette through the Cue bridge
   if (t === 'material') {
     // the WebView's prefers-color-scheme is unreliable (app forces a theme) — ask native
@@ -1579,6 +1591,62 @@ function applyTheme(sel) {
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if ((localStorage.getItem('vmr-theme') || 'dark') === 'auto') applyTheme('auto');
 }); } catch (e) {}
+/* ==================== Album colours: Refine's theme, its tones made from the cover of what plays ==================== */
+// The same tones Refine gives YouTube Music (one hue, Material You style), so the two look alike side by side.
+const ALBUM = { h: 352, s: 1, url: '' };
+try { const a = JSON.parse(localStorage.getItem('vmr-album-color')); if (a && isFinite(a.h) && isFinite(a.s)) { ALBUM.h = a.h; ALBUM.s = a.s; } } catch (e) {}
+function albumPalette(h, vivid) {
+  const c = vivid < 0.12 ? 0.3 : 1;   // a grey cover gives nearly neutral tones
+  const t = (s, l, a) => 'hsl(' + Math.round(h) + ' ' + Math.round(s * c) + '% ' + l + '%' + (a != null ? ' / ' + a : '') + ')';
+  return { bg:t(14, 7), panel:t(14, 10), card:t(15, 13), card2:t(16, 17), line:t(12, 22), text:t(18, 93), dim:t(10, 72), dim2:t(8, 52),
+    accent:t(78, 76), accent2:t(70, 86), container:t(42, 27), 'on-container':t(78, 90), 'on-accent':t(62, 15), glow:t(85, 55, .55) };
+}
+function paintAlbum() {
+  if (document.documentElement.dataset.theme !== 'refine') return;
+  const rs = document.documentElement.style, p = albumPalette(ALBUM.h, ALBUM.s);
+  for (const k in p) rs.setProperty('--' + k, p[k]);
+  syncSystemBars();
+}
+// The most vivid colour of a small copy of the cover: hues in 10-degree bins, weighted by how colourful each pixel is.
+function dominantHue(data) {
+  const bins = new Float64Array(36), sum = new Float64Array(36);
+  let total = 0, vivid = 0, px = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue;
+    px++;
+    const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, s = mx ? d / mx : 0;
+    if (mx < 0.18 || s < 0.22) continue;
+    let hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hh = (hh * 60 + 360) % 360;
+    const w = s * mx * (0.6 + 0.4 * s), bin = Math.floor(hh / 10) % 36;
+    bins[bin] += w; sum[bin] += hh * w; total += w; vivid++;
+  }
+  if (!px || total < 0.5) return null;
+  const around = (i) => bins[i] + 0.5 * (bins[(i + 35) % 36] + bins[(i + 1) % 36]);
+  let best = 0;
+  for (let i = 1; i < 36; i++) if (around(i) > around(best)) best = i;
+  return { h: sum[best] / bins[best], s: vivid / px };
+}
+function albumFrom(url) {
+  if (!url || url === ALBUM.url) return;
+  ALBUM.url = url;
+  const img = new Image();
+  img.crossOrigin = 'anonymous'; img.referrerPolicy = 'no-referrer';
+  img.onload = () => {
+    if (url !== ALBUM.url) return;
+    try {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+      const x = cv.getContext('2d', { willReadFrequently: true });
+      x.drawImage(img, 0, 0, 32, 32);
+      const c = dominantHue(x.getImageData(0, 0, 32, 32).data) || { h: 352, s: 1 };
+      ALBUM.h = c.h; ALBUM.s = c.s;
+      try { localStorage.setItem('vmr-album-color', JSON.stringify({ h: c.h, s: c.s })); } catch (e) {}
+      paintAlbum();
+    } catch (e) { /* the image host didn't allow reading it: the colours stay */ }
+  };
+  img.src = url;
+}
 function rgb2hex(rgb) {
   const m = (rgb || '').match(/\d+/g); if (!m) return '#000000';
   return '#' + m.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('');
@@ -1598,11 +1666,11 @@ function moveNavPill() {
   const sel = document.querySelector('.navbtn.sel'), pill = $('#navpill');
   if (!pill) return;
   if (!sel) { pill.style.opacity = '0'; return; }
+  // wide screens: Settings sits outside the bar of tabs, and is shown chosen by itself
+  if (sel.offsetParent !== pill.offsetParent) { pill.style.opacity = '0'; return; }
   pill.style.width = sel.offsetWidth + 'px';
   pill.style.height = sel.offsetHeight + 'px';
-  // wide screens: an underline under the tab (its height is fixed by CSS); phones: the capsule behind it
-  const y = isWide() ? sel.offsetTop + sel.offsetHeight - 3 : sel.offsetTop;
-  pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + y + 'px)';
+  pill.style.transform = 'translate(' + sel.offsetLeft + 'px,' + sel.offsetTop + 'px)';
   pill.style.opacity = '1';
 }
 // Re-measure whenever the bar or a button changes size (a label appearing, fonts loading late, the phone turning).
@@ -2398,7 +2466,7 @@ function renderThemes(m) {
   const paintThemeGrid = () => {
     grid.innerHTML = '';
     const mk = (id, name, sw, custom) => {
-      const c = el('div', 'themecard' + (id === (localStorage.getItem('vmr-theme') || 'dark') ? ' sel' : ''));
+      const c = el('div', 'themecard' + (id === (localStorage.getItem('vmr-theme') || 'refine') ? ' sel' : ''));
       c.style.position = 'relative';
       c.innerHTML = `<div class="swatch"><i style="background:${sw[0]}"></i><i style="background:${sw[1]}"></i><i style="background:${sw[2]}"></i></div><div class="n">${escapeHtml(name)}</div>`;
       c.addEventListener('click', () => { applyTheme(id); paintThemeGrid(); });
@@ -2603,7 +2671,7 @@ function openThemeEditor(m, existing) {
       applyTheme('dark'); toast('Theme deleted'); renderThemes(m); });
     bar.appendChild(del); }
   const cancel = el('button', 'pill ghost'); cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => { applyTheme(localStorage.getItem('vmr-theme') || 'dark'); renderThemes(m); });
+  cancel.addEventListener('click', () => { applyTheme(localStorage.getItem('vmr-theme') || 'refine'); renderThemes(m); });
   bar.appendChild(cancel);
   wrap.appendChild(bar); m.appendChild(wrap);
 }
@@ -2959,6 +3027,7 @@ function optimisticNow(item) {
     $('#mini-art').src = src; $('#npbar-art').src = src;
     if ($('#np-art').tagName === 'IMG') $('#np-art').src = src;
     $('#np-glow').style.backgroundImage = 'url("' + src + '")';
+    albumFrom(src);
   }
   $('#miniplayer').classList.remove('idle');
 }
@@ -3287,6 +3356,7 @@ function paintNow(now, queue) {
     $('#np-art').src = now.art; }
   else { if ($('#np-art').tagName === 'IMG') { const d = el('div','art idle'); d.id='np-art'; d.textContent='Nothing playing'; $('#np-art').replaceWith(d); } }
   $('#np-glow').style.backgroundImage = (live && now.art) ? 'url("' + now.art + '")' : 'none';
+  if (live && now.art) albumFrom(now.art);
   $('#np-t').textContent = live ? now.title : 'Nothing playing';
   $('#np-s').textContent = live ? (now.artist || '') : '';
   const has = !!live;
@@ -3847,7 +3917,13 @@ document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', ()
   $('#app').classList.remove('editwidgets');   // tapping a nav item saves & exits edit mode
   setView(b.dataset.view);
 }));
-applyTheme(localStorage.getItem('vmr-theme') || 'dark');
+// Album colours became the default look in 0.2.5: anyone on the old default (Dark) moves to it once; a theme chosen
+// later stays.
+(() => {
+  let t = null;
+  try { t = localStorage.getItem('vmr-theme'); if (!localStorage.getItem('vmr-look2')) { if (!t || t === 'dark') t = 'refine'; localStorage.setItem('vmr-look2', '1'); } } catch (e) {}
+  applyTheme(t || 'refine');
+})();
 $('#app').classList.toggle('nolabels', !lsGet('vmr-navlabels', true));
 // Called by the Cue shell when the device wakes — the WebView's timers get frozen while
 // the screen is off, so kick everything back to life instead of sitting there stale.
@@ -4015,6 +4091,60 @@ html[data-audio="off"] [data-part="audio"] { display:none !important; }
 .setrow.more:active { transform:scale(var(--press)); }
 .setrow.more .chev { display:block; width:22px; height:22px; fill:var(--dim); transition:transform var(--t-medium) var(--ease); }
 .setrow.more[aria-expanded="true"] .chev { transform:rotate(180deg); }
+
+/* ============ the look of Refine in YouTube Music: one bar of pill tabs, tonal choices, the album's colours ============ */
+.navtabs { display:contents; }   /* phones: the tabs stay part of the bottom bar */
+#nav .brand .word { display:none; }
+/* the song playing in the queue, and chosen chips: on the tonal container, as in YouTube Music's Up next with Refine */
+.qitem.cur { background:var(--container); box-shadow:none; }
+.qitem.cur .t { color:var(--on-container); }
+.qitem.cur .s { color:color-mix(in srgb, var(--on-container) 72%, transparent); }
+.qitem:hover:not(.cur) { background:color-mix(in srgb, var(--text) 5%, transparent); }
+.qmodes { background:transparent; }
+.qm { border-color:transparent; background:var(--card); border-radius:var(--r-full); }
+.qm.on { background:var(--container); color:var(--on-container); border-color:transparent; border-radius:var(--r-sm); }
+.dchip[aria-pressed="true"] { background:var(--container); border-color:transparent; color:var(--on-container); }
+/* the play button and the cover in the album's colour, with its light under them */
+#r-pp { background:var(--accent); color:var(--on-accent); box-shadow:0 10px 30px -10px var(--glow); }
+#mini-pp { background:var(--accent); color:var(--on-accent); }
+.np .art { box-shadow:0 30px 90px -18px var(--glow), 0 12px 30px rgba(0,0,0,.35); }
+.transport button:not(#r-pp) { background:transparent; transition:border-radius var(--t-medium) var(--ease), background-color .2s, transform .15s; }
+.transport button:not(#r-pp):hover { border-radius:var(--r-sm); background:color-mix(in srgb, var(--accent) 16%, transparent); }
+/* switches in the Material 3 shape: an outlined track with a small knob that grows once on */
+.toggle { width:52px; height:32px; background:var(--card2); box-shadow:inset 0 0 0 2px var(--dim2); }
+.toggle::after { top:8px; left:8px; width:16px; height:16px; background:var(--dim2);
+  transition:transform var(--t-medium) var(--spring), width var(--t-medium) var(--spring), height var(--t-medium) var(--spring), top var(--t-medium) var(--spring), left var(--t-medium) var(--spring), background .2s; }
+.toggle.on { background:var(--accent); box-shadow:none; }
+.toggle.on::after { top:4px; left:4px; width:24px; height:24px; transform:translateX(20px); background:var(--on-accent); }
+/* settings cards and the search box on the tonal surfaces */
+.setcat .ic { background:var(--container); color:var(--on-container); }
+#searchbox { background:var(--card); border-color:transparent; }
+#searchbox:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+@media (min-width:1101px), (min-width:820px) and (min-height:600px) and (orientation:landscape) {
+  /* the top bar: YTM Starcast's logo with its name, then the tabs in one pill bar, the chosen one tonal */
+  #nav { gap:12px; padding:12px 18px 10px; border-bottom:0; }
+  #nav .brand { width:auto; height:auto; display:flex; align-items:center; gap:9px; margin:0 6px 0 0; }
+  #nav .brand img { width:34px; height:34px; }
+  #nav .brand .word { display:inline; font-size:20px; font-weight:650; letter-spacing:-.03em; color:var(--text); }
+  #nav .dot { margin:0 0 0 2px; }
+  .navtabs { display:flex; position:relative; align-items:center; gap:2px; padding:4px; border-radius:var(--r-full); background:var(--card); min-width:0; }
+  .navbtn { height:40px; padding:0 16px; border-radius:var(--r-full); color:var(--dim); font-weight:600; transition:color .25s var(--ease), background-color .25s var(--ease); }
+  .navbtn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 6%, transparent); }
+  .navbtn.sel, .navtabs .navbtn.sel:hover { color:var(--on-container); background:transparent; }
+  .navbtn[data-view="settings"] { background:var(--card); }
+  .navbtn[data-view="settings"].sel { background:var(--container); color:var(--on-container); }
+  #navpill { height:40px !important; border-radius:var(--r-full) !important; background:var(--container) !important; border:0 !important; box-shadow:none !important; }
+  /* the player: the page's colour deepening downward, as YouTube Music's player page does with Refine */
+  #rail { background:linear-gradient(180deg, var(--card), var(--bg) 70%); border-right:0; }
+  #rail .np { background:transparent; }
+  #qpane { padding:6px 14px 0; }
+  #qpane .qmodes { padding:6px 4px 12px; }
+}
+@media (min-width:820px) and (max-width:1060px) and (min-height:600px) and (orientation:landscape), (min-width:1101px) and (max-width:1060px) {
+  #nav .brand { display:flex; }
+  #nav .brand .word { display:none; }
+  .navbtn { padding:0 12px; }
+}
 </style>
 <script id="parity-js">
 (() => {

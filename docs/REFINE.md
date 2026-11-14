@@ -27,21 +27,22 @@ lives in YouTube Music's own page rather than in a separate panel:
 | Done | Where | Switch |
 |---|---|---|
 | Rounder shapes (covers, list rows, queue, menus, dialogs, search box, chips) | style layer | Rounder shapes |
-| Colours from the album art: tonal surfaces and an accent from the cover's most vivid colour | style layer + cover sampling | Colours from the album art |
+| Colours from the album art: tonal surfaces and an accent from the cover's most vivid colour (the song's progress bar too, with the wavy bar off) | style layer + cover sampling | Colours from the album art |
 | Expressive player controls: bigger play button that morphs circle ↔ rounded square, tinted hover and pressed buttons | style layer | Expressive player controls |
 | Wavy progress bar: drawn over YouTube Music's own (which stays underneath, invisible, so seeking and dragging are unchanged) | canvas | Wavy progress bar |
 | Glow behind the cover | style layer | Glow behind the cover |
-| Material You page parts: the tabs beside the player (Up next, Lyrics, Comments, Related) as a pill bar instead of underlined capitals, the queue's header and its Save button tonal, YouTube Music's switches in the Material 3 shape, quiet scrollbars, pill-shaped sidebar entries | style layer | Material You page parts |
+| Material You page parts: the tabs beside the player (Up next, Lyrics, Comments, Related) as a pill bar instead of underlined capitals (a tab YouTube Music can't open for the song, such as Comments when they are turned off, is crossed out), the queue's header and its Save button tonal, YouTube Music's switches in the Material 3 shape, quiet scrollbars, pill-shaped sidebar entries | style layer | Material You page parts |
 | Cover visualizer (experimental): Halo (the cover, blurred, slowly turning around it), Orbit (a ring of the album's colours running round its edge), Pulse (the halo breathing with the music), Bars (the music's frequencies all round the cover) | player page | Cover visualizer |
-| YTM Starcast's logo in the top bar | top bar | YTM Starcast logo |
+| YTM Starcast's logo in the top bar (only its tile when the window is too narrow for the name) | top bar | YTM Starcast logo |
 | Lyrics, Make a playlist and Refine in the sidebar | sidebar | In the sidebar |
-| Animations: a new page's header, shelves and rows rise in one after another; cards, rows, chips and buttons answer a press; menus and dialogs drop in; a new song slides into the player bar and the big cover settles; the player page and the Up next / Lyrics / Related tabs move into place. None of it for anyone whose system asks for less motion | style layer | Animations |
+| Animations: a new page's header, shelves and rows rise in one after another; cards, rows, chips and buttons answer a press; menus and dialogs drop in; a new song slides into the player bar and the big cover settles; the player page and the Up next / Lyrics / Related tabs move into place, and every song in view in Up next glides in, one after another. None of it for anyone whose system asks for less motion | style layer | Animations |
 | Speed menu: 0.25×–3×, presets, pitch on/off, a speed for any song (it stays from song to song and after a reload, even though the player puts its own back whenever a song loads), for this song or for this playlist | YouTube Music's speed button | Richer speed menu, Keep the pitch |
 | Clear slowed sound: a slowed song is played the clear way (pitch lowered, as with a record) and its pitch is put back by a phase vocoder, instead of the browser's own time-stretching, which smears and warbles on music | speed menu | Clear slowed sound |
 | Room: a soft reverb for a "slowed + reverb" sound, from off to 100% | speed menu | — |
 | Times that follow the speed: at 0.8×, a 3:00 song shows 3:45 in the player bar (and on Discord, through the app) | player bar | Times follow the speed |
 | Random-song button beside the home page's first shelf | home page | Something-you-might-like button |
 | Playlist maker (item 3 below) | ✦ menu → Make a playlist | — |
+| Download in a song's menu: YouTube Music Premium's own download, or Save to this computer (the YTM Starcast app saves the song as an audio file, with its details and cover, in Music › YTM Starcast) | a song's ⋮ menu | Song menu additions |
 | Live lyrics (item 1 below): word by word, in YouTube Music's own Lyrics tab, or in a window that can be moved, resized, pinned and kept above other windows; they follow you out of the player | Lyrics tab, sidebar, ✦ menu → Lyrics window | Live lyrics, Lyrics follow you, Above other windows when you switch tabs |
 | Speed from the keyboard: Shift+. faster, Shift+, slower | keyboard | Richer speed menu |
 | YTM Starcast's switches: the YouTube Music remote, Discord status and Refine itself, with a line saying what Discord status is doing | All settings → YTM Starcast | — |

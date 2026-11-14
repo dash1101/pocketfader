@@ -1,6 +1,6 @@
 # Privacy
 
-**Effective 2026-11-13**
+**Effective 2026-11-14**
 
 This page describes what YTM Starcast keeps, where it keeps it, and what it sends to other services. It covers every
 part: the program on your computer (with its desktop window), the web app, the browser extension and the Android app.
@@ -30,6 +30,9 @@ The settings folder is `~/.config/ytm-starcast` (Windows: `%APPDATA%\ytm-starcas
 | `updates` | Downloaded updates. |
 
 A few other small files there hold the port, the equalizer and similar settings.
+
+Songs you save with **Save to this computer** (in YouTube Music's song menu, with Refine) go to `Music/YTM Starcast` in
+your Music folder, as ordinary audio files with the song's details and cover. They stay until you delete them.
 
 Songs the computer fetches for the phone are kept in `~/.cache/ytm-starcast/audio` (Windows: `.cache\ytm-starcast\audio`
 in your user folder), up to 1 GiB; the songs used least recently are removed first. Lyrics are kept in memory only.
@@ -62,8 +65,9 @@ list stays on the phone.
 
 ### In your browser
 
-- **Web app**: its settings (such as the theme) in the browser's local storage, and, when an access token is used, a
-  cookie holding the token, kept for a year.
+- **Web app**: its settings (such as the theme, and the last colour taken from a cover for the Album colours theme) in
+  the browser's local storage, and, when an access token is used, a cookie holding the token, kept for a year. The
+  Album colours theme reads the cover in the browser itself; nothing about it is sent anywhere.
 - **Extension**: a few small values in the extension's own storage (such as colours taken from the album art).
 - **Refine**: its settings in music.youtube.com's local storage, in your browser.
 
@@ -97,8 +101,8 @@ it, including the access token. Tailscale encrypts it, and so does an `https://`
   history, and public playlists. It also uses it for search suggestions when YouTube Music isn't open on the computer,
   and for the comments that load by themselves on the Playing page a few seconds after a YouTube song starts, wherever
   that song plays. YouTube sees your IP address and which videos are asked for.
-- **The computer** may fetch a song with yt-dlp when the phone can't get it itself. YouTube then sees the computer's IP
-  address and which video is asked for.
+- **The computer** may fetch a song with yt-dlp when the phone can't get it itself, and when you choose **Save to this
+  computer** in a song's menu. YouTube then sees the computer's IP address and which video is asked for.
 
 ### Discord
 
