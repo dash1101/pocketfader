@@ -34,7 +34,8 @@ change the computer's volume**, even with the screen off.
 | Section | Options |
 |---|---|
 | **Connection** | The computer's address, whether it's reachable, whether the YouTube Music extension is connected; edit the connection. |
-| **Appearance** | Theme (System, Light, Dark, true Black), Album colours (the colours of the cover that plays), Material You colours (Android 12+), accent colour, the light around the cover (Glow, Halo or Orbit, and how strong), which screen opens first. |
+| **Appearance** | Theme (System, Light, Dark, true Black), Album colours (the colours of the cover that plays), Material You colours (Android 12+), accent colour, navigation style, which screen opens first. |
+| **Effects** | The light around the cover (Glow, Halo or Orbit, and how strong), the cover's shape, glow on text and buttons, the wavy seek bar, screen transitions and rows gliding in. |
 | **Screen & always-on** | Keep the screen on (off, while playing, always), dim when untouched, full screen, and **pixel shift**: every few minutes the whole screen glides a few pixels so static parts don't burn into OLED displays (interval and distance are adjustable; best with Always on and the Black theme). |
 | **Controls** | Media notification on/off, volume buttons on/off and the step per press, haptic feedback. |
 | **Lyrics** | Romanize and translations on by default, text size, preferred source. |

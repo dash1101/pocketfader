@@ -66,6 +66,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.drawBehind
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -316,6 +318,13 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     // of tabs doesn't change width at every song; kept out here so opening an artist or album page doesn't forget it
     var commentsSeen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(comments.loaded) { if (comments.loaded) commentsSeen = true }
+    // opening the Comments tab looks them up at once; a new song while it is open waits a moment, so songs skipped past
+    // aren't looked up (keyed on the song only, so switching tabs doesn't cut a lookup short)
+    LaunchedEffect(comments) {
+        if (pane == Pane.Comments) kotlinx.coroutines.delay(800)
+        androidx.compose.runtime.snapshotFlow { pane == Pane.Comments }.first { it }
+        if (comments.usable && !comments.loaded && !comments.loading && comments.error == null) comments.loadFirst()
+    }
     val snackbar = remember { SnackbarHostState() }
     // The YouTube Music remote is switched off on the computer (music playing on this phone doesn't need it).
     val remoteOff = cfg.isSet && prefs.playOn != "phone" && !s.remoteOn
@@ -358,7 +367,6 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
     val tint = art.tint
     val showArt = !showSettings && (wide || dest == Dest.Playing)
     val wash = artBackground(if (showArt && prefs.coverWash) tint else null, prefs.theme == "black")
-    val washBrush = wash.brush
     val pageBg = MaterialTheme.colorScheme.background
     val highlight = if (showArt && prefs.coverHighlight) tint?.let { readableOn(it, pageBg, 5f) } else null
     // the frame's own small motions (the title's fade, the tablet's panes, the notices) follow the screen-transition and
@@ -368,8 +376,8 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
         expandVertically(tween(Motion.Medium, easing = Motion.Ease)) + fadeIn(tween(Motion.Short, delayMillis = 60))
     val noticeOut = if (prefs.reduceMotion) ExitTransition.None else
         shrinkVertically(tween(Motion.Short, easing = Motion.Ease)) + fadeOut(tween(Motion.Quick))
-    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null), LocalEdgeFade provides EdgeFade(wash.colorAt(0.11f), wash.colorAt(0.93f))) {
-    Box(Modifier.fillMaxSize().background(washBrush)) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalAccent provides highlight, LocalTint provides (if (showArt) tint else null), LocalArtThumb provides (if (showArt) art.thumb else null), LocalEdgeFade provides remember(wash) { EdgeFade({ wash.colorAt(0.11f) }, { wash.colorAt(0.93f) }) }) {
+    Box(Modifier.fillMaxSize().drawBehind { drawRect(wash.brush()) }) {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         // Without this, text that doesn't name a colour falls back to black, which vanishes on the dark themes.
@@ -415,9 +423,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
             Column {
             androidx.compose.animation.AnimatedVisibility(
                 visible = showMini,
-                enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(Motion.Medium, easing = Motion.Ease)) +
+                enter = if (calm) EnterTransition.None else androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(Motion.Medium, easing = Motion.Ease)) +
                     androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.Short)),
-                exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)) +
+                exit = if (calm) ExitTransition.None else androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(Motion.Short, easing = Motion.Ease)) +
                     androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(Motion.Quick)),
             ) {
                 MiniControls(
@@ -546,7 +554,9 @@ private fun App(cfg: ServerConfig, s: RemoteState, prefs: Prefs, onSave: (Server
                     AnimatedContent(
                         targetState = dest,
                         transitionSpec = {
-                            (fadeIn(tween(Motion.Short, delayMillis = 60, easing = Motion.Ease)) + slideInVertically(tween(Motion.Medium, easing = Motion.Ease)) { it / 28 }) togetherWith fadeOut(tween(Motion.Quick, easing = Motion.Ease))
+                            (fadeIn(tween(Motion.Short, delayMillis = 60, easing = Motion.Ease)) + slideInVertically(tween(Motion.Medium, easing = Motion.Ease)) { it / 28 }) togetherWith fadeOut(tween(Motion.Quick, easing = Motion.Ease)) using
+                                // the cover's light reaches past the player's edges: not cut off while screens change
+                                androidx.compose.animation.SizeTransform(clip = false)
                         },
                         label = "screen",
                     ) { d -> DestContent(d, s, cfg, remoteOff) { showConnect = true } }

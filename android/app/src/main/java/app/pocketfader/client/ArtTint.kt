@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.LaunchedEffect
@@ -71,32 +72,43 @@ fun rememberArt(url: String?): State<ArtInfo> {
     return art
 }
 
-/** The background wash: a brush, and the colour it has at a given fraction of the screen's height (0 top, 1 bottom). */
-@Immutable
-class Wash(val brush: Brush, val colorAt: (Float) -> Color)
-
 /**
- * A soft wash of the cover's colour fading into the background. It is weakened as needed so the normal text colour
- * always stays easy to read on top of it (a dark cover on the light theme, a bright one on the dark theme).
+ * The background wash: a soft wash of the cover's colour fading into the background, as a brush and as the colour it
+ * has at a given fraction of the screen's height (0 top, 1 bottom). The colour glides when the song changes; it is read
+ * only while drawing, so the glide repaints the wash without recomposing the screens on top of it.
  */
+@Stable
+class Wash internal constructor(private val base: Color, private val text: Color, private val black: Boolean, private val tint: State<Color>) {
+    // weakened as needed so the normal text colour always stays easy to read on top of it (a dark cover on the light
+    // theme, a bright one on the dark theme)
+    private fun strength(a: Color): Float {
+        var s = if (black) 0.22f else 0.42f
+        while (s > 0.02f && contrast(text, lerp(base, a, s)) < 7f) s *= 0.8f
+        return s
+    }
+
+    fun brush(): Brush {
+        val a = tint.value
+        val k0 = strength(a)
+        return Brush.verticalGradient(0f to lerp(base, a, k0), 0.55f to lerp(base, a, k0 * 0.35f), 1f to base)
+    }
+
+    fun colorAt(t: Float): Color {
+        val a = tint.value
+        val k0 = strength(a)
+        val k = if (t <= 0.55f) k0 + (k0 * 0.35f - k0) * (t / 0.55f) else k0 * 0.35f * (1f - (t - 0.55f) / 0.45f)
+        return lerp(base, a, k.coerceIn(0f, 1f))
+    }
+}
+
+/** The wash for [tint] (none: the plain background). */
 @Composable
 fun artBackground(tint: Color?, black: Boolean): Wash {
     val reduce = LocalReduceMotion.current
     val base = MaterialTheme.colorScheme.background
     val text = MaterialTheme.colorScheme.onBackground
-    val target = tint ?: base
-    val animated by animateColorAsState(target, tween(if (reduce) 0 else 700), label = "art")
-    var strength = if (black) 0.22f else 0.42f
-    while (strength > 0.02f && contrast(text, lerp(base, animated, strength)) < 7f) strength *= 0.8f
-    val k0 = strength
-    val brush = Brush.verticalGradient(
-        0f to lerp(base, animated, k0), 0.55f to lerp(base, animated, k0 * 0.35f), 1f to base,
-    )
-    val colorAt = { t: Float ->
-        val k = if (t <= 0.55f) k0 + (k0 * 0.35f - k0) * (t / 0.55f) else k0 * 0.35f * (1f - (t - 0.55f) / 0.45f)
-        lerp(base, animated, k.coerceIn(0f, 1f))
-    }
-    return Wash(brush, colorAt)
+    val animated = animateColorAsState(tint ?: base, tween(if (reduce) 0 else 700), label = "art")
+    return remember(base, text, black, animated) { Wash(base, text, black, animated) }
 }
 
 /** A 64 px copy of the picture, blurred (three box passes, close to a Gaussian), so scaling it up gives a smooth glow with no blocks. */

@@ -257,7 +257,7 @@ fun SearchScreen(s: RemoteState, modifier: Modifier = Modifier) {
                         onClick = { if (filter != id && !busy) { SearchMemory.filter = id; doSearch(SearchMemory.query) } },
                         label = { Text(label) },
                         colors = refineChipColors(),
-                        border = null,
+                        border = refineChipBorder(chosen),
                     )
                 }
             }

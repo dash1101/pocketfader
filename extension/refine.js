@@ -222,7 +222,10 @@
       colorFor = url;
       colorNote = r.err || "";
       lastColor = r.c || null;
-      setPalette(r.c ? palette(r.c.h, r.c.s) : palette(DEFAULT_HUE, 1), r.c ? r.c.h : DEFAULT_HUE, r.c ? r.c.s : 1);
+      // a cover with no colour in it at all gives neutral tones (as in the web app and the Android app); a cover that
+      // couldn't be read keeps the default colour
+      const c = r.c || (r.err ? null : { h: DEFAULT_HUE, s: 0 });
+      setPalette(c ? palette(c.h, c.s) : palette(DEFAULT_HUE, 1), c ? c.h : DEFAULT_HUE, c ? c.s : 1);
       if (r.c) writeJSON(COLOR_KEY, { h: r.c.h, s: r.c.s });
     } finally { colorBusy = false; }
   }

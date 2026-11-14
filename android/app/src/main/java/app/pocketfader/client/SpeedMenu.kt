@@ -112,6 +112,7 @@ fun SpeedDialog(onDismiss: () -> Unit) {
     DisposableEffect(Unit) { onDispose { drag.value?.let { saveSpeed(it) } } }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         icon = { Icon(Icons.Filled.Speed, null) },
         title = { Text("Speed") },
         text = {
@@ -153,7 +154,7 @@ fun SpeedDialog(onDismiss: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (p in row) {
                             val chosen = percent == p
-                            FilterChip(colors = refineChipColors(onDialog = true), border = null, 
+                            FilterChip(colors = refineChipColors(onDialog = true), border = refineChipBorder(chosen), 
                                 selected = chosen, onClick = { saveSpeed(p) }, shape = chipShape(chosen),
                                 label = { Text(speedShort(p)) },
                             )

@@ -53,6 +53,7 @@ fun SleepButton(s: RemoteState) {
     if (open) {
         AlertDialog(
             onDismissRequest = { open = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             title = { Text("Sleep timer") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,10 +64,10 @@ fun SleepButton(s: RemoteState) {
                     )
                     for (row in listOf(listOf(15, 30, 45), listOf(60, 90, 120))) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            for (m in row) FilterChip(colors = refineChipColors(onDialog = true), border = null, selected = false, onClick = { Remote.setSleep(m); open = false }, label = { Text("$m min") })
+                            for (m in row) FilterChip(colors = refineChipColors(onDialog = true), border = refineChipBorder(false), selected = false, onClick = { Remote.setSleep(m); open = false }, label = { Text("$m min") })
                         }
                     }
-                    FilterChip(colors = refineChipColors(onDialog = true), border = null, selected = false, onClick = { Remote.setSleep("track"); open = false }, label = { Text("When this song ends") })
+                    FilterChip(colors = refineChipColors(onDialog = true), border = refineChipBorder(false), selected = false, onClick = { Remote.setSleep("track"); open = false }, label = { Text("When this song ends") })
                 }
             },
             confirmButton = { TextButton(onClick = { open = false }) { Text("Close") } },

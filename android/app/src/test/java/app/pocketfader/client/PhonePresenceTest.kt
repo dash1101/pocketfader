@@ -15,6 +15,12 @@ class PhonePresenceTest {
     )
 
     @Test
+    fun aSpeedChangeGoesAtOnce() {
+        assertTrue(shouldSendPresence(song, 1_000L, song.copy(speed = 1.25, position = 10.5), 1_500L))
+        assertFalse(shouldSendPresence(song, 1_000L, song.copy(position = 10.5), 1_500L))
+    }
+
+    @Test
     fun onlyMusicPlayingStartsBeingShown() {
         assertTrue(shouldSendPresence(null, 0L, song, 1_000L))
         // a paused queue left from before isn't music playing

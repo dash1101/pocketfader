@@ -1640,7 +1640,8 @@ function albumFrom(url) {
       const cv = document.createElement('canvas'); cv.width = cv.height = 32;
       const x = cv.getContext('2d', { willReadFrequently: true });
       x.drawImage(img, 0, 0, 32, 32);
-      const c = dominantHue(x.getImageData(0, 0, 32, 32).data) || { h: 352, s: 1 };
+      // a cover with no colour in it at all: neutral tones (as Refine and the Android app)
+      const c = dominantHue(x.getImageData(0, 0, 32, 32).data) || { h: 352, s: 0 };
       ALBUM.h = c.h; ALBUM.s = c.s;
       try { localStorage.setItem('vmr-album-color', JSON.stringify({ h: c.h, s: c.s })); } catch (e) {}
       paintAlbum();

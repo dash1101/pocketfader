@@ -75,6 +75,7 @@ import coil.request.ImageRequest
 import coil.transform.RoundedCornersTransformation
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawBehind
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -583,10 +584,11 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     // The Comments tab: shown once a song's comments have been looked up, crossed out (and not openable) for a song that
     // has them turned off, as in Refine. After the first look it stays for the songs that follow, while theirs are looked
     // up, so the tab bar doesn't change shape at every song; it goes for what can't have comments (files on this phone).
-    var commentsSeen by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(comments.loaded) { if (comments.loaded) commentsSeen = true }
-    val showComments = comments.usable && (comments.loaded || commentsSeen)
+    LaunchedEffect(comments.loaded) { if (comments.loaded) CommentsMemory.seen = true }
+    val showComments = comments.usable && (comments.loaded || CommentsMemory.seen)
     val commentsOff = comments.turnedOff
+    // the tab shown: Up next at once when Comments can't be opened any more (the saved choice follows just after)
+    val shownTab = if (tab == 2 && (!showComments || commentsOff)) 0 else tab
     // leaving the Comments tab when the song playing now can't show any
     LaunchedEffect(showComments, commentsOff) { if ((!showComments || commentsOff) && tab == 2) tab = 0 }
     // Opening the tab looks the comments up at once. A new song while the tab is already open waits a moment first, so
@@ -600,8 +602,8 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val crossed = remember(commentsOff) { if (commentsOff) setOf(2) else emptySet<Int>() }
     val still = !prefs.transitions || prefs.reduceMotion
     // the rows glide in one after another when a tab opens (and the comments' when they arrive), as in Refine
-    val arrival = rememberArrival(tab).takeIf { prefs.transitions }
-    val commentArrival = rememberArrival(tab, comments, comments.loaded).takeIf { prefs.transitions }
+    val arrival = rememberArrival(shownTab).takeIf { prefs.transitions }
+    val commentArrival = rememberArrival(shownTab, comments, comments.loaded).takeIf { prefs.transitions }
     val lines = ui.result?.lines.orEmpty()
     val active = rememberActiveLine(lines, ui.result?.synced == true, s.now?.playing == true)
     // list items before the first lyric line: player, tabs, lyrics controls
@@ -611,28 +613,32 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
     val glowVisible by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     Box(modifier.fillMaxSize()) {
         PlayerGlow(s, glowVisible, { listState.firstVisibleItemScrollOffset })
-        LazyColumn(Modifier.fillMaxSize().edgeFade(listState), state = listState) {
+        // no fade at the top once the tabs are pinned there: it would fade the tabs themselves
+        LazyColumn(Modifier.fillMaxSize().edgeFade({ listState.firstVisibleItemIndex == 0 && listState.canScrollBackward }, { listState.canScrollForward }), state = listState) {
             item(key = "player") { PlayerPanel(s) }
             stickyHeader(key = "tabs") {
                 // see-through while it sits under the player (the cover's light carries on behind it); a backdrop once it
                 // is pinned to the top, so the list doesn't show through
+                // in the page's own wash colour at the top, read while drawing (the wash glides when the song changes)
                 val pinned by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
-                val backdrop by androidx.compose.animation.animateColorAsState(
-                    MaterialTheme.colorScheme.background.copy(alpha = if (pinned) 0.94f else 0f),
+                val backdrop = androidx.compose.animation.core.animateFloatAsState(
+                    if (pinned) 0.94f else 0f,
                     androidx.compose.animation.core.tween(if (still) 0 else Motion.Short, easing = Motion.Ease), label = "tabs-backdrop",
                 )
-                Surface(color = backdrop, modifier = Modifier.fillMaxWidth()) {
+                val edge = LocalEdgeFade.current
+                val page = MaterialTheme.colorScheme.background
+                Box(Modifier.fillMaxWidth().drawBehind { drawRect((edge?.top ?: page).copy(alpha = backdrop.value)) }) {
                     PillTabs(
-                        tabLabels, tab,
+                        tabLabels, shownTab,
                         onSelect = { i -> tab = i; scope.launch { listState.animateScrollToItem(1) } },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                         crossed = crossed,
                     )
                 }
             }
-            if (tab == 0) {
+            if (shownTab == 0) {
                 queueItems(s, playedOpen, { playedOpen = !playedOpen }, prefs.queueArt, arrival) { menuTrack = it }
-            } else if (tab == 1) {
+            } else if (shownTab == 1) {
                 item(key = "ly-controls") { LyricsControls(ui) }
                 lyricsItems(ui, active, prefs, s.canLyrics, s.now?.title?.isNotBlank() == true, s.now?.playing == true)
             } else {
@@ -655,6 +661,11 @@ fun PlayingPage(s: RemoteState, modifier: Modifier = Modifier) {
             MiniControls(s, onTap = { scope.launch { listState.animateScrollToItem(0) } }, Modifier)
         }
     }
+}
+
+/** Whether any song's comments have shown since the app started: the Comments tab then stays while the next song's load. */
+private object CommentsMemory {
+    var seen by mutableStateOf(false)
 }
 
 /** Slim now-playing bar: over the lists once the full player has scrolled out of view, and above the navigation on every

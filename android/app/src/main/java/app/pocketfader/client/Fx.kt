@@ -192,6 +192,21 @@ fun AmbientGlow(
     val filter = remember(sat) { ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(sat) }) }
     val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     val mask = remember(reach, shape, coverDp.roundToInt(), rtl) { glowMask(reach, coverCorners(shape, coverDp, rtl), shape == "cut") }
+    // a new song's light fades in over the last one's (blended while drawing, so nothing recomposes meanwhile)
+    val reduce = LocalReduceMotion.current
+    val shown = remember { mutableStateOf(thumb) }
+    val previous = remember { mutableStateOf<ImageBitmap?>(null) }
+    val mix = remember { androidx.compose.animation.core.Animatable(1f) }
+    androidx.compose.runtime.LaunchedEffect(thumb) {
+        if (thumb === shown.value) return@LaunchedEffect
+        previous.value = shown.value
+        shown.value = thumb
+        if (!reduce) {
+            mix.snapTo(0f)
+            mix.animateTo(1f, tween(Motion.Long, easing = Motion.Ease))
+        }
+        previous.value = null
+    }
     Box(
         modifier
             .graphicsLayer {
@@ -203,26 +218,22 @@ fun AmbientGlow(
             }
             .drawBehind {
                 val deg = turn?.invoke() ?: 0f
+                val dst = IntSize(size.width.roundToInt(), size.height.roundToInt())
+                val old = previous.value
+                val k = if (old == null) 1f else mix.value
+                fun paint() {
+                    if (old != null) drawImage(old, dstSize = dst, colorFilter = filter, filterQuality = FilterQuality.High)
+                    drawImage(shown.value, dstSize = dst, alpha = k, colorFilter = filter, filterQuality = FilterQuality.High)
+                }
                 if (turn == null) {
-                    drawImage(
-                        thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                        colorFilter = filter, filterQuality = FilterQuality.High,
-                    )
+                    paint()
                 } else {
                     // Halo: the blurred cover turns slowly; drawn a little larger so its corners never show inside the light
                     val pivot = center
-                    withTransform({ this.rotate(deg, pivot); this.scale(1.42f, 1.42f, pivot) }) {
-                        drawImage(
-                            thumb, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                            colorFilter = filter, filterQuality = FilterQuality.High,
-                        )
-                    }
+                    withTransform({ this.rotate(deg, pivot); this.scale(1.42f, 1.42f, pivot) }) { paint() }
                 }
                 // keep only what the mask lets through: everything under the cover, less and less further out
-                drawImage(
-                    mask, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                    blendMode = BlendMode.DstIn, filterQuality = FilterQuality.High,
-                )
+                drawImage(mask, dstSize = dst, blendMode = BlendMode.DstIn, filterQuality = FilterQuality.High)
             },
     )
 }
@@ -353,6 +364,20 @@ fun refineChipColors(onDialog: Boolean = false): androidx.compose.material3.Sele
     )
 }
 
+/**
+ * The faint outline of a chip that isn't chosen (Refine's chips have one), so it keeps its shape on a card or a dialog of
+ * nearly its own colour; a chosen chip has none.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun refineChipBorder(selected: Boolean, enabled: Boolean = true): androidx.compose.foundation.BorderStroke {
+    val v = MaterialTheme.colorScheme.outlineVariant
+    return androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+        enabled = enabled, selected = selected,
+        borderColor = v, selectedBorderColor = Color.Transparent, disabledBorderColor = v.copy(alpha = 0.5f),
+    )
+}
+
 /** Three little bars that dance while music plays (the "now playing" mark). */
 @Composable
 fun EqBars(color: Color, playing: Boolean, modifier: Modifier = Modifier.size(22.dp)) {
@@ -477,8 +502,12 @@ fun WavySeekBar(
 // A soft fade where scrolled content leaves the screen.
 
 /** The colours the page background has at the top and bottom of the content area (so the fade blends in). */
-@androidx.compose.runtime.Immutable
-class EdgeFade(val top: Color, val bottom: Color)
+@androidx.compose.runtime.Stable
+class EdgeFade(private val topColor: () -> Color, private val bottomColor: () -> Color) {
+    /** Read while drawing, so a colour that glides repaints the fade without recomposing the list. */
+    val top: Color get() = topColor()
+    val bottom: Color get() = bottomColor()
+}
 
 val LocalEdgeFade = compositionLocalOf<EdgeFade?> { null }
 

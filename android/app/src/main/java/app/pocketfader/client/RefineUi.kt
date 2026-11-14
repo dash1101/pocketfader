@@ -61,7 +61,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -186,13 +185,12 @@ fun PillTabs(
 class Arrival internal constructor() {
     internal var epoch = 0
         private set
-    private var at = 0L
+    /** When the arrival began (uptime ms): each row's turn is counted from here, not from when the row was built. */
+    internal var at = 0L
+        private set
     private var next = 0
 
     internal fun begin() { epoch++; at = SystemClock.uptimeMillis(); next = 0 }
-
-    /** The rows drawn so far are the ones that glide in: rows that arrive later (scrolled into view) just appear. */
-    internal fun end() { at = 0L }
 
     /** This row's turn, or -1 when the arrival is over (a row that scrolls into view later). */
     internal fun take(): Int = if (at != 0L && SystemClock.uptimeMillis() - at < WINDOW_MS && next < MAX_ROWS) next++ else -1
@@ -210,13 +208,6 @@ fun rememberArrival(vararg keys: Any?): Arrival {
     val a = remember { Arrival() }
     // started during composition, so the rows composed right after it (in the same frame) already belong to it
     remember(*keys) { a.begin(); 0 }
-    // and over once the first frames are drawn: rows each count their turn from when they were composed, so a row that
-    // scrolled in later would otherwise wait, blank, for a turn far down the list
-    LaunchedEffect(*keys) {
-        withFrameNanos { }
-        withFrameNanos { }
-        a.end()
-    }
     return a
 }
 
@@ -227,8 +218,11 @@ fun Modifier.arrive(arrival: Arrival?): Modifier {
     val turn = remember(arrival.epoch) { arrival.take() }
     if (turn < 0) return this
     val p = remember(arrival.epoch) { Animatable(0f) }
+    // a row's turn is counted from when the arrival began: a row brought in a moment later (the list scrolling to the
+    // tabs, say) starts at once instead of waiting, blank, behind the rows above it
+    val due = remember(arrival.epoch) { arrival.at + turn * Arrival.STEP_MS + 40L }
     LaunchedEffect(p) {
-        delay(turn * Arrival.STEP_MS + 40L)
+        delay((due - SystemClock.uptimeMillis()).coerceAtLeast(0L))
         p.animateTo(1f, tween(520, easing = Motion.Emphasized))
     }
     return graphicsLayer {

@@ -340,7 +340,7 @@ fun BeaconCard(online: Boolean, modifier: Modifier = Modifier) {
                     Text("Hide for…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((label, mins) in listOf("30 min" to 30, "1 hour" to 60, "3 hours" to 180)) {
-                            FilterChip(colors = refineChipColors(), border = null, 
+                            FilterChip(colors = refineChipColors(), border = refineChipBorder(false, usable), 
                                 selected = false, shape = chipShape(false), enabled = usable,
                                 onClick = { scope.launch { BeaconModel.setVisibility(false, mins) } },
                                 label = { Text(label) },
@@ -447,7 +447,7 @@ private fun BeaconSettingsList(s: BeaconSettings, enabled: Boolean) {
             Text("Stop showing a paused song after", style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (listOf(0, 1, 5, 15, 60) + s.pauseTimeoutMinutes).distinct().sorted().forEach { m ->
-                    FilterChip(colors = refineChipColors(), border = null, 
+                    FilterChip(colors = refineChipColors(), border = refineChipBorder(s.pauseTimeoutMinutes == m, enabled), 
                         selected = s.pauseTimeoutMinutes == m, shape = chipShape(s.pauseTimeoutMinutes == m), enabled = enabled,
                         onClick = { scope.launch { BeaconModel.setSetting("pauseTimeoutMinutes", m) } },
                         label = { Text(if (m == 0) "Never" else "$m min") },
@@ -462,7 +462,7 @@ private fun BeaconSettingsList(s: BeaconSettings, enabled: Boolean) {
         Text("Name next to your username", style = MaterialTheme.typography.bodyMedium)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((v, label) in listOf("name" to "YouTube Music", "state" to "Artist", "details" to "Song title")) {
-                FilterChip(colors = refineChipColors(), border = null, 
+                FilterChip(colors = refineChipColors(), border = refineChipBorder(s.statusDisplay == v, enabled), 
                     selected = s.statusDisplay == v, shape = chipShape(s.statusDisplay == v), enabled = enabled,
                     onClick = { scope.launch { BeaconModel.setSetting("statusDisplay", v) } },
                     label = { Text(label) },
@@ -489,7 +489,7 @@ private fun NeverShowWords(words: List<String>, enabled: Boolean, onChange: (Lis
         if (words.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (w in words) {
-                    FilterChip(colors = refineChipColors(), border = null, 
+                    FilterChip(colors = refineChipColors(), border = refineChipBorder(true, enabled), 
                         selected = true, shape = chipShape(true), enabled = enabled,
                         onClick = { onChange(words.filter { it != w }) },
                         label = { Text(w) },

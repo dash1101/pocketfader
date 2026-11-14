@@ -86,12 +86,12 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int, modifier: Modifie
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = now.shuffle, shape = chipShape(now.shuffle), onClick = { tap(); Remote.setShuffle(!now.shuffle) },
-                    colors = colors, border = null,
+                    colors = colors, border = refineChipBorder(now.shuffle),
                     label = { Text(if (now.shuffle) "Shuffle on" else "Shuffle off") },
                     leadingIcon = { Icon(Icons.Filled.Shuffle, null, Modifier.size(18.dp)) },
                 )
                 FilterChip(
-                    selected = now.repeat != "NONE", shape = chipShape(now.repeat != "NONE"), colors = colors, border = null,
+                    selected = now.repeat != "NONE", shape = chipShape(now.repeat != "NONE"), colors = colors, border = refineChipBorder(now.repeat != "NONE"),
                     onClick = { tap(); Remote.setRepeat(when (now.repeat) { "NONE" -> "ALL"; "ALL" -> "ONE"; else -> "NONE" }) },
                     label = { Text(when (now.repeat) { "ALL" -> "Loop: queue"; "ONE" -> "Loop: track"; else -> "Loop off" }) },
                     leadingIcon = { Icon(if (now.repeat == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat, null, Modifier.size(18.dp)) },
@@ -99,7 +99,7 @@ private fun QueueModes(now: Now?, bridge: Boolean, count: Int, modifier: Modifie
                 val auto = now.autoplay
                 if (auto != null) {
                     FilterChip(
-                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) }, colors = colors, border = null,
+                        selected = auto, shape = chipShape(auto), onClick = { tap(); Remote.setAutoplay(!auto) }, colors = colors, border = refineChipBorder(auto),
                         // YouTube Music ignores autoplay while the queue is looping
                         enabled = now.repeat == "NONE",
                         label = { Text(if (now.repeat != "NONE") "Autoplay: off while looping" else if (auto) "Autoplay on" else "Autoplay off") },

@@ -225,7 +225,7 @@ fun SettingsScreen(cfg: ServerConfig, s: RemoteState, onEditConnection: () -> Un
             }
             Toggle("Wavy seek bar", "The played part of the bar ripples while music plays.", p.wavyBar) { v -> Settings.update { it.copy(wavyBar = v) } }
             Toggle(
-                "Screen transitions", "A short fade and slide between Playing, Search and Settings, and settings that glide in as a page opens.",
+                "Screen transitions", "A short fade and slide between screens, and the rows of lists, pages and settings gliding in as they open.",
                 p.transitions,
             ) { v -> Settings.update { it.copy(transitions = v) } }
             Text(
@@ -712,7 +712,7 @@ private fun Choice(
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { (value, label) ->
-                FilterChip(colors = refineChipColors(), border = null, selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
+                FilterChip(colors = refineChipColors(), border = refineChipBorder(selected == value, enabled), selected = selected == value, shape = chipShape(selected == value), onClick = { onSelect(value) }, enabled = enabled, label = { Text(label) })
             }
         }
     }
@@ -745,9 +745,9 @@ private fun NumberChoice(
         if (warning != null) Text(warning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.forEach { (v, label) ->
-                FilterChip(colors = refineChipColors(), border = null, selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
+                FilterChip(colors = refineChipColors(), border = refineChipBorder(value == v), selected = value == v, shape = chipShape(value == v), onClick = { onSet(v) }, label = { Text(label) })
             }
-            FilterChip(colors = refineChipColors(), border = null, 
+            FilterChip(colors = refineChipColors(), border = refineChipBorder(!isPreset), 
                 selected = !isPreset, shape = chipShape(!isPreset), onClick = { asking = true },
                 label = { Text(if (isPreset) "Custom…" else custom(value)) },
             )

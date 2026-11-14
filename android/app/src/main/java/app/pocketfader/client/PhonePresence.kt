@@ -190,13 +190,14 @@ internal fun PhoneSong.movedOn(readAt: Long, clock: Long): PhoneSong {
 
 /**
  * Whether [song] has to go to the computer now rather than with the next heartbeat: it was taken out, changed, paused or
- * resumed, or jumped (more than [SEEK_SLACK_SEC] away from where the song last sent, [shown] at [shownAt], would be by
+ * resumed, changed speed, or jumped (more than [SEEK_SLACK_SEC] away from where the song last sent, [shown] at [shownAt], would be by
  * [clock]). Nothing starts being shown by a paused song: that is a queue left from before, not music playing.
  */
 internal fun shouldSendPresence(shown: PhoneSong?, shownAt: Long, song: PhoneSong?, clock: Long): Boolean = when {
     song == null -> shown != null
     shown == null -> song.playing
     song.key != shown.key || song.title != shown.title || song.playing != shown.playing -> true
+    abs(song.speed - shown.speed) > 1e-3 -> true     // played faster or slower: the times on Discord change pace
     else -> abs(song.position - shown.movedOn(shownAt, clock).position) > SEEK_SLACK_SEC
 }
 
