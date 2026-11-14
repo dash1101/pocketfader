@@ -1624,9 +1624,10 @@ function dominantHue(data) {
   }
   if (!px || total < 0.5) return null;
   const around = (i) => bins[i] + 0.5 * (bins[(i + 35) % 36] + bins[(i + 1) % 36]);
-  let best = 0;
-  for (let i = 1; i < 36; i++) if (around(i) > around(best)) best = i;
-  return { h: sum[best] / bins[best], s: vivid / px };
+  // only a bin holding some colour can win (an empty one between two equal neighbours would give 0 / 0)
+  let best = -1;
+  for (let i = 0; i < 36; i++) if (bins[i] > 0 && (best < 0 || around(i) > around(best))) best = i;
+  return best < 0 ? null : { h: sum[best] / bins[best], s: vivid / px };
 }
 function albumFrom(url) {
   if (!url || url === ALBUM.url) return;

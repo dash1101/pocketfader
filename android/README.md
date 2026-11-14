@@ -3,8 +3,9 @@
 A native Android app (Kotlin, Jetpack Compose, Material 3) for the computer running YTM Starcast, your YouTube Music
 companion: the YouTube Music remote, your Discord status, and the computer's volume, output devices and equalizer.
 
-Requires **Android 5.0 (API 21) or newer**. On Android 12 and newer it follows your wallpaper colours
-(Material You); on older versions it uses YTM Starcast's violet theme.
+Requires **Android 5.0 (API 21) or newer**. It takes its colours from the cover of what plays (Album colours, as Refine
+does in YouTube Music); with that off, it follows your wallpaper colours on Android 12 and newer (Material You), or uses
+YTM Starcast's violet theme.
 
 ## What's in the app
 
@@ -33,7 +34,7 @@ change the computer's volume**, even with the screen off.
 | Section | Options |
 |---|---|
 | **Connection** | The computer's address, whether it's reachable, whether the YouTube Music extension is connected; edit the connection. |
-| **Appearance** | Theme (System, Light, Dark, true Black), Material You colours (Android 12+), which screen opens first. |
+| **Appearance** | Theme (System, Light, Dark, true Black), Album colours (the colours of the cover that plays), Material You colours (Android 12+), accent colour, the light around the cover (Glow, Halo or Orbit, and how strong), which screen opens first. |
 | **Screen & always-on** | Keep the screen on (off, while playing, always), dim when untouched, full screen, and **pixel shift**: every few minutes the whole screen glides a few pixels so static parts don't burn into OLED displays (interval and distance are adjustable; best with Always on and the Black theme). |
 | **Controls** | Media notification on/off, volume buttons on/off and the step per press, haptic feedback. |
 | **Lyrics** | Romanize and translations on by default, text size, preferred source. |
